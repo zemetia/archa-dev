@@ -1,0 +1,52 @@
+# Knowledge System
+
+← [Blueprint INDEX](./INDEX.md)
+
+Two files in `docs/knowledge/` capture learned context that is not derivable from the code or git history.
+
+| File | Purpose | When to write |
+|---|---|---|
+| [THIS.md](../knowledge/THIS.md) | Project identity, owner's style, do's & don'ts, dated insights | A new preference, pattern or insight is discovered |
+| [LEARN.md](../knowledge/LEARN.md) | Correction & mistake log | The owner corrects the AI **or** the AI catches its own deviation |
+
+---
+
+## THIS.md — How to Use
+
+- Read before planning work, alongside the relevant blueprint section
+- Add new entries to **Insights** with a date prefix
+- Mark outdated entries with `~~strikethrough~~` — never delete
+
+---
+
+## LEARN.md — Entry Format
+
+```
+[YYYY-MM-DD] - [what went wrong] - [what the correct approach is] - [the transferable lesson]
+```
+
+One line per entry, newest first. The lesson is the part that prevents a repeat.
+
+**Triggers for writing:**
+- The owner says the AI was wrong, did something unwanted, or missed the intent
+- Output violated a blueprint hard constraint
+- The AI added something not asked for (files, abstraction, comments, emojis)
+- A forbidden pattern was used (raw colour, shell-string prompt, core importing Electron…)
+
+---
+
+## Priority
+
+After `CLAUDE.md`, this is the most important context layer. Agents must:
+
+1. Read `THIS.md` before every task
+2. Read `LEARN.md` before writing code
+3. Append to both whenever new knowledge appears
+
+---
+
+## Blueprint upkeep
+
+- When code changes what a blueprint doc describes, update the doc **in the same change**.
+- Each blueprint file stays **under 150 lines**. When a doc would grow past that, split it into a new numbered sub-file and add it to the parent's table.
+- Every sub-file starts with the nav line: `← [PARENT.md](../PARENT.md) | [Blueprint INDEX](../INDEX.md) | [next →](./NN-next.md)`.

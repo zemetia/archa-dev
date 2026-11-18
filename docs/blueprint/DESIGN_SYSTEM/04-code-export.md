@@ -1,0 +1,60 @@
+# Design System — 04: Code Export
+
+← [DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md) | [Blueprint INDEX](../INDEX.md)
+
+**Phase:** 7 (tokens), 9 (HTML/React). Code: `packages/formats/src/export/code/`.
+
+---
+
+## Tokens
+
+| Target | Output | Notes |
+|---|---|---|
+| DTCG JSON | `tokens.json` (W3C Design Tokens format) | Theme axes as `$extensions.archadev.themes` |
+| CSS | `:root { --color-surface: oklch(…); }` + `[data-theme="dark"] { … }` | sRGB fallback via `@supports not (color: oklch(0 0 0))` |
+| Tailwind v4 | `@theme { --color-surface: …; --spacing-4: …; }` | Same shape Zemetiash uses in `globals.css` |
+| TS | `export const tokens = { … } as const` | For JS consumers |
+
+Names: `color/surface` → `--color-surface`, `space/4` → `--spacing-4`, `radius/md` → `--radius-md`, `type/heading-1` → `--text-heading-1` (+ line-height pair).
+
+`archa tokens export --to css|tailwind|dtcg|ts --out <file>` and `archa tokens import <file>` (applies values to variables the doc already declares; new names only with `--add`).
+
+---
+
+## HTML / CSS
+
+| Design | Code |
+|---|---|
+| Frame with layout | `display:flex`, direction, gap, padding, align/justify |
+| `hug` / `fill` / `fixed` | `width:auto` / `flex:1 1 0` + `align-self:stretch` / px |
+| Text sizing | `white-space:nowrap` (auto-width) / normal |
+| Variables | `var(--…)` |
+| Images | Copied to `assets/` |
+| Code frame | Not exported (already code) |
+
+One static page per top-level frame; CSS in one file; output passes the HTML importer round-trip test.
+
+---
+
+## React + Tailwind
+
+| Rule | Detail |
+|---|---|
+| Unit | One React component per ArchaDev component; screens import them |
+| Variants | CVA `cva()` with variant props from the variant set |
+| Styling | Tailwind classes referencing exported `@theme` tokens only — no raw colours |
+| Files | Optional Zemetiash four-file rule: `Name.tsx`, `Name.stories.tsx`, `Name.test.tsx`, `index.ts` |
+| Naming | PascalCase from component name; `displayName` set |
+
+Export compiles (`tsc --noEmit`) in its test fixture project.
+
+---
+
+## Design-to-Code in a Linked Repo
+
+Not a generator — an **agent task** guided by `references/guides/code-export.md`:
+
+1. One component at a time; map each design instance to the repo's existing component if one exists.
+2. Write code in the repo's conventions (read its blueprint/CLAUDE.md).
+3. Render via code frame; compare with the design frame screenshot; fix until lint/audit is clean.
+4. Only then move to the next component.

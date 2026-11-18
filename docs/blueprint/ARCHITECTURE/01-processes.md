@@ -1,0 +1,54 @@
+# Architecture — 01: Processes
+
+← [ARCHITECTURE.md](../ARCHITECTURE.md) | [Blueprint INDEX](../INDEX.md) | [02 — Protocol and IPC →](./02-protocol-ipc.md)
+
+**Phase:** 2 (main, core host, renderer), 10 (plugin host).
+
+---
+
+## Process Table
+
+| Process | Runtime | Entry | Owns | Must not |
+|---|---|---|---|---|
+| Main | Electron main (Node) | `apps/desktop/src/main/index.ts` | Windows, menus, single-instance, argv, file associations, `archadev://`, auto-update, spawning hosts | Hold document state; do heavy work |
+| Core host | `utilityProcess` (Node) | `apps/desktop/src/core-host/index.ts` | Open documents, ops, revisions, undo, cache, autosave, journal, watcher, local socket, MCP relay, agent runs | Touch UI or Electron window APIs |
+| Renderer | Chromium | `apps/desktop/src/renderer/main.tsx` | Shell, panels, canvas view, view state (zoom, scroll, hover), input → ops | Write files; mutate a document without the core |
+| Render worker | Web Worker + OffscreenCanvas | `packages/render/src/worker.ts` | Tile rasterisation | Hold authoritative state |
+| Plugin host | `utilityProcess` per trust group | `packages/plugin-host/src/host.ts` | Plugin code under capability checks | Reach fs/network/spawn directly |
+| CLI | Node | `apps/cli/src/index.ts` | Args, output; client of the core or in-process headless core | Contain logic the core does not expose |
+
+---
+
+## Why a separate core host
+
+- A big import, a heavy `execute` or an agent run must never freeze window management.
+- The same `@archa/core` must run in the CLI with no Electron — so it cannot live in main.
+- Agent runs survive a renderer reload because they live in the core host.
+
+---
+
+## Who talks to whom
+
+| From → To | Channel | Doc |
+|---|---|---|
+| Main → core host | `utilityProcess.fork` + `postMessage` (control: start, stop, open project) | [03](./03-startup-lifecycle.md) |
+| Renderer ↔ core host | `MessagePort` transferred by main | [02](./02-protocol-ipc.md) |
+| CLI / `archa mcp` ↔ core host | Named pipe (Windows) / unix socket | [02](./02-protocol-ipc.md) |
+| Core host ↔ plugin host | `MessagePort` | [PLUGINS/02](../PLUGINS/02-sandbox-permissions.md) |
+| Core host → agent CLIs | `child_process.spawn` (no shell) | [AGENT_BRIDGE/01](../AGENT_BRIDGE/01-adapter-interface.md) |
+| Renderer ↔ render worker | `postMessage` with transferable bitmaps | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) |
+
+---
+
+## Preload contract
+
+`apps/desktop/src/preload/index.ts` exposes exactly one object:
+
+```ts
+contextBridge.exposeInMainWorld('archa', {
+  connectCore: (): Promise<MessagePort> => /* port handshake via ipcRenderer */,
+  platform: process.platform,
+});
+```
+
+`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true` on every window. Nothing else crosses the bridge — all app features go through the core RPC.

@@ -1,0 +1,64 @@
+# File Formats — 04: Importers
+
+← [FILE_FORMATS.md](../FILE_FORMATS.md) | [Blueprint INDEX](../INDEX.md)
+
+**Phase:** 9. Code: `packages/formats/src/import/`.
+
+---
+
+## Pipeline
+
+```
+source → detect(kind) → importer.read() → IR (our node schema, unresolved assets)
+       → asset ingest (sha256 store) → validate → one transaction "Import <name>"
+       → import report
+```
+
+```ts
+interface Importer {
+  id: string;                        // 'svg' | 'html' | 'tokens' | 'archa' | 'pen-export' | plugin ids
+  detect(input: ImportInput): boolean;
+  read(input: ImportInput, ctx: ImportContext): Promise<ImportResult>;
+}
+type ImportResult = { nodes: Node[]; variables?: VariableCollection; assets: PendingAsset[]; report: ImportReport };
+```
+
+Plugins register importers through the same interface → [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md).
+
+---
+
+## Built-in Importers
+
+| Importer | Input | Notes |
+|---|---|---|
+| `archa` | `.archa` | Merge pages/components into the current doc or open standalone |
+| `svg` | `.svg` | Paths, groups, gradients, text (as text when possible); scripts stripped |
+| `html` | URL or `.html` | Headless Chromium: computed styles + boxes → frames with auto-layout where flex is detected; images to asset store |
+| `image` | png/jpg/webp/gif | Rect with image fill |
+| `tokens` | DTCG JSON, CSS custom properties, Tailwind `@theme` | → variables |
+| `pen-export` | HTML/SVG exported **by pen.dev itself** | Uses the `html`/`svg` importers |
+
+---
+
+## `.pen` Rules (licence)
+
+| Allowed | Not allowed |
+|---|---|
+| Importing what pen.dev **exports** (HTML, SVG, PNG) by the person | Decrypting `.pen` |
+| (Later, only after a written licence review) reading a person's own file through their installed pen tools' documented interface | Decompiling or string-mining the pen CLI, editor, or MCP binaries |
+| Writing our own docs, styles, libraries | Copying pen docs, style archetypes, `.lib.pen` libraries |
+
+Until the review is recorded in `docs/plan/DECISIONS.md` (D-06), only `pen-export` exists. The import dialog explains this when a `.pen` file is dropped.
+
+---
+
+## Import Report
+
+Saved as `.archadev/designs/<name>/import-report.json` (or shown only, for standalone) and opened in the app:
+
+| Section | Content |
+|---|---|
+| Mapped | Count per node type |
+| Approximated | Node + what was approximated (e.g. CSS grid → rows of frames) |
+| Dropped | Node + reason (e.g. unsupported filter) — flattened to image when possible |
+| Assets | Imported, deduplicated, failed |

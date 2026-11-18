@@ -1,0 +1,81 @@
+# Best Practice — 01: TypeScript and ESLint
+
+← [BEST_PRACTICE.md](../BEST_PRACTICE.md) | [Blueprint INDEX](../INDEX.md) | [02 — Testing →](./02-testing.md)
+
+---
+
+## `tsconfig.base.json`
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  }
+}
+```
+
+`array[i]` is `T | undefined` — guard it. No `any`; use `unknown` + zod at boundaries.
+
+---
+
+## ESLint (flat config)
+
+| Rule / plugin | Setting |
+|---|---|
+| `@typescript-eslint/consistent-type-imports` | error |
+| `@typescript-eslint/no-explicit-any` | error |
+| `@typescript-eslint/no-floating-promises` | error |
+| `@typescript-eslint/switch-exhaustiveness-check` | error |
+| `eslint-plugin-boundaries` | Package dependency direction → [STRUCTURE/02](../STRUCTURE/02-packages.md) |
+| `no-restricted-imports` | `electron` outside `apps/desktop`; `react` in `packages/core` |
+| `no-restricted-syntax` | `shell: true`, `child_process.exec` in `packages/agents` |
+| Custom `archa/no-raw-color` | Raw colours/Tailwind palette classes in renderer UI |
+| Custom `archa/canvaskit-delete` | CanvasKit objects must be freed |
+| `react-hooks` | recommended, error |
+| `--max-warnings 0` | in `pnpm lint` |
+
+---
+
+## Naming
+
+| Thing | Convention | Example |
+|---|---|---|
+| Files (TS) | camelCase; React components PascalCase | `applyTransaction.ts`, `LayersPanel.tsx` |
+| Types / interfaces | PascalCase, no `I` prefix | `AgentAdapter` |
+| Zod schemas | camelCase + `Schema` | `nodeSchema` |
+| RPC methods | `domain.verb` | `document.applyTransaction` |
+| MCP tools | snake_case | `get_state` |
+| Lint rule ids | `area/kebab` | `layout/xy-ignored` |
+| Stores | `<domain>.store.ts`, hook `use<Domain>Store` | `view.store.ts` |
+| Branded ids | `type NodeId = string & { __brand: 'NodeId' }` | |
+
+---
+
+## Imports
+
+```ts
+import type { Node } from '@archa/schema';       // type-only
+import { nodeSchema } from '@archa/schema';      // value
+import { Button } from '@archa/ui';             // barrel only
+```
+
+Relative imports only inside a package. Across packages always the package name.
+
+---
+
+## Errors
+
+- Domain errors are typed (`class ArchaError extends Error { code: ErrorCode }`); RPC maps them to `RpcError`.
+- Never swallow errors silently; log with context (`docId`, `runId`).
+- User-facing messages say what happened and what to do.

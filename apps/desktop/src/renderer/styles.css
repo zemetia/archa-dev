@@ -1,0 +1,45 @@
+@import 'tailwindcss';
+
+/* App UI tokens (blueprint APP_UI/02). Never use raw colours in components. */
+@theme {
+  --color-app: #0c0c0e;
+  --color-panel: #161618;
+  --color-panel-2: #1e1e21;
+  --color-panel-3: #27272b;
+  --color-line: #2a2a2f;
+  --color-canvas: #1b1b1e;
+  --color-fg: #ececef;
+  --color-fg-muted: #a1a1aa;
+  --color-fg-subtle: #6b6b73;
+  --color-accent: #8b5cf6;
+  --color-accent-soft: #8b5cf633;
+  --color-accent-fg: #c4b5fd;
+  --color-ok: #22c55e;
+  --color-warn: #f59e0b;
+  --color-danger: #ef4444;
+  --color-agent: #f97316;
+  --font-sans: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+}
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--color-app);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+.drag { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
+input, textarea, select, button { font: inherit; color: inherit; }
+input:focus, textarea:focus, select:focus { outline: none; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--color-panel-3); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+input[type='number']::-webkit-inner-spin-button { display: none; }
+input[type='color'] { -webkit-appearance: none; border: none; padding: 0; background: none; }
+input[type='color']::-webkit-color-swatch-wrapper { padding: 0; }
+input[type='color']::-webkit-color-swatch { border: 1px solid var(--color-line); border-radius: 4px; }

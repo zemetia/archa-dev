@@ -1,0 +1,26 @@
+# Document Model
+
+← [Blueprint INDEX](./INDEX.md)
+
+| Part | Coverage |
+|---|---|
+| [01 — Nodes and properties](./DOCUMENT_MODEL/01-nodes-properties.md) | Document shape, node types, property schemas, variable refs, ids, names |
+| [02 — Ops, transactions, undo](./DOCUMENT_MODEL/02-ops-transactions-undo.md) | Op kinds, transactions, inverse ops, per-author undo, op log |
+| [03 — Layout](./DOCUMENT_MODEL/03-layout.md) | Auto-layout vocabulary, Yoga mapping, hard errors vs soft issues |
+| [04 — Hashing](./DOCUMENT_MODEL/04-hashing.md) | `selfHash`, `subtreeHash`, incremental update, reverse indexes |
+
+---
+
+## Source of Truth
+
+`@archa/schema` defines every node and property **once**. From it come:
+
+| Derived artefact | Where |
+|---|---|
+| `.archa` validation | `@archa/formats` |
+| RPC param validation | `@archa/protocol` |
+| `execute` API types for the sandbox | `@archa/mcp` |
+| Agent API reference | `skills/archadev/references/api.md` (generated) |
+| Plugin SDK types | `@archa/plugin-sdk` |
+
+Changing a property means changing the schema; everything else regenerates or fails typecheck.

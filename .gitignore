@@ -1,0 +1,10 @@
+node_modules/
+dist/
+out/
+*.log
+.DS_Store
+*.tsbuildinfo
+.archadev/cache/
+.archadev/journal/
+.archadev/runtime/
+.archadev/runs/

@@ -1,0 +1,49 @@
+# Reference — pen.dev Desktop Stack
+
+← [Blueprint INDEX](./INDEX.md)
+
+Comparison only. Recorded 2026-11-18 from the owner's look at the installed pen.dev desktop app (package names, bundled files). Used to sanity-check our stack choices — **not** to copy anything.
+
+> **Clean-room boundary.** Names of public libraries an app ships are fine to note. Reading symbols out of pen's WASM or bundles is string-mining, which the pen licence forbids and [FILE_FORMATS/04](./FILE_FORMATS/04-importers.md) rules out. Do not inspect pen binaries further; do not use anything here to reproduce pen internals, file format or behaviour.
+
+---
+
+## What pen.dev Desktop Uses (as reported)
+
+| Layer | pen.dev | Notes |
+|---|---|---|
+| Shell | Electron 44.9.3 (Chromium 152) | |
+| Auto-update | electron-updater, GitHub releases | Vendor: High Agency, internal packages `@ha/*` |
+| Main process | Node.js; electron-store (settings), chokidar (file watch), pino (logs), Sentry (errors), @vscode/ripgrep + fzf (workspace file search) | |
+| Renderer UI | React 19.2.3, Radix, Tailwind | |
+| Rich text / code | Tiptap, Lexical; CodeMirror | |
+| Sync | Yjs | Likely collaboration / document sync |
+| Effects | PixiJS (WebGL2/WebGPU), a shader library | Likely effects/shaders, not the main canvas |
+| Canvas engine | ~9.5 MB Emscripten WASM built on Skia (C++) | Same approach as Figma |
+| Sandbox | QuickJS WASM (`@jitl/quickjs`) | Likely scripts/plugins |
+
+---
+
+## What It Confirms or Changes for ArchaDev
+
+| Topic | Our choice | Effect of this reference |
+|---|---|---|
+| Canvas | CanvasKit (Skia WASM) — [RENDERING](./RENDERING.md) | **Confirms** D-02: Skia in WASM is the production path. MVP ships a Canvas2D backend behind the same draw interface first ([RENDERING/01](./RENDERING/01-canvaskit-pipeline.md)) |
+| Sandbox | QuickJS for `execute` and plugin draw code — [MCP/02](./MCP/02-execute-api.md) | **Confirms**. Use `quickjs-emscripten` (same author as `@jitl/quickjs`) |
+| Collaboration | Own op log, CRDT later — [ARCHITECTURE/04](./ARCHITECTURE/04-single-writer-sync.md) | Keep. Yjs remains the first candidate when multiplayer starts (plan D-04) |
+| UI | React 19, Radix, Tailwind v4 — [APP_UI](./APP_UI.md) | **Confirms** |
+| Main-process utilities | — | **Adopt**: electron-store → `~/.archadev/config.json` access, chokidar for watchers, pino for logs, electron-updater for releases, Sentry opt-in only (plan open question 8) |
+| Workspace search | — | **Adopt** `@vscode/ripgrep` for "find in project" and code-target search |
+| Text editing | DOM overlay — [RENDERING/01](./RENDERING/01-canvaskit-pipeline.md) | Consider Lexical/Tiptap only if rich-text runs need a real editor |
+| Code panel | — | **Adopt** CodeMirror 6 for the code view (HTML/Tailwind export, `execute` snippets in Activity) |
+| Effects | — | PixiJS not needed; Skia covers blur/shadow. Revisit for shader fills |
+
+---
+
+## Differences We Keep on Purpose
+
+| pen.dev | ArchaDev | Why |
+|---|---|---|
+| Embeds agent SDKs, owns the session | Launch/listen local agent CLIs — [AGENT_BRIDGE](./AGENT_BRIDGE.md) | Agent-neutral; uses the person's own logins |
+| Encrypted proprietary `.pen` | Open zip-of-JSON `.archa`, unpacked in git — [FILE_FORMATS/01](./FILE_FORMATS/01-archa.md) | Readable, diffable files |
+| Account / workspace login | Local first, no account | Plan principle 1 |

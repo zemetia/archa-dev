@@ -1,0 +1,18 @@
+# MCP
+
+← [Blueprint INDEX](./INDEX.md)
+
+| Part | Coverage |
+|---|---|
+| [01 — Transports and tools](./MCP/01-transports-tools.md) | `archa mcp`, HTTP mode, tool list, client identity |
+| [02 — `execute` API](./MCP/02-execute-api.md) | QuickJS sandbox, globals, mutation/read/output functions, limits, patch retry |
+| [03 — Response contract and lint](./MCP/03-response-contract-lint.md) | Reply skeleton, error format, lint rules, severities |
+| [04 — Local skill](./MCP/04-local-skill.md) | `skills/archadev/`, generated API reference, install per agent |
+
+---
+
+## Why this shape
+
+From Accent's study of pen.dev and its own harness: **few tools + one code tool**, and **every reply steers the next step** (ids, lint, screenshot + verify instruction, patch-based retry). Quality comes from the feedback loop, not from tool count. Mechanisms are reimplemented; no pen text is copied.
+
+Code: `packages/mcp/`.

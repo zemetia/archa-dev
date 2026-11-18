@@ -1,0 +1,61 @@
+# Cache — 02: Render Tiles
+
+← [CACHE.md](../CACHE.md) | [Blueprint INDEX](../INDEX.md) | [03 — Disk stores →](./03-disk-stores-budgets.md)
+
+**Phase:** 3. Code: `packages/render/src/tiles/`.
+
+---
+
+## Tile Grid
+
+| Parameter | Value |
+|---|---|
+| Tile size | 512 × 512 device px |
+| Zoom buckets | Powers of two from 1/64 to 64 |
+| Coordinates | `tx = floor(worldX * bucket / 512)` per page |
+| Overscan | 1 tile ring around the viewport pre-rendered at idle |
+
+---
+
+## Frame Loop (renderer)
+
+1. Viewport → visible tile coords for current bucket.
+2. For each tile: compute `tileHash` from R-tree query (core sends node hashes with bounds on subscribe and in `ops.applied`).
+3. Hit → draw tile texture.
+4. Miss → draw best fallback (parent bucket scaled up, or child bucket scaled down) and enqueue the tile.
+5. Draw overlays (selection, guides) on their own layer → [RENDERING/02](../RENDERING/02-layers-hit-testing.md).
+
+---
+
+## Worker Queue
+
+| Rule | Detail |
+|---|---|
+| Priority | Visible tiles near the viewport centre first, then overscan, then thumbnails |
+| Cancellation | Tiles leaving the viewport before rendering are dropped from the queue |
+| Workers | `min(4, hardwareConcurrency - 2)` render workers, each with its own CanvasKit surface |
+| Transfer | Result as `ImageBitmap` (transferable) → GPU texture upload on the main renderer thread |
+| Budget | Max 8 ms of upload per frame; remainder deferred |
+
+---
+
+## Gesture Mode
+
+During pan, zoom or a drag:
+
+- Only cached tiles and fallbacks are drawn; no new rasterisation of the content layer.
+- A dragged node is drawn from its L4 bitmap on the overlay layer, not re-tiled every frame.
+- On gesture end (100 ms idle): enqueue missing tiles at full quality.
+
+---
+
+## Large Nodes
+
+Nodes whose raster exceeds 4096 px on either side at the current zoom are drawn directly per tile (clipped), never cached whole in L4.
+
+---
+
+## Tests
+
+- Golden: render a fixture page via tiles and via a single full-page raster → pixel diff ≤ 0.1%.
+- Bench: `bench/pan-20k.ts` — 300 frames of scripted pan on a 20k-node fixture, assert p95 frame < 16 ms (GPU CI runner) and no frame > 32 ms.

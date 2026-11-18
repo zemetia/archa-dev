@@ -1,0 +1,59 @@
+# Architecture — 03: Startup and Lifecycle
+
+← [ARCHITECTURE.md](../ARCHITECTURE.md) | [Blueprint INDEX](../INDEX.md) | [04 — Single writer →](./04-single-writer-sync.md)
+
+**Phase:** 2, 4.
+
+---
+
+## Boot Sequence (app)
+
+1. `main`: `app.requestSingleInstanceLock()` — if lost, forward argv and quit → [ENTRY_POINTS/01](../ENTRY_POINTS/01-cli-single-instance.md)
+2. `main`: parse argv (`--project <dir>`, `--file <path>`, `archadev://…`)
+3. `main`: fork core host; wait for `ready` (socket listening, `runtime/core.json` written)
+4. `main`: create window for the target; transfer a `MessagePort` to it
+5. renderer: `archa.connectCore()` → `project.open` / `file.open` → `document.subscribe`
+6. core: load from disk (visible page first), build indexes, warm cache from `cache/`
+
+Target: first paint < 1.5 s cold for a 20k-node file → [CACHE/03](../CACHE/03-disk-stores-budgets.md).
+
+---
+
+## Boot Sequence (headless)
+
+`archa export …`, `archa mcp` with no app running:
+
+1. Read `~/.archadev/runtime/core.json`; try to connect → if OK, act as client.
+2. Otherwise check `<project>/.archadev/runtime/core.lock`; stale pid → remove.
+3. Boot `@archa/core` in-process with the in-process transport.
+4. `archa mcp` headless writes `core.lock` so a later app launch connects to it instead of opening a second writer… **unless** the app starts later: the app asks the headless core to hand over (`core.handover`) — it flushes, releases the lock and its clients reconnect to the app.
+
+---
+
+## Autosave and Journal
+
+| Step | Detail |
+|---|---|
+| Every transaction | Appended to `journal/<docId>.jsonl` (fsync batched every 250 ms) |
+| Autosave | 2 s after the last op: write `<target>.tmp` → fsync → rename; keep one `.bak` |
+| After save | Journal truncated to the saved revision |
+| On open | If journal revision > saved revision → replay, mark document dirty, show "Recovered N changes" |
+
+---
+
+## Crash Handling
+
+| Crash | Response |
+|---|---|
+| Core host | Main restarts it (backoff 0.5 s, 2 s, 5 s; then error screen). Renderers reconnect and re-subscribe; journal replays |
+| Renderer | Reload window; core keeps state and agent runs |
+| Plugin host | Plugin marked crashed, other plugins unaffected, user notified |
+| Agent CLI | Run marked failed with last output; worktree kept for inspection |
+
+---
+
+## Shutdown
+
+1. Main receives `before-quit` → asks core `shutdown`.
+2. Core: stop accepting requests, pause agent runs (they can resume next launch), flush autosave, close socket, delete `core.json` / `core.lock`.
+3. Timeout 5 s → force quit; journal guarantees no data loss.

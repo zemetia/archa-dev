@@ -1,0 +1,60 @@
+# Agent Bridge — 04: Review Loop
+
+← [AGENT_BRIDGE.md](../AGENT_BRIDGE.md) | [Blueprint INDEX](../INDEX.md)
+
+**Phase:** 8. Ported from Accent's review board. Code: `packages/core/src/review/`, renderer `features/review/`.
+
+---
+
+## Records
+
+| Record | Stored in | Key fields |
+|---|---|---|
+| Comment thread | `.archadev/comments/<designId>.json` | `nodeId` (or DOM selector for code frames), messages, attachments, resolved |
+| Round | `.archadev/rounds/<id>/` | note, comment ids, markup PNG, selection, sentTo, summary, before/after thumbs |
+| Decision | `.archadev/decisions/<id>.json` | kind `ask` \| `variants`, question/options or takes, answer, answeredAt |
+| Activity | `.archadev/activity.jsonl` | ts, author, tool/action, node ids, text |
+
+Attachments go to the asset store (sha256).
+
+---
+
+## Round Flow
+
+```
+person: comments + markup + note → Send to agent (or Ctrl+L)
+  ├─ launch mode: start/continue a run with the round as prompt
+  └─ listen mode: deliver to an agent blocked in review_wait (heartbeat shows who listens)
+agent: works (execute / screenshot / say) → review_done(roundId, summary)
+app: History stores before/after per touched frame; comments auto-linked
+```
+
+If both modes are possible, the person picks. Markup is sent as a picture; typed notes are sent as text with the node each sits on.
+
+---
+
+## Decisions
+
+| Tool | Behaviour |
+|---|---|
+| `ask(question, options)` | Agent blocks; modal on the board; one tab per pending decision; answer returned as text |
+| `variants(nodeId, takes)` | Each take's code runs on a **fork** (copy-on-write ops over the doc); frames shown side by side; choosing applies that fork's ops as one transaction |
+
+Changing a past answer: if the nodes the first choice touched are unchanged → swap directly; otherwise it becomes a new request to the agent (later work is never overwritten).
+
+---
+
+## Activity and Presence
+
+- Every MCP call, plugin action and run event → activity entry.
+- Agent cursor with name tag moves to the node of the latest entry; **Follow** makes the camera follow it.
+- Activity tab: filter by author, jump to node, open the run timeline.
+
+---
+
+## Quick Actions
+
+| Key | Action |
+|---|---|
+| Ctrl+K | Palette over frames, nodes, comments, rounds, library items, issues, decisions, actions. Prefixes `>` actions, `@` nodes, `#` comments, `/` pages |
+| Ctrl+L | Handoff box: one sentence to the agent, suggestions from the selection; submit = send round + Follow |

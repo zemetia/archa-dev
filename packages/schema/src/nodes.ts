@@ -1,0 +1,113 @@
+import { z } from 'zod';
+import { colorSchema } from './color';
+
+export const nodeIdSchema = z.string().min(1).describe('Node id');
+export type NodeId = string;
+
+const sizingModeSchema = z.enum(['fixed', 'hug', 'fill']).describe('fixed: own size · hug: fit children/text · fill: take the remaining space of an auto-layout parent');
+
+export const paintSchema = z.object({
+  type: z.literal('solid'),
+  color: colorSchema,
+  visible: z.boolean().default(true),
+});
+export type Paint = z.infer<typeof paintSchema>;
+
+export const strokeSchema = z.object({
+  color: colorSchema,
+  width: z.number().min(0).default(1),
+  align: z.enum(['inside', 'center', 'outside']).default('inside'),
+  visible: z.boolean().default(true),
+});
+export type Stroke = z.infer<typeof strokeSchema>;
+
+export const shadowSchema = z.object({
+  type: z.literal('drop-shadow'),
+  x: z.number().default(0),
+  y: z.number().default(4),
+  blur: z.number().min(0).default(12),
+  color: colorSchema,
+  visible: z.boolean().default(true),
+});
+export type Shadow = z.infer<typeof shadowSchema>;
+
+const paddingSchema = z.object({ top: z.number().min(0), right: z.number().min(0), bottom: z.number().min(0), left: z.number().min(0) });
+
+const base = {
+  id: nodeIdSchema,
+  name: z.string().describe('Human-readable layer name. Name every node.'),
+  parentId: nodeIdSchema.nullable(),
+  x: z.number().default(0).describe('X relative to parent (ignored inside auto-layout unless absolute)'),
+  y: z.number().default(0),
+  width: z.number().min(0).default(100),
+  height: z.number().min(0).default(100),
+  visible: z.boolean().default(true),
+  locked: z.boolean().default(false),
+  opacity: z.number().min(0).max(1).default(1),
+  sizing: z.object({ horizontal: sizingModeSchema, vertical: sizingModeSchema }).default({ horizontal: 'fixed', vertical: 'fixed' }),
+  absolute: z.boolean().default(false).describe('Opt out of the parent auto-layout and keep x/y'),
+  meta: z.record(z.string(), z.unknown()).default({}),
+};
+
+const visual = {
+  fills: z.array(paintSchema).default([]),
+  strokes: z.array(strokeSchema).default([]),
+  effects: z.array(shadowSchema).default([]),
+};
+
+const container = { children: z.array(nodeIdSchema).default([]) };
+
+export const pageNodeSchema = z.object({ ...base, ...container, type: z.literal('page') });
+
+export const frameNodeSchema = z.object({
+  ...base, ...visual, ...container,
+  type: z.literal('frame'),
+  cornerRadius: z.number().min(0).default(0),
+  clip: z.boolean().default(true),
+  layout: z.enum(['none', 'row', 'column']).default('none').describe('Auto-layout direction'),
+  gap: z.number().min(0).default(0),
+  padding: paddingSchema.default({ top: 0, right: 0, bottom: 0, left: 0 }),
+  align: z.enum(['start', 'center', 'end']).default('start').describe('Cross-axis alignment'),
+  justify: z.enum(['start', 'center', 'end', 'space-between']).default('start').describe('Main-axis distribution'),
+});
+
+export const groupNodeSchema = z.object({ ...base, ...container, type: z.literal('group') });
+
+export const rectNodeSchema = z.object({ ...base, ...visual, type: z.literal('rect'), cornerRadius: z.number().min(0).default(0) });
+
+export const ellipseNodeSchema = z.object({ ...base, ...visual, type: z.literal('ellipse') });
+
+export const textNodeSchema = z.object({
+  ...base, ...visual,
+  type: z.literal('text'),
+  text: z.string().default(''),
+  fontFamily: z.string().default('Inter'),
+  fontSize: z.number().min(1).default(16),
+  fontWeight: z.number().int().min(100).max(900).default(400),
+  lineHeight: z.number().min(0.5).default(1.3).describe('Multiplier of font size'),
+  letterSpacing: z.number().default(0),
+  textAlign: z.enum(['left', 'center', 'right']).default('left'),
+  textSizing: z.enum(['fixed', 'auto-width', 'auto-height']).default('auto-width'),
+});
+
+export const nodeSchema = z.discriminatedUnion('type', [
+  pageNodeSchema, frameNodeSchema, groupNodeSchema, rectNodeSchema, ellipseNodeSchema, textNodeSchema,
+]);
+
+export type PageNode = z.infer<typeof pageNodeSchema>;
+export type FrameNode = z.infer<typeof frameNodeSchema>;
+export type GroupNode = z.infer<typeof groupNodeSchema>;
+export type RectNode = z.infer<typeof rectNodeSchema>;
+export type EllipseNode = z.infer<typeof ellipseNodeSchema>;
+export type TextNode = z.infer<typeof textNodeSchema>;
+export type Node = z.infer<typeof nodeSchema>;
+export type NodeType = Node['type'];
+export type ContainerNode = PageNode | FrameNode | GroupNode;
+
+export const CONTAINER_TYPES: ReadonlySet<NodeType> = new Set(['page', 'frame', 'group']);
+export const isContainer = (n: Node): n is ContainerNode => CONTAINER_TYPES.has(n.type);
+export const hasVisual = (n: Node): n is FrameNode | RectNode | EllipseNode | TextNode =>
+  n.type === 'frame' || n.type === 'rect' || n.type === 'ellipse' || n.type === 'text';
+
+/** Input accepted when creating a node: everything except id/parentId is optional, children may be inline. */
+export type NodeInput = Partial<Omit<Node, 'children'>> & { type: Exclude<NodeType, 'page'>; children?: NodeInput[] } & Record<string, unknown>;

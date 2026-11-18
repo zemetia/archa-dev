@@ -1,0 +1,72 @@
+# Best Practice — 03: Git, Changelog, Release
+
+← [BEST_PRACTICE.md](../BEST_PRACTICE.md) | [Blueprint INDEX](../INDEX.md) | [04 — Anti-patterns →](./04-antipatterns-perf.md)
+
+Follows the Gungnir repo's flow.
+
+---
+
+## Branches
+
+| Branch | Use |
+|---|---|
+| `main` | Always releasable; protected; PRs only |
+| `zemetia/<topic>` | Feature/fix work (kebab-case topic) |
+| `archadev/run-<id>` | Created by agent runs inside a project (not in this repo) |
+
+Parallel work uses git worktrees (Orca workspaces).
+
+---
+
+## Commits (Conventional Commits)
+
+```
+feat(core): per-author undo stacks
+fix(render): free paragraph objects after shaping
+docs(blueprint): split CACHE into three files
+chore(release): 0.3.0
+```
+
+Scopes = package or area: `core`, `schema`, `protocol`, `render`, `formats`, `mcp`, `agents`, `design-system`, `plugins`, `ui`, `desktop`, `cli`, `blueprint`, `plan`.
+
+---
+
+## CHANGELOG.md — Keep a Changelog
+
+```md
+## [Unreleased]
+
+### Canvas
+- …
+
+### Agents
+- …
+
+## [0.2.0] - 2026-12-01
+```
+
+| Rule | Detail |
+|---|---|
+| Groups | By area: Canvas, Layers, Files, Cache, Agents, MCP, Design System, Plugins, CLI, App, Development |
+| Voice | What changed for the user, in plain sentences; mention migrations and breaking changes first |
+| When | Every user-visible change adds a line to `[Unreleased]` in the same PR |
+
+---
+
+## Versions
+
+| Version | Scheme |
+|---|---|
+| App + CLI | SemVer, one version for both |
+| `@archa/plugin-sdk` | SemVer; `engine` ranges in plugin manifests refer to it |
+| `.archa` / `.archadev` | Integer `formatVersion` → [FILE_FORMATS/03](../FILE_FORMATS/03-migrations-validation.md) |
+
+---
+
+## Release Steps
+
+1. Move `[Unreleased]` to `## [x.y.z] - YYYY-MM-DD`.
+2. Bump versions (`pnpm version:set x.y.z` updates every package.json).
+3. Commit `chore(release): x.y.z`, tag `vx.y.z`, push.
+4. CI `release` workflow: build installers (NSIS, dmg, AppImage/deb), sign, publish GitHub release, update feed for auto-update.
+5. Smoke test on a clean machine: install → right-click folder → open → `archa status`.

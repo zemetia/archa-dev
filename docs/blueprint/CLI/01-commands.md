@@ -1,0 +1,76 @@
+# CLI — 01: Commands
+
+← [CLI.md](../CLI.md) | [Blueprint INDEX](../INDEX.md) | [02 — Parity and exit codes →](./02-parity-exit-codes.md)
+
+Code: `apps/cli/src/commands/<command>.ts` — one file per top-level command.
+
+---
+
+## Open and Projects (phase 4)
+
+| Command | Behaviour |
+|---|---|
+| `archa [path]`, `archa open <dir\|file.archa>` | Open in the app → [ENTRY_POINTS/01](../ENTRY_POINTS/01-cli-single-instance.md) |
+| `archa init [dir] [--yes]` | Create `.archadev/`; one question at a time → [FILE_FORMATS/02](../FILE_FORMATS/02-archadev-project.md) |
+| `archa new <name> [--file] [--style <profile>]` | New design in the project, or a new `.archa` |
+| `archa pack <design> [--out]` / `archa unpack <file.archa> [--as]` | Project design ⇄ standalone file |
+| `archa adopt <file.archa>` | Move a standalone file into the current project |
+
+## Import / Export (phases 1, 9)
+
+| Command | Behaviour |
+|---|---|
+| `archa import <file\|url> [--as <design>]` | Run the importer pipeline; prints the import report |
+| `archa export <design\|file.archa> --to png\|jpeg\|webp\|svg\|pdf\|html\|react\|tokens [--frame <id\|name>] [--scale] [--out]` | Headless export |
+| `archa tokens export --to css\|tailwind\|dtcg\|ts --out <file>` / `archa tokens import <file> [--add]` | Token sync with code |
+
+## Agents (phases 5, 6)
+
+| Command | Behaviour |
+|---|---|
+| `archa mcp [--project <dir> \| --file <path>] [--run <id>]` | MCP server on stdio → [MCP/01](../MCP/01-transports-tools.md) |
+| `archa skill install\|uninstall [--agent claude\|agy\|codex\|hermes\|all] [--scope project\|user]` | → [MCP/04](../MCP/04-local-skill.md) |
+| `archa agents [--json]` | Detected CLIs, versions, profiles, default models |
+| `archa status [agent]` | Deep check app ↔ core ↔ MCP ↔ agent |
+| `archa run <agent> "<prompt>" [--design <name>] [--model] [--profile]` | Start a run; stream timeline; Ctrl+C → interrupt menu |
+| `archa runs [--json]` / `archa run steer\|stop\|finish <id> [message]` | Manage runs |
+
+## Design System and Plugins (phases 7, 10)
+
+| Command | Behaviour |
+|---|---|
+| `archa library list\|add\|remove\|harvest <url>` | Libraries |
+| `archa style list\|show <profile>` | Style profiles |
+| `archa plugin new\|link\|install\|list\|enable\|disable\|remove` | → [PLUGINS/02](../PLUGINS/02-sandbox-permissions.md) |
+
+## Maintenance
+
+| Command | Behaviour |
+|---|---|
+| `archa doctor [--fix]` | PATH, registry/OS integration, agent configs, cache index, core lock |
+| `archa cache stats\|clear [--project\|--global] [--layer]` | → [CACHE/03](../CACHE/03-disk-stores-budgets.md) |
+| `archa setup` | First-run terms + config (never blocks a tool call) |
+| `archa uninstall` | Remove OS integration, skills it installed, global data (asks) |
+| `archa tools` | Full command list |
+| `archa --version` | App, CLI, plugin API, `.archa` formatVersion |
+
+---
+
+## Command File Template
+
+```ts
+// apps/cli/src/commands/export.ts
+import { Command } from 'commander';
+import { connect } from '../connect';
+import { output } from '../output';
+
+export const exportCommand = new Command('export')
+  .argument('<target>')
+  .requiredOption('--to <format>')
+  .option('--frame <ref>').option('--scale <n>', '', parseFloat).option('--out <path>').option('--json')
+  .action(async (target, opts) => {
+    const core = await connect({ target });
+    const result = await core.export.run({ target, format: opts.to, frame: opts.frame, scale: opts.scale, out: opts.out });
+    output(result, opts);
+  });
+```

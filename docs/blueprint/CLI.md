@@ -1,0 +1,19 @@
+# CLI — `archa`
+
+← [Blueprint INDEX](./INDEX.md)
+
+| Part | Coverage |
+|---|---|
+| [01 — Commands](./CLI/01-commands.md) | Every command, flags, behaviour |
+| [02 — Parity and exit codes](./CLI/02-parity-exit-codes.md) | App/CLI/MCP parity table, exit codes, `--json`, output rules |
+
+---
+
+## Principles
+
+- `archa --help` is a short front door for people; `archa tools` lists everything (Accent lesson).
+- Every command is a thin wrapper over a core RPC method — no logic of its own.
+- Works with the app running (client) or not (headless in-process core).
+- `--json` on every read command, for scripts and agents.
+
+Code: `apps/cli/`.

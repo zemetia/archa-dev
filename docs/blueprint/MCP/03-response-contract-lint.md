@@ -1,0 +1,70 @@
+# MCP — 03: Response Contract and Lint
+
+← [MCP.md](../MCP.md) | [Blueprint INDEX](../INDEX.md) | [04 — Local skill →](./04-local-skill.md)
+
+**Phase:** 5. Code: `packages/mcp/src/reply/`, `packages/mcp/src/lint/`.
+
+---
+
+## Success Reply Skeleton (fixed order)
+
+1. `OK (revision 57). Globals you assigned carry over to later calls.`
+2. Id remap notice — only if the snippet tried to set ids.
+3. **Created / changed** — `name → "id"` per node, ids quoted; marks which globals hold them.
+4. **Output** — `print()` lines.
+5. **Screenshots** — images, then: *"Check each: nothing broken, collapsed, clipped or overflowing; spacing and alignment even; contrast readable; matches what you intended."*
+6. **Issues detected** — one sentence each: rule id, node (name + id), problem, remedy. Closed by *"Resolve these in your next call."*
+7. **Pending** — async generations still running: *"Keep designing; don't regenerate; screenshots will show them when done."*
+
+Builder: `packages/mcp/src/reply/success.ts` — tools never hand-format replies.
+
+---
+
+## Error Reply
+
+```
+FAILED — rolled back, nothing changed (revision still 56).
+Statement: update(card, { width: "100%" })
+Reason: card.width — expected number | { $var }, received string "100%". Use sizing.horizontal: "fill".
+editId: e_7Qx2 — fix with execute({ editId, edits: [{ find, replace }] }) instead of resending the snippet.
+```
+
+| Field | Rule |
+|---|---|
+| Statement | The failing source line (QuickJS stack → snippet line) |
+| Reason | Zod path + expected vs received + remedy when known |
+| editId | Always present for snippet failures |
+
+---
+
+## Severities
+
+| Severity | Effect | Examples |
+|---|---|---|
+| Hard error | Transaction rejected | Schema violation, unknown property, percentage size, children on a primitive, unbounded `find`, JS exception |
+| Issue | Applied, listed in reply + Issues panel | See rule table |
+| Silent | Nothing | Must not exist for anything an agent can cheaply fix — add a rule instead |
+
+---
+
+## Lint Rules (v1)
+
+| Rule id | Detects | Remedy text |
+|---|---|---|
+| `text/no-fill` | Text without fill (invisible) | Add a fill using a text colour token |
+| `text/overflow` | Text exceeds a fixed box | Use auto-height or enlarge the box |
+| `text/font-missing` | Font not available | Pick from the profile fonts |
+| `layout/xy-ignored` | x/y on a child inside auto-layout | Remove x/y or set `absolute: true` |
+| `layout/fill-no-parent` | `fill` sizing without a layout parent | Give the parent a layout or use fixed |
+| `layout/collapsed` | hug/fill cycle → zero size | Fix one axis to fixed |
+| `layout/clipped` | Child clipped by parent | Resize parent or child |
+| `layout/overlap-frames` | Top-level frames overlap | Use `findEmptySpace` |
+| `token/raw-color` | Raw colour where a token exists | Use `{ $var: … }` |
+| `token/off-scale` | Spacing/radius not on the scale | Snap to scale value |
+| `token/unknown-variable` | Reference to a missing variable | Create it or fix the name |
+| `a11y/contrast` | Text contrast below WCAG AA on its surface | Use the profile's foreground token |
+| `icon/unknown` | Icon name not in the icon set | Pick from `library list icons` |
+| `naming/missing` | Node without a name | Name it |
+| `component/rebuilt` | Hand-built subtree matching an existing component | Use `instance()` |
+
+Rules live in `packages/mcp/src/lint/rules/<id>.ts`, each with a fixture test. Projects can disable rules in `project.json` (`lint.disabled`). Plugins add rules → [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md).
