@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, type AccountsOverview, type BrowserState, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, type AccountsOverview, type McpServer, type SkillsOverview, type BrowserState, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodePng } from '@archa/render';
 
@@ -30,8 +30,12 @@ type State = {
   toasts: Toast[];
   fitRequest: number;
   settingsOpen: boolean;
+  /** Settings page to show when it opens (deep links from chat etc.). */
+  settingsPage: SettingsPage;
   /** Agent CLIs + saved login profiles (Settings → Agents, chat account picker). */
   accounts: AccountsOverview | null;
+  skills: SkillsOverview | null;
+  mcpServers: McpServer[] | null;
   /** In-app browser pane (blueprint BROWSER). Pages live in main; this mirrors their state. */
   browserOpen: boolean;
   browserWidth: number;
@@ -42,7 +46,7 @@ export const useStore = create<State>(() => ({
   client: null, info: null, docs: [], activeDocId: null, doc: null, rev: 0,
   selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers',
   agents: [], activity: [], chat: [], runningRun: null, agentFocus: null, editingText: null, toasts: [], fitRequest: 0,
-  settingsOpen: false, accounts: null,
+  settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
   browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
 }));
 
@@ -113,6 +117,10 @@ export async function init() {
   });
   let accountsTimer: ReturnType<typeof setTimeout> | undefined;
   client.on('accounts.changed', () => { clearTimeout(accountsTimer); accountsTimer = setTimeout(() => void loadAccounts(), 120); });
+  let skillsTimer: ReturnType<typeof setTimeout> | undefined;
+  client.on('skills.changed', () => { clearTimeout(skillsTimer); skillsTimer = setTimeout(() => void loadSkills(), 120); });
+  let mcpTimer: ReturnType<typeof setTimeout> | undefined;
+  client.on('mcp.changed', () => { clearTimeout(mcpTimer); mcpTimer = setTimeout(() => void loadMcpServers(), 120); });
   client.on('render.request', async ({ requestId, docId, nodeId, scale }) => {
     try {
       let doc = get().doc;
@@ -136,6 +144,32 @@ export async function init() {
   set({ docs, agents, info });
   void loadAccounts();
   await activate(docs.at(-1)?.id ?? null);
+}
+
+export type SettingsPage = 'providers' | 'skills' | 'mcp' | 'connect' | 'github' | 'integrations' | 'about';
+
+export function openSettings(page?: SettingsPage) {
+  set({ settingsOpen: true, ...(page ? { settingsPage: page } : {}) });
+}
+
+export async function loadSkills() {
+  const { client } = get();
+  if (!client) return;
+  try {
+    set({ skills: await client.call('skills.list') });
+  } catch (e) {
+    toast((e as Error).message, 'error');
+  }
+}
+
+export async function loadMcpServers() {
+  const { client } = get();
+  if (!client) return;
+  try {
+    set({ mcpServers: await client.call('mcp.list') });
+  } catch (e) {
+    toast((e as Error).message, 'error');
+  }
 }
 
 export async function loadAccounts() {

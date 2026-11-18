@@ -1,0 +1,69 @@
+# Agent Bridge — 05: Skills and MCP Servers
+
+← [AGENT_BRIDGE.md](../AGENT_BRIDGE.md) | [Blueprint INDEX](../INDEX.md) | [← 04 — Review loop](./04-review-loop.md)
+
+**Phase:** MVP. Code: `apps/desktop/src/core-host/skills.ts`, `core-host/mcp-servers.ts`, `renderer/ui/settings/`. Types: `packages/protocol/src/settings.ts`. Tests: `apps/desktop/test/settings.test.ts`.
+
+---
+
+## Settings Dialog Map
+
+`Ctrl+,` / title-bar gear. Shell + grouped nav in `renderer/ui/SettingsDialog.tsx`; one file per page in `renderer/ui/settings/`. The page shown is `settingsPage` in the Zustand store.
+
+| Group | Page | File | Status |
+|---|---|---|---|
+| AI | AI providers | `ProvidersPage.tsx` — see [02](./02-roster-profiles.md) | Built |
+| AI | Skills | `SkillsPage.tsx` | Built |
+| AI | MCP servers | `McpPage.tsx` | Built |
+| Connections | Connect an agent | `OtherPages.tsx` — Listen-mode commands for Claude Code, Codex, agy / any MCP client | Built |
+| Connections | GitHub | `OtherPages.tsx` — planned features, disabled Connect button, link to GitHub MCP | Coming soon |
+| Connections | Integrations | `OtherPages.tsx` — Figma, Vercel, Linear, Notion, Slack | Coming soon |
+| ArchaDev | About | Version, data folder, CLI path, runners | Built |
+
+Brand marks: `settings/Logo.tsx` + `renderer/assets/logos/` (simple-icons, CC0; Antigravity from antigravity.google). Monochrome SVGs render as a CSS mask filled by a token class — no raw colours.
+
+---
+
+## Skills
+
+A skill is a folder with `SKILL.md` (frontmatter `name`, `description`, then Markdown).
+
+| Source | Folder | ArchaDev may |
+|---|---|---|
+| `archadev` (library) | `~/.archadev/skills/<name>/` | create, import, enable/disable, delete |
+| `claude` | `$CLAUDE_CONFIG_DIR/skills` or `~/.claude/skills` | list; "Add to ArchaDev" copies it in |
+| `codex` | `$CODEX_HOME/skills` | same |
+| `gemini` | `~/.gemini/skills` | same |
+| `agents` | `~/.agents/skills` | same |
+
+- Disabled library skills are listed in `~/.archadev/skills.json` (`{ version: 1, disabled: [...] }`); new skills are on.
+- Import copies the folder (skipping `node_modules`, `.git`); the folder name is the skill's slugged `name`. Never imports from inside the library.
+- **Runs:** before each Claude Code run, enabled library skills are mirrored into `<runtime>/.claude/skills/` (the run's cwd, so they load as project skills) and `Skill` is added to `--allowedTools`. The mirror is rebuilt every run — it is derivable.
+
+RPC: `skills.list | create | import | update | delete | read`; event `skills.changed`.
+
+---
+
+## External MCP Servers
+
+Stored in `~/.archadev/mcp.json` (mode 0600): `{ version: 1, servers: [{ id, name, transport, command, args, url, env, headers, enabled, createdAt }] }`.
+
+| Rule | Detail |
+|---|---|
+| Name | `^[A-Za-z0-9_-]+$`, unique (case-insensitive), never `archadev` — tools appear as `mcp__<name>__<tool>` |
+| Transport | `stdio` (command + args + env), `http` (Streamable HTTP, url + headers), `sse` (url + headers) |
+| Secrets | Env values and header values stay in the core host. The protocol returns `envKeys` / `headerKeys` only; an edit sends `{ key, value: null }` to keep a stored value |
+| Test | `mcp.test` connects with the MCP SDK client, lists tools, disconnects; 20 s timeout. Result kept in memory and shown on the row |
+| Import | User-level servers from `~/.claude.json`, `~/.gemini/antigravity/mcp_config.json` (`url` or `serverUrl`), `~/.cursor/mcp.json` |
+| Presets | GitHub, Figma Dev Mode, Context7, Playwright, Filesystem prefill the form; nothing is added until saved |
+| **Runs** | Enabled servers are merged into the run's `--mcp-config` next to `archadev` (still `--strict-mcp-config`) and allowed whole as `mcp__<name>`. The per-run config file is written 0600 and deleted when the run exits |
+
+RPC: `mcp.list | save | delete | test | importCandidates | import`; event `mcp.changed`. All params are zod-checked in the manager (`skillParams`, `mcpParams`).
+
+---
+
+## Not Yet
+
+- Skills and MCP servers reach **Claude Code** runs only; agy / Codex runners are not wired (see [03](./03-runs-steering.md)).
+- No per-document or per-project selection — the library and server list are global.
+- GitHub sign-in (device flow, token in keyring) and the other integrations are UI placeholders.

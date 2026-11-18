@@ -1,8 +1,10 @@
 import type { Author, DocumentData, Issue, Op } from '@archa/schema';
 import type { BrowserCommand, BrowserReply } from './browser';
+import type { McpImportCandidate, McpImportSource, McpServer, McpServerInput, McpTestResult, SkillsOverview, Skill } from './settings';
 
 export * from './agent-docs';
 export * from './browser';
+export * from './settings';
 
 /* ----------------------------------------------------------------------------
  * One protocol for every client: renderer (MessagePort), CLI / MCP (socket).
@@ -61,6 +63,20 @@ export interface CoreMethods {
   'accounts.login.start': { params: { id: string }; result: LoginState };
   'accounts.login.code': { params: { id: string; code: string }; result: AgentAccount };
   'accounts.login.cancel': { params: { id: string }; result: void };
+  // Skills handed to chat runs (blueprint AGENT_BRIDGE/05)
+  'skills.list': { params: void; result: SkillsOverview };
+  'skills.create': { params: { name: string; description: string; body: string }; result: Skill };
+  'skills.import': { params: { dir: string }; result: Skill };
+  'skills.update': { params: { id: string; enabled: boolean }; result: Skill };
+  'skills.delete': { params: { id: string }; result: void };
+  'skills.read': { params: { id: string }; result: { content: string } };
+  // External MCP servers handed to chat runs (blueprint AGENT_BRIDGE/05)
+  'mcp.list': { params: void; result: McpServer[] };
+  'mcp.save': { params: McpServerInput; result: McpServer };
+  'mcp.delete': { params: { id: string }; result: void };
+  'mcp.test': { params: { id: string }; result: McpTestResult };
+  'mcp.importCandidates': { params: void; result: McpImportCandidate[] };
+  'mcp.import': { params: { source: McpImportSource; names: string[] }; result: McpServer[] };
 }
 
 /* -------------------------------- accounts -------------------------------- */
@@ -116,6 +132,9 @@ export interface CoreEvents {
   'chat.run': { runId: string; docId: string; status: 'running' | 'finished' | 'failed' | 'stopped' };
   /** Accounts or a sign-in changed; clients re-read `accounts.overview`. */
   'accounts.changed': { accountId?: string };
+  /** Skills or MCP servers changed; clients re-read `skills.list` / `mcp.list`. */
+  'skills.changed': Record<string, never>;
+  'mcp.changed': Record<string, never>;
 }
 export type EventName = keyof CoreEvents;
 

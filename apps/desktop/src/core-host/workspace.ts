@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { AgentExecutor, describeState } from './execute';
 import { ADAPTERS, ChatRunner, findBin, type McpCommand } from './agents';
 import { AccountManager } from './accounts';
+import { SkillManager } from './skills';
+import { McpServerManager } from './mcp-servers';
 import { callBrowser } from './main-bridge';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -38,6 +40,8 @@ export class Workspace {
   private sentHashes = new Map<string, string>();
   private lastDocId: string | null = null;
   readonly accounts = new AccountManager((accountId) => this.broadcast('accounts.changed', accountId ? { accountId } : {}));
+  readonly skills = new SkillManager(() => this.broadcast('skills.changed', {}));
+  readonly mcpServers = new McpServerManager(() => this.broadcast('mcp.changed', {}));
   readonly chat = new ChatRunner(this, mcpCommand);
 
   constructor() {
@@ -272,6 +276,18 @@ export class Workspace {
     'accounts.login.start': (p) => this.accounts.startLogin(p),
     'accounts.login.code': (p) => this.accounts.submitCode(p),
     'accounts.login.cancel': (p) => this.accounts.cancelLogin(p),
+    'skills.list': () => this.skills.overview(),
+    'skills.create': (p) => this.skills.create(p),
+    'skills.import': (p) => this.skills.import(p),
+    'skills.update': (p) => this.skills.update(p),
+    'skills.delete': (p) => this.skills.delete(p),
+    'skills.read': (p) => this.skills.read(p),
+    'mcp.list': () => this.mcpServers.list(),
+    'mcp.save': (p) => this.mcpServers.save(p),
+    'mcp.delete': (p) => this.mcpServers.delete(p),
+    'mcp.test': (p) => this.mcpServers.test(p),
+    'mcp.importCandidates': () => this.mcpServers.importCandidates(),
+    'mcp.import': (p) => this.mcpServers.import(p),
   };
 }
 

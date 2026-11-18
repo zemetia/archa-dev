@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, delimiter, join } from 'node:path';
 import { newId } from '@archa/schema';
 import { DESIGNER_PROMPT, type ChatMessage } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
@@ -18,7 +18,7 @@ type Adapter = {
   label: string;
   bin: string;
   models: string[];
-  args: (o: { prompt: string; mcpConfig: string; model?: string; sessionId?: string; tools: string[] }) => string[];
+  args: (o: { prompt: string; mcpConfig: string; model?: string; sessionId?: string; tools: string[]; extraServers: string[]; skills: boolean }) => string[];
 };
 
 const MCP_TOOLS = ['get_state', 'execute', 'screenshot', 'export_svg', 'say', 'browser'];
@@ -29,11 +29,12 @@ export const ADAPTERS: Adapter[] = [
     label: 'Claude Code',
     bin: 'claude',
     models: ['opus', 'sonnet', 'haiku'],
-    args: ({ prompt, mcpConfig, model, sessionId, tools }) => [
+    args: ({ prompt, mcpConfig, model, sessionId, tools, extraServers, skills }) => [
       '-p', prompt,
       '--output-format', 'stream-json', '--verbose',
       '--mcp-config', mcpConfig, '--strict-mcp-config',
-      '--allowedTools', tools.map((t) => `mcp__archadev__${t}`).join(','),
+      // Settings → MCP servers are allowed whole (`mcp__<name>`); Settings → Skills need the Skill tool.
+      '--allowedTools', [...tools.map((t) => `mcp__archadev__${t}`), ...extraServers.map((n) => `mcp__${n}`), ...(skills ? ['Skill'] : [])].join(','),
       '--append-system-prompt', DESIGNER_PROMPT,
       ...(model ? ['--model', model] : []),
       ...(sessionId ? ['--resume', sessionId] : []),
@@ -87,11 +88,13 @@ export class ChatRunner {
     const cfgDir = join(archaHome(), 'runtime');
     mkdirSync(cfgDir, { recursive: true });
     const mcpConfig = join(cfgDir, `mcp-${runId}.json`);
-    writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { archadev: { command: mcp.command, args: [...mcp.args, '--doc', docId, '--agent', adapter.id], env: mcp.env } } }, null, 2));
+    const extra = this.ws.mcpServers.forRun();
+    writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { ...extra, archadev: { command: mcp.command, args: [...mcp.args, '--doc', docId, '--agent', adapter.id], env: mcp.env } } }, null, 2), { mode: 0o600 });
+    const skills = syncRunSkills(cfgDir, this.ws.skills.forRun());
 
     const sessionKey = `${docId}:${agentId}:${login.label ? Object.values(login.env).join() : 'host'}`;
     const fullPrompt = `${prompt}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}`;
-    const child = spawn(bin, adapter.args({ prompt: fullPrompt, mcpConfig, model, sessionId: this.sessions.get(sessionKey), tools: MCP_TOOLS }), {
+    const child = spawn(bin, adapter.args({ prompt: fullPrompt, mcpConfig, model, sessionId: this.sessions.get(sessionKey), tools: MCP_TOOLS, extraServers: Object.keys(extra), skills }), {
       cwd: cfgDir, shell: false, windowsHide: true, env: { ...process.env, ...login.env, ARCHA_RUN_ID: runId },
     });
     const run: Run = { id: runId, docId, agent: agentId, child, stopped: false };
@@ -117,6 +120,7 @@ export class ChatRunner {
     child.on('error', (e) => this.emit(docId, runId, agentId, 'error', e.message));
     child.on('exit', (code) => {
       this.runs.delete(runId);
+      rmSync(mcpConfig, { force: true });
       const status = run.stopped ? 'stopped' : code === 0 ? 'finished' : 'failed';
       if (status === 'failed') this.emit(docId, runId, agentId, 'error', stderr.trim() || `Agent exited with code ${code}`);
       this.ws.broadcast('chat.run', { runId, docId, status });
@@ -146,6 +150,19 @@ export class ChatRunner {
       this.emit(run.docId, run.id, run.agent, 'error', String(ev.result ?? 'Agent run failed'));
     }
   }
+}
+
+/**
+ * The run's cwd is a project to Claude Code, so enabled library skills are mirrored into its
+ * `.claude/skills`. Returns whether any skill is present.
+ */
+function syncRunSkills(cwd: string, dirs: string[]): boolean {
+  const target = join(cwd, '.claude', 'skills');
+  rmSync(target, { recursive: true, force: true });
+  if (!dirs.length) return false;
+  mkdirSync(target, { recursive: true });
+  for (const d of dirs) cpSync(d, join(target, basename(d)), { recursive: true });
+  return true;
 }
 
 function toolSummary(name: string, input: unknown): string {
