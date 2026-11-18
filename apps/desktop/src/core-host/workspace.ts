@@ -3,11 +3,12 @@ import { basename } from 'node:path';
 import { ArchaDocument, DocumentError, DocumentSession, subtreeHash } from '@archa/core';
 import { decodeArcha, encodeArcha, exportSvg } from '@archa/formats';
 import { newId, opSchema, type Author, type Op } from '@archa/schema';
-import type { ActivityEntry, AgentClient, Channel, ClientInfo, CoreEvents, CoreMethods, DocSummary, EventName, Message, MethodName } from '@archa/protocol';
+import { browserCommandSchema, type ActivityEntry, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
 import { z } from 'zod';
 import { AgentExecutor, describeState } from './execute';
 import { ADAPTERS, ChatRunner, findBin, type McpCommand } from './agents';
 import { AccountManager } from './accounts';
+import { callBrowser } from './main-bridge';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -234,6 +235,15 @@ export class Workspace {
     'agent.say': ({ docId, text, nodeId }, conn) => {
       const s = this.session(docId);
       this.log(s.id, conn.author, 'say', text, nodeId ? [resolveRef(s, nodeId)] : []);
+    },
+    'agent.browser': async (params, conn) => {
+      const parsed = browserCommandSchema.safeParse(params);
+      if (!parsed.success) throw new DocumentError('VALIDATION', `Invalid browser input: ${parsed.error.issues[0]?.path.join('.')} ${parsed.error.issues[0]?.message}`);
+      const cmd = parsed.data;
+      const reply = await callBrowser(cmd, conn.author.name ?? conn.author.id);
+      const detail = cmd.url ?? cmd.ref ?? cmd.selector ?? cmd.key ?? (cmd.text !== undefined ? `"${cmd.text.slice(0, 40)}"` : '');
+      this.log(this.session().id, conn.author, 'browser', `Browser · ${cmd.action}${detail ? ` ${detail}` : ''}`);
+      return reply;
     },
     'app.info': () => {
       const m = mcpCommand();

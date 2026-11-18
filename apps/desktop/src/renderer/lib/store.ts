@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, type AccountsOverview, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, type AccountsOverview, type BrowserState, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodePng } from '@archa/render';
 
@@ -32,6 +32,10 @@ type State = {
   settingsOpen: boolean;
   /** Agent CLIs + saved login profiles (Settings → Agents, chat account picker). */
   accounts: AccountsOverview | null;
+  /** In-app browser pane (blueprint BROWSER). Pages live in main; this mirrors their state. */
+  browserOpen: boolean;
+  browserWidth: number;
+  browser: BrowserState;
 };
 
 export const useStore = create<State>(() => ({
@@ -39,6 +43,7 @@ export const useStore = create<State>(() => ({
   selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers',
   agents: [], activity: [], chat: [], runningRun: null, agentFocus: null, editingText: null, toasts: [], fitRequest: 0,
   settingsOpen: false, accounts: null,
+  browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
 }));
 
 const set = useStore.setState;

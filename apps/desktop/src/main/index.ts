@@ -1,6 +1,9 @@
 import { join, resolve } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 import { app, BrowserWindow, dialog, ipcMain, MessageChannelMain, shell, utilityProcess, type UtilityProcess } from 'electron';
+import { z } from 'zod';
+import { browserCommandSchema, type MainBridgeResponse } from '@archa/protocol';
+import { BrowserManager } from './browser';
 
 /* Main process: windows, argv, dialogs, core host lifecycle. Holds no document state (blueprint ARCHITECTURE/01). */
 
@@ -27,9 +30,30 @@ function parseArgv(argv: string[], cwd: string): OpenIntent {
 let core: UtilityProcess | null = null;
 let restarts = 0;
 const windows = new Set<BrowserWindow>();
+const browser = new BrowserManager();
+
+/* The core host relays agent `browser` calls here; pages live in this process (blueprint BROWSER). */
+const bridgeRequest = z.object({ type: z.literal('browser'), id: z.number(), agent: z.string().max(200), cmd: browserCommandSchema });
+
+function onCoreMessage(msg: unknown) {
+  if ((msg as { type?: string })?.type !== 'browser') return;
+  const parsed = bridgeRequest.safeParse(msg);
+  const reply = (r: MainBridgeResponse) => core?.postMessage(r);
+  if (!parsed.success) {
+    const id = (msg as { id?: unknown }).id;
+    if (typeof id === 'number') reply({ type: 'browser-result', id, ok: false, error: `Invalid browser command: ${parsed.error.issues[0]?.path.join('.')} ${parsed.error.issues[0]?.message}` });
+    return;
+  }
+  const { id, agent, cmd } = parsed.data;
+  browser.run(cmd, agent).then(
+    (r) => reply({ type: 'browser-result', id, ok: true, reply: r }),
+    (e: unknown) => reply({ type: 'browser-result', id, ok: false, error: (e as Error).message }),
+  );
+}
 
 function startCore() {
   core = utilityProcess.fork(join(__dirname, 'core-host.js'), [], { serviceName: 'ArchaDev Core', stdio: 'inherit' });
+  core.on('message', onCoreMessage);
   core.on('exit', (code) => {
     core = null;
     if (code !== 0 && !quitting && restarts < 3) {
@@ -68,11 +92,29 @@ function createWindow(intent: OpenIntent = { kind: 'none' }) {
     },
   });
   windows.add(win);
-  win.on('closed', () => windows.delete(win));
+  if (windows.size === 1) browser.setHost(win);
+  win.on('closed', () => {
+    windows.delete(win);
+    browser.hostClosed(win);
+    const next = [...windows][0];
+    if (next) browser.setHost(next);
+  });
   win.once('ready-to-show', () => win.show());
-  win.webContents.once('did-finish-load', () => {
+  // Every load (first load, reload, crash recovery) needs a fresh core port; the open intent is sent once.
+  let pendingIntent = intent;
+  win.webContents.on('did-finish-load', () => {
     connectWindow(win);
-    if (intent.kind !== 'none') win.webContents.send('open-intent', intent);
+    if (pendingIntent.kind !== 'none') win.webContents.send('open-intent', pendingIntent);
+    pendingIntent = { kind: 'none' };
+  });
+  // A dead renderer leaves a blank window; reload it (documents live in the core host).
+  // At most once per 10 s so a renderer that dies on load cannot spin.
+  let lastCrash = 0;
+  win.webContents.on('render-process-gone', (_e, details) => {
+    console.error(`Renderer gone (${details.reason}, exit ${details.exitCode})`);
+    if (details.reason === 'clean-exit' || win.isDestroyed() || Date.now() - lastCrash < 10_000) return;
+    lastCrash = Date.now();
+    win.webContents.reload();
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -123,6 +165,21 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('shell:open-path', async (_e, path: string) => {
       if (typeof path !== 'string' || !existsSync(path) || !statSync(path).isDirectory()) return 'Folder not found';
       return shell.openPath(path);
+    });
+    const rect = z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).nullable();
+    ipcMain.on('browser:bounds', (e, r: unknown) => {
+      const parsed = rect.safeParse(r);
+      const win = BrowserWindow.fromWebContents(e.sender);
+      if (!parsed.success || !win) return;
+      browser.setHost(win);
+      browser.setBounds(parsed.data);
+    });
+    ipcMain.handle('browser:state', () => browser.state());
+    const uiAction = z.enum(['navigate', 'back', 'forward', 'reload', 'stop', 'devtools', 'new', 'switch', 'close']);
+    ipcMain.handle('browser:ui', async (_e, action: unknown, arg: unknown) => {
+      const a = uiAction.safeParse(action);
+      if (!a.success || (arg !== undefined && typeof arg !== 'string')) return 'Invalid browser action';
+      try { await browser.ui(a.data, arg as string | undefined); return null; } catch (err) { return (err as Error).message; }
     });
     createWindow(parseArgv(process.argv, process.cwd()));
   });

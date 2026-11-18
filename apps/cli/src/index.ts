@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Command } from 'commander';
+import { browserCommandSchema } from '@archa/protocol';
 import { connectCore, CoreUnavailable } from './connect';
 import { runMcp } from './mcp';
 
@@ -34,6 +35,33 @@ program
     } catch (e) {
       if (opts.json) console.log(JSON.stringify({ running: false, error: (e as Error).message }));
       else console.error(`error: ${(e as Error).message}`);
+      process.exit(e instanceof CoreUnavailable ? 4 : 1);
+    }
+  });
+
+program
+  .command('browser')
+  .argument('<action>', 'open, snapshot, screenshot, click, type, press, scroll, evaluate, … (same as the MCP browser tool)')
+  .argument('[options]', 'JSON object with the action fields, e.g. {"url":"localhost:3000"}', '{}')
+  .option('--out <file>', 'write a returned screenshot PNG here')
+  .description('Drive the in-app browser of the running app')
+  .action(async (action: string, options: string, opts: { out?: string }) => {
+    let input: unknown;
+    try { input = { ...(JSON.parse(options) as object), action }; } catch { console.error('error: options must be a JSON object'); process.exit(2); }
+    const parsed = browserCommandSchema.safeParse(input);
+    if (!parsed.success) {
+      console.error(`error: ${parsed.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ')}`);
+      process.exit(2);
+    }
+    try {
+      const core = await connectCore({ kind: 'cli', name: 'archa browser' });
+      const r = await core.call('agent.browser', parsed.data);
+      console.log(r.text);
+      if (r.png && opts.out) { writeFileSync(opts.out, Buffer.from(r.png, 'base64')); console.log(`PNG written to ${resolve(opts.out)}`); }
+      else if (r.png) console.log('(screenshot returned — pass --out file.png to save it)');
+      process.exit(0);
+    } catch (e) {
+      console.error(`error: ${(e as Error).message}`);
       process.exit(e instanceof CoreUnavailable ? 4 : 1);
     }
   });
