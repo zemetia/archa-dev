@@ -1,0 +1,52 @@
+# Document Model — 04: Hashing
+
+← [DOCUMENT_MODEL.md](../DOCUMENT_MODEL.md) | [Blueprint INDEX](../INDEX.md)
+
+**Phase:** 1 (hashes), 3 (consumers). Code: `packages/core/src/hash/`.
+
+---
+
+## Two Hashes per Node
+
+| Hash | Input | Consumers |
+|---|---|---|
+| `selfHash` | Node's **resolved** properties (variables resolved for the active theme), excluding `children`, `name`, `meta`, `locked` | Node bitmap cache, tile keys |
+| `subtreeHash` | `selfHash` + ordered children's `subtreeHash` (Merkle) | Thumbnails, screenshots, export cache, layout cache, "unchanged" replies to agents |
+
+Algorithm: xxhash64 (wasm) over a canonical encoding (sorted keys, fixed float precision 1e-4). Not cryptographic — collisions only cost a stale cache entry; the asset store uses sha256 instead.
+
+---
+
+## Incremental Update
+
+```
+apply op on node N
+  └─ recompute selfHash(N)
+       └─ walk parents: recompute subtreeHash up to page root   (O(depth))
+```
+
+- Batched per transaction: collect dirty nodes, recompute once, top-down order avoided.
+- Move op: dirty both old and new parent chains.
+- Layout results feed back: if Yoga moves a child, that child's `selfHash` changes (bounds are part of resolved props).
+
+---
+
+## Reverse Indexes
+
+| Index | Key → Value | Used when |
+|---|---|---|
+| Variable usage | `variableId → Set<NodeId>` | Variable edit or theme switch dirties exactly these nodes |
+| Component instances | `componentId → Set<NodeId>` | Editing the main component dirties every instance |
+| Asset refs | `assetHash → refCount` | Asset store eviction |
+| Name index | `name → Set<NodeId>` | `find` by name, override by unique name |
+
+Maintained by the op applier; rebuilt from scratch on load (fast: one pass).
+
+---
+
+## Invariants (tested)
+
+1. Same document content → same hashes, regardless of op history.
+2. Undo back to revision R → hashes equal those at R.
+3. Theme switch A → B → A restores every hash.
+4. Changing a node's `name` does not change any hash.

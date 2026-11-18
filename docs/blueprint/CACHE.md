@@ -1,0 +1,19 @@
+# Cache
+
+← [Blueprint INDEX](./INDEX.md)
+
+| Part | Coverage |
+|---|---|
+| [01 — Layers and keys](./CACHE/01-layers-keys.md) | L0–L7 cache layers, keys, owners, invalidation |
+| [02 — Render tiles](./CACHE/02-render-tiles.md) | Tile grid, zoom buckets, worker queue, gesture mode |
+| [03 — Disk stores and budgets](./CACHE/03-disk-stores-budgets.md) | Asset store, thumbnails, index.sqlite, eviction, performance targets |
+
+---
+
+## Principles
+
+1. **Derivable.** Deleting `.archadev/cache/` or `~/.archadev/cache/` never loses data — only time.
+2. **Keyed by content hash**, never by node id alone → [DOCUMENT_MODEL/04](./DOCUMENT_MODEL/04-hashing.md).
+3. **Budgeted.** Every cache has a size cap and an eviction policy; no unbounded maps.
+4. **Observable.** `archa doctor` and the dev overlay show hit rate and size per layer.
+5. **Shared with agents.** Screenshots and state digests an agent already received are not resent.

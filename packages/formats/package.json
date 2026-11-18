@@ -1,0 +1,19 @@
+{
+  "name": "@archa/formats",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@archa/core": "workspace:*",
+    "@archa/schema": "workspace:*",
+    "fflate": "^0.8.3"
+  }
+}

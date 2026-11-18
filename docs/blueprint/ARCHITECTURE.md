@@ -1,0 +1,29 @@
+# Architecture
+
+← [Blueprint INDEX](./INDEX.md)
+
+| Part | Coverage |
+|---|---|
+| [01 — Processes](./ARCHITECTURE/01-processes.md) | Main, core host, renderer, render worker, plugin host, CLI — duties and bans |
+| [02 — Protocol and IPC](./ARCHITECTURE/02-protocol-ipc.md) | `@archa/protocol`, transports, framing, auth, events |
+| [03 — Startup and lifecycle](./ARCHITECTURE/03-startup-lifecycle.md) | Boot paths, headless core, crash recovery, shutdown |
+| [04 — Single writer and sync](./ARCHITECTURE/04-single-writer-sync.md) | Revisions, rebase, broadcast, core lock, multi-window |
+
+---
+
+## System Overview
+
+```
+┌──────────────────────────── ArchaDev app (Electron) ────────────────────────────┐
+│ main ── spawn ──► core host (utilityProcess) ◄── MessagePort ──► renderer (React)│
+│                     │  documents · ops · cache · MCP · agent runs   + render worker│
+│                     └── MessagePort ──► plugin host (sandbox)                    │
+└─────────────────────┬────────────────────────────────────────────┬──────────────┘
+                      │ named pipe / unix socket                    │ spawn (argv/stdin)
+              archa CLI / archa mcp ◄──── MCP stdio ──── local agents (Claude Code, agy, Codex, Hermes)
+                      │ app not running → core loaded in-process (headless)
+                      ▼
+              disk: *.archa · <project>/.archadev/ · ~/.archadev/
+```
+
+**One core, three surfaces.** The renderer, the CLI and the MCP server are all clients of `@archa/core`. Only the core host writes.

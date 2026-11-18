@@ -1,0 +1,77 @@
+# Architecture — 02: Protocol and IPC
+
+← [ARCHITECTURE.md](../ARCHITECTURE.md) | [Blueprint INDEX](../INDEX.md) | [03 — Startup and lifecycle →](./03-startup-lifecycle.md)
+
+**Phase:** 1 (schema), 2 (MessagePort), 4 (socket).
+
+---
+
+## One protocol for every client
+
+`@archa/protocol` defines every request, response and event once. Renderer, CLI, MCP relay and plugin host all use it.
+
+```
+packages/protocol/src/
+├── index.ts
+├── envelope.ts        Request / Response / Event envelopes
+├── methods/           one file per domain: document.ts, project.ts, export.ts, agents.ts, review.ts, cache.ts
+├── events.ts          ops.applied, activity, agent.event, decision.pending, cache.invalidated
+├── client.ts          createClient(transport) → typed CoreApi
+└── transports/        messagePort.ts, socket.ts (JSON lines), inProcess.ts
+```
+
+### Envelope
+
+```ts
+type Request  = { id: string; method: MethodName; params: unknown; client: ClientInfo };
+type Response = { id: string; ok: true; result: unknown } | { id: string; ok: false; error: RpcError };
+type Event    = { event: EventName; data: unknown; revision?: number };
+type ClientInfo = { kind: 'renderer' | 'cli' | 'mcp' | 'plugin' | 'agent-run'; name: string; runId?: string };
+```
+
+`params` and `result` are validated with the method's zod schemas **on the core side**. Clients get types from `z.infer`.
+
+### Defining a method
+
+```ts
+// packages/protocol/src/methods/document.ts
+export const applyTransaction = defineMethod({
+  name: 'document.applyTransaction',
+  params: z.object({ docId: docIdSchema, baseRevision: z.number().int(), ops: z.array(opSchema) }),
+  result: z.object({ revision: z.number().int(), created: z.record(z.string(), nodeIdSchema), issues: z.array(issueSchema) }),
+});
+```
+
+Handler lives in `packages/core/src/rpc/document.ts`. A method without a handler fails the `protocol-coverage` test.
+
+---
+
+## Transports
+
+| Transport | Used by | Framing | Auth |
+|---|---|---|---|
+| `MessagePort` | Renderer, plugin host | Structured clone | Implicit (port given by main) |
+| Named pipe `\\.\pipe\archadev-<user>-<hash>` / unix socket `~/.archadev/runtime/core.sock` | CLI, `archa mcp` | JSON lines | Token from `runtime/core.json` sent in the first frame |
+| In-process | Headless CLI, tests | Direct call | — |
+
+The socket only accepts local connections. `core.json` is written with mode `0600` and deleted on clean shutdown.
+
+---
+
+## Events
+
+| Event | Payload | Consumers |
+|---|---|---|
+| `ops.applied` | docId, revision, ops, author | Every view of that doc |
+| `activity` | Activity entry | Activity panel, agent cursor |
+| `agent.event` | runId + normalised agent event | Agent dock timeline |
+| `decision.pending` | Decision record | Decision modal |
+| `cache.invalidated` | Keys / node ids | Renderer tile cache |
+
+Subscriptions are per document (`document.subscribe(docId)`) so a window only receives its own docs.
+
+---
+
+## Errors
+
+`RpcError = { code, message, details? }` with codes: `VALIDATION`, `NOT_FOUND`, `STALE_REVISION`, `CONFLICT`, `PERMISSION`, `TIMEOUT`, `INTERNAL`. Never throw raw errors across a boundary.

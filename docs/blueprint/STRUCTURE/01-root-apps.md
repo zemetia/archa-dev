@@ -1,0 +1,70 @@
+# Structure — 01: Root and Apps
+
+← [STRUCTURE.md](../STRUCTURE.md) | [Blueprint INDEX](../INDEX.md) | [02 — Packages →](./02-packages.md)
+
+**Phase:** 0 (skeleton), filled in by every later phase.
+
+---
+
+## Root
+
+| Path | Type | Purpose |
+|---|---|---|
+| `apps/` | dir | Runnable programs: desktop app, CLI |
+| `packages/` | dir | Libraries → [02-packages.md](./02-packages.md) |
+| `skills/archadev/` | dir | The local skill shipped with the app → [MCP/04](../MCP/04-local-skill.md) |
+| `docs/plan/` | dir | Intent, decisions, roadmap |
+| `docs/blueprint/` | dir | Build contract (this dir) |
+| `docs/knowledge/` | dir | `THIS.md`, `LEARN.md` → [KNOWLEDGE.md](../KNOWLEDGE.md) |
+| `CLAUDE.md` | file | Agent entry point — read first |
+| `CHANGELOG.md` | file | Keep a Changelog → [BEST_PRACTICE/03](../BEST_PRACTICE/03-git-changelog-release.md) |
+| `package.json` | file | Root scripts only (`dev`, `build`, `lint`, `typecheck`, `test`, `bench`, `gen:api-docs`) |
+| `pnpm-workspace.yaml` | file | `apps/*`, `packages/*` |
+| `turbo.json` | file | Task graph and caching |
+| `tsconfig.base.json` | file | Strict compiler options shared by all packages |
+| `eslint.config.mjs` | file | Flat config, zero-warning policy |
+| `vitest.workspace.ts` | file | One Vitest project per package |
+| `.github/workflows/` | dir | CI: lint, typecheck, test on windows/macos/ubuntu; release |
+
+---
+
+## apps/desktop — Electron app
+
+| Path | Purpose |
+|---|---|
+| `src/main/index.ts` | App lifecycle, single-instance lock, argv parsing → [ENTRY_POINTS](../ENTRY_POINTS.md) |
+| `src/main/windows.ts` | One window per project; standalone files as tabs |
+| `src/main/core-host.ts` | Spawns the core host `utilityProcess`, restarts it on crash, hands `MessagePort`s to windows |
+| `src/main/plugin-host.ts` | Spawns plugin hosts |
+| `src/main/menu.ts`, `src/main/protocol.ts` | Native menus; `archadev://` handler |
+| `src/main/os-integration/` | Registry verbs (Windows), Finder Quick Action, `.desktop` — install/uninstall |
+| `src/core-host/index.ts` | Entry of the core host process: boots `@archa/core`, RPC server, local socket, MCP relay |
+| `src/preload/index.ts` | Exposes a typed `archa` bridge (port handshake only) via `contextBridge` |
+| `src/renderer/` | React app → [APP_UI](../APP_UI.md) |
+| `src/renderer/canvas/` | Canvas view, input → ops, render worker bootstrap |
+| `electron.vite.config.ts` | main / preload / renderer / core-host builds |
+| `electron-builder.yml` | Installers, file associations, protocols, auto-update |
+
+---
+
+## apps/cli — `archa`
+
+| Path | Purpose |
+|---|---|
+| `src/index.ts` | commander root; `--help` front door, `archa tools` full list |
+| `src/commands/<name>.ts` | One file per command → [CLI.md](../CLI.md) |
+| `src/connect.ts` | Find running core via `~/.archadev/runtime/core.json`; else boot headless core in-process |
+| `src/output.ts` | Human output vs `--json`; exit codes |
+
+The CLI is bundled inside the desktop app and put on `PATH` by the installer.
+
+---
+
+## skills/archadev
+
+| Path | Purpose |
+|---|---|
+| `SKILL.md` | When to use, the loop, hard rules, tool overview |
+| `references/api.md` | **Generated** by `pnpm gen:api-docs` from `@archa/schema` — never hand-edit |
+| `references/*.md` | process, taste, layout, design-system, review |
+| `references/guides/*.md` | landing, web-app, mobile, slides, tables, code-export |

@@ -1,0 +1,64 @@
+# File Formats — 03: Migrations and Validation
+
+← [FILE_FORMATS.md](../FILE_FORMATS.md) | [Blueprint INDEX](../INDEX.md) | [04 — Importers →](./04-importers.md)
+
+**Phase:** 1. Code: `packages/formats/src/migrations/`, `packages/formats/test/fixtures/`.
+
+---
+
+## Versioning
+
+| Version | Scope | Bumped when |
+|---|---|---|
+| `.archa` `formatVersion` | Document file format | A property is renamed/removed, semantics change, an entry layout changes |
+| `.archadev` `formatVersion` | Project folder layout | Folder or config file shape changes |
+| App SemVer | Release | Independent of both |
+
+Adding an **optional** property does not bump `formatVersion`.
+
+---
+
+## Migrations
+
+```
+packages/formats/src/migrations/
+├── archa/
+│   ├── index.ts          ordered list; runMigrations(raw, from, to)
+│   ├── v1-to-v2.ts       pure function (raw JSON) → raw JSON
+│   └── ...
+└── project/
+    └── ...
+```
+
+| Rule | Detail |
+|---|---|
+| Pure | Work on raw JSON before schema parsing; no I/O |
+| Forward only | No downgrade migrations; newer files open read-only |
+| Fixtures | Every released `formatVersion` keeps a fixture in `test/fixtures/archa-v<N>/`; CI migrates each to latest and validates |
+| Backup | Migrating a project or file in place writes a backup first |
+
+---
+
+## Validation and Quarantine
+
+On load, each node is parsed with `nodeSchema`:
+
+| Result | Action |
+|---|---|
+| Valid | Loaded |
+| Invalid node | Kept verbatim in `quarantine`, hidden from canvas, listed in Issues with the zod path; saved back unchanged |
+| Unknown plugin node type | Kept, drawn with its `fallback` asset |
+| Invalid `manifest.json` / `document.json` | Open fails with a clear error; nothing written |
+
+Quarantine guarantees an older or buggy app never destroys data it does not understand.
+
+---
+
+## Checklist: changing the format
+
+- [ ] Schema change in `packages/schema`
+- [ ] Bump `formatVersion` constant
+- [ ] Migration `vN-to-vN+1.ts` + unit test
+- [ ] New fixture `archa-v<N+1>/`
+- [ ] CHANGELOG entry under **Files**
+- [ ] `pnpm gen:api-docs`

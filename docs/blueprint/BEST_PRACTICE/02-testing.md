@@ -1,0 +1,67 @@
+# Best Practice — 02: Testing
+
+← [BEST_PRACTICE.md](../BEST_PRACTICE.md) | [Blueprint INDEX](../INDEX.md) | [03 — Git →](./03-git-changelog-release.md)
+
+---
+
+## Test Kinds
+
+| Kind | Tool | Location | Runs in CI |
+|---|---|---|---|
+| Unit | Vitest | `packages/*/test/**/*.test.ts` | Always |
+| Component | Vitest + Testing Library | `packages/ui/src/**/Name.test.tsx` | Always |
+| Format round-trip | Vitest | `packages/formats/test/roundtrip.test.ts` | Always |
+| Migration | Vitest | `packages/formats/test/migrations/` — every old fixture → latest | Always |
+| Golden image | Vitest + CanvasKit (Node) | `packages/render/test/golden/` | Always (CPU raster) |
+| Protocol coverage | Vitest | Every method has a handler and a test | Always |
+| MCP contract | Vitest, headless core | Replayed `execute` sessions, reply snapshots | Always |
+| Agent parsers | Vitest | Recorded transcripts `packages/agents/test/fixtures/` | Always |
+| App e2e | Playwright `_electron` | `apps/desktop/e2e/` | Always (one OS per PR, all on main) |
+| OS integration | Vitest (Windows job) | Registry writer against a temp hive | Windows |
+| Agent live | Vitest, `ARCHA_AGENT_IT=1` | `packages/agents/test/live/` | Manual / nightly |
+| Benchmarks | `vitest bench` | `packages/core/bench`, `packages/render/bench` | main + nightly; > 10% regression fails |
+
+---
+
+## Isolation (Gungnir lesson)
+
+Gungnir's tests once shared the live database and wiped the owner's data. Here:
+
+| Rule | Detail |
+|---|---|
+| Home dir | Every test run sets `ARCHA_HOME` to a fresh temp dir (global setup) |
+| Projects | Tests create projects in temp dirs; never touch the repo's own `.archadev/` |
+| Agents | Live agent tests use dedicated profiles, never the host login |
+| Network | Disabled in unit tests (msw / injected fetch) |
+
+A guard in `test/setup.ts` throws if `ARCHA_HOME` resolves to the real home.
+
+---
+
+## Fixtures
+
+| Fixture | Generator |
+|---|---|
+| Documents of N nodes | `packages/core/bench/fixtures.ts` (seeded, deterministic) |
+| `.archa` per formatVersion | Committed under `packages/formats/test/fixtures/archa-v<N>/` |
+| Agent transcripts | Recorded with `pnpm record:agent <id>`, scrubbed of paths/emails |
+
+---
+
+## CI Matrix
+
+| Job | OS | Steps |
+|---|---|---|
+| check | ubuntu | install → lint → typecheck |
+| test | windows, macos, ubuntu | unit, golden, contract |
+| e2e | windows (PR), all (main) | build app → Playwright |
+| bench | ubuntu (GPU runner when available) | benchmarks vs baseline |
+| release | all | electron-builder, sign, publish → [03](./03-git-changelog-release.md) |
+
+---
+
+## Writing Tests
+
+- Test behaviour through the public API of a package, not internals.
+- One assertion idea per test; name says the behaviour (`rejects percentage width with VALIDATION`).
+- Snapshot only stable text (MCP replies, parser output) — never images as snapshots (use golden diff).

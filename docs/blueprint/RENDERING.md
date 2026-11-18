@@ -1,0 +1,15 @@
+# Rendering
+
+← [Blueprint INDEX](./INDEX.md)
+
+| Part | Coverage |
+|---|---|
+| [01 — CanvasKit pipeline](./RENDERING/01-canvaskit-pipeline.md) | Engine, surfaces, draw order per node, fonts, headless parity |
+| [02 — Render layers and layer tree](./RENDERING/02-layers-hit-testing.md) | Stacked render layers, layer panel behaviour, hit testing, code frames |
+| [03 — Export](./RENDERING/03-export.md) | PNG/JPEG/WebP, SVG, PDF, screenshots for agents, export cache |
+
+---
+
+## Key Decision
+
+**CanvasKit (Skia WASM)** draws content in the renderer, in render workers, and in Node for the CLI/MCP. An agent working headless sees exactly what the person sees in the app. (Plan decision D-02.)

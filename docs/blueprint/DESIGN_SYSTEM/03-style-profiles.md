@@ -1,0 +1,62 @@
+# Design System — 03: Style Profiles
+
+← [DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md) | [Blueprint INDEX](../INDEX.md) | [04 — Code export →](./04-code-export.md)
+
+**Phase:** 7. Code: `packages/design-system/src/styles/`, data in `packages/design-system/styles/`. Ported from Accent's `plugin/styles/` (our own work).
+
+---
+
+## Files
+
+```
+packages/design-system/styles/
+├── profiles/<id>.json     parameters (which slots, radius scale, elevation, type scale, font roles, token jobs)
+├── profiles/<id>.md       the brief (prose about structure)
+├── palettes.json          named palettes: 6 slots + optional band, signal, tints, glow
+└── fonts.json             families, kind tags, available weights, fallback stacks
+```
+
+---
+
+## Brief Shape (`<id>.md`)
+
+| Section | Content |
+|---|---|
+| Identity | One signature device, stated as a removal test ("take this away and it becomes generic") |
+| Layout | Columns, density, margins, what separates zones |
+| Token map | Which semantic token goes where, with usage budgets (accent ≤ 3–4 per view) |
+| Decoration | Allowed / banned imagery |
+| Hierarchy | Scale ratios between levels |
+| Typography | A job per font role (heading, body, caption, data) |
+
+The brief never contains values; values live in parameters so one profile works with many palettes.
+
+---
+
+## Two-Step Load (`get_style`)
+
+| Call | Returns |
+|---|---|
+| `get_style()` | Catalogue: id, name, one-line identity, kind (`marketing` \| `app-ui`) |
+| `get_style({ name })` | The parameters it requires (palette, fonts per role, roundness, elevation) with allowed values |
+| `get_style({ name, params })` | Brief + resolved tokens (**only** the slots this profile uses), measured contrast per colour job, type scale |
+
+Applying (`apply_style` via `execute` → `setVariables`) writes variables into the document. The brief is never written.
+
+---
+
+## Computed, Not Written
+
+| Value | How |
+|---|---|
+| Type scale | Each level stored as size at 390 and at 1440 → emitted as an exact `clamp()` for code export |
+| Derived colours | Missing constants emitted as relative colours from a slot, so a later accent edit carries through |
+| Contrast | Measured per declared job (text / fill / light) |
+
+---
+
+## Starter Set
+
+Accent's 7 profiles (Blush Studio, Open File, Sticker Book, Poster Catalogue, Liquid Glass, Drawing Board, Type Wall), 12 palettes, 20 fonts — plus new **app-UI** profiles (dashboard, settings-heavy, mobile app), which pen's catalogue lacked.
+
+Acceptance (from Accent): the same prompt with two profiles gives clearly different, coherent results with a clean lint.

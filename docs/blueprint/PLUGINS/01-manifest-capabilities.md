@@ -1,0 +1,77 @@
+# Plugins — 01: Manifest and Capabilities
+
+← [PLUGINS.md](../PLUGINS.md) | [Blueprint INDEX](../INDEX.md) | [02 — Sandbox →](./02-sandbox-permissions.md)
+
+**Phase:** 10. Schema: `packages/schema/src/plugin-manifest.ts`.
+
+---
+
+## Manifest — `archa-plugin.json`
+
+```json
+{
+  "id": "com.example.bg-remove",
+  "name": "Background Remover",
+  "version": "1.2.0",
+  "engine": "^1.0.0",
+  "main": "dist/main.js",
+  "ui": { "panel": "dist/panel.html" },
+  "contributes": {
+    "generators": [{ "id": "remove-bg", "kinds": ["remove-bg"] }],
+    "commands": [{ "id": "bg-remove.run", "title": "Remove background" }],
+    "tools": [{ "name": "remove_background", "description": "Remove the background of an image node" }]
+  },
+  "permissions": ["document:read", "document:write", "assets:write", "network:api.example.com"]
+}
+```
+
+`id` is reverse-DNS, unique. `engine` = compatible ArchaDev plugin API range.
+
+---
+
+## Contribution Points
+
+| Key | Adds | Consumed by |
+|---|---|---|
+| `tools` | MCP tools (`plugin_<id>_<name>`) | [MCP/01](../MCP/01-transports-tools.md) |
+| `commands` | Palette actions, menu items | App |
+| `panels` (`ui.panel`) | A left/right panel (sandboxed iframe) | App |
+| `nodeTypes` | Custom node type: schema, draw function (runs in render worker), required fallback image | Document, render |
+| `importers` / `exporters` | Formats and code targets | [FILE_FORMATS/04](../FILE_FORMATS/04-importers.md), export |
+| `generators` | `generate()` kinds: image, svg, remove-bg, trace, html-animation | `execute` API |
+| `lintRules` | Extra rules with ids `plugin/<id>/<rule>` | [MCP/03](../MCP/03-response-contract-lint.md) |
+| `styleProfiles`, `libraries` | Design content | Design system |
+| `agents` | Agent adapter (launch mode) | [AGENT_BRIDGE/01](../AGENT_BRIDGE/01-adapter-interface.md) |
+| `designerProfiles` | Skill emphasis + style + tool set bundles | Runs |
+
+---
+
+## SDK Surface (`@archa/plugin-sdk`)
+
+```ts
+import { definePlugin } from '@archa/plugin-sdk';
+
+export default definePlugin({
+  async activate(ctx) {
+    ctx.tools.register('remove_background', schema, async (input, call) => {
+      const img = await call.document.get(input.nodeId);
+      const bytes = await call.assets.read(img.fill.asset);
+      const out = await call.net.fetch('https://api.example.com/remove', { method: 'POST', body: bytes });
+      const hash = await call.assets.write(await out.arrayBuffer(), 'image/png');
+      await call.document.transact('Remove background', (t) => t.update(input.nodeId, { fill: { type: 'image', asset: hash } }));
+      return { text: 'Background removed', nodeIds: [input.nodeId] };
+    });
+  },
+});
+```
+
+| `ctx` / `call` API | Requires permission |
+|---|---|
+| `document.get/find` | `document:read` |
+| `document.transact` | `document:write` |
+| `assets.read/write` | `assets:read` / `assets:write` |
+| `net.fetch` | `network:<host>` per host |
+| `ui.notify`, `ui.openPanel` | — |
+| `storage` (plugin-private key/value) | — |
+
+Every plugin transaction has `author = { kind: 'plugin', id }` — own undo stack, shown in Activity.

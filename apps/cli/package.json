@@ -1,0 +1,23 @@
+{
+  "name": "@archa/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "archa": "./dist/archa.cjs"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@archa/protocol": "workspace:*",
+    "@archa/schema": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "commander": "^15.1.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "tsup": "^9.0.0"
+  }
+}

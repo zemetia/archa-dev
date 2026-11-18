@@ -1,0 +1,59 @@
+# Entry Points — 02: OS Integration
+
+← [ENTRY_POINTS.md](../ENTRY_POINTS.md) | [Blueprint INDEX](../INDEX.md)
+
+**Phase:** 4 (classic menus, associations), 12 (Windows 11 modern menu). Code: `apps/desktop/src/main/os-integration/`, `apps/desktop/electron-builder.yml`.
+
+---
+
+## Windows (per-user, no admin)
+
+| Registry key (`HKCU\Software\Classes\…`) | Value |
+|---|---|
+| `Directory\shell\ArchaDev` | `(Default)` = "Open with ArchaDev", `Icon` = exe |
+| `Directory\shell\ArchaDev\command` | `"<install>\ArchaDev.exe" --project "%1"` |
+| `Directory\Background\shell\ArchaDev` | "Open this folder with ArchaDev" |
+| `Directory\Background\shell\ArchaDev\command` | `"<install>\ArchaDev.exe" --project "%V"` |
+| `.archa` | `(Default)` = `ArchaDev.Document`, `Content Type` = `application/vnd.archadev.archa+zip` |
+| `ArchaDev.Document\shell\open\command` | `"<install>\ArchaDev.exe" --file "%1"` |
+| `archadev` | `URL Protocol` = "" ; `shell\open\command` = `"<install>\ArchaDev.exe" "%1"` |
+
+- Written by the NSIS installer (`electron-builder` `nsis.include` script) **and** repairable from Settings → Integration (`os-integration/windows.ts` using `reg.exe` with argv, no shell).
+- Uninstall removes every key it wrote.
+- Windows 11 shows these under "Show more options". A top-level entry needs an `IExplorerCommand` handler in a sparse MSIX package — phase 12.
+- CLI: installer adds `<install>\bin` (contains `archa.cmd`) to the user `PATH` (opt-out checkbox).
+
+---
+
+## macOS
+
+| Item | How |
+|---|---|
+| `.archa` association | `Info.plist` `CFBundleDocumentTypes` + exported UTI `dev.archa.document` (via electron-builder `fileAssociations`) |
+| Folder menu | Bundled Quick Action (`.workflow`) "Open with ArchaDev" installed to `~/Library/Services/` on first run (with consent) |
+| Protocol | `protocols: [{ name: 'ArchaDev', schemes: ['archadev'] }]` |
+| CLI | Menu "Install `archa` command in PATH" → symlink `/usr/local/bin/archa` (asks for permission) |
+
+---
+
+## Linux
+
+| Item | How |
+|---|---|
+| `.desktop` | `MimeType=application/vnd.archadev.archa+zip;x-scheme-handler/archadev;inode/directory;` |
+| MIME | `archadev-archa.xml` shared-mime-info package file |
+| File managers | Optional Nautilus script / Dolphin service menu installed from Settings |
+| CLI | deb/rpm put `archa` in `/usr/bin`; AppImage offers a symlink |
+
+---
+
+## Thumbnails / Previews
+
+The `.archa` `thumbnail.png` entry is stored uncompressed so OS preview handlers (later: Windows thumbnail provider, macOS Quick Look extension) can read it cheaply. Not required for v1.
+
+---
+
+## Tests
+
+- `parseArgv` unit tests for each command line above.
+- Windows CI job: run the registry writer against a temp hive path, assert keys; run uninstall, assert removed.

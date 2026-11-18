@@ -1,0 +1,21 @@
+# Best Practice
+
+← [Blueprint INDEX](./INDEX.md)
+
+| Part | Coverage |
+|---|---|
+| [01 — TypeScript and ESLint](./BEST_PRACTICE/01-typescript-eslint.md) | Compiler flags, lint rules, naming, imports |
+| [02 — Testing](./BEST_PRACTICE/02-testing.md) | Test kinds, locations, fixtures, isolation, CI matrix |
+| [03 — Git, changelog, release](./BEST_PRACTICE/03-git-changelog-release.md) | Branches, commits, Keep a Changelog, versions, releases |
+| [04 — Anti-patterns and performance](./BEST_PRACTICE/04-antipatterns-perf.md) | Forbidden patterns with the fix, hot-path rules |
+
+---
+
+## Definition of Done (every change)
+
+- [ ] `pnpm lint` exits 0 (zero warnings)
+- [ ] `pnpm typecheck` clean
+- [ ] `pnpm test` green; new behaviour has a test
+- [ ] Blueprint doc updated if the change alters what it describes (files stay < 150 lines)
+- [ ] CHANGELOG `[Unreleased]` entry for user-visible changes
+- [ ] `docs/knowledge/LEARN.md` / `THIS.md` updated if a correction or insight happened

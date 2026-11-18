@@ -1,0 +1,66 @@
+# File Formats — 02: `.archadev/` Project
+
+← [FILE_FORMATS.md](../FILE_FORMATS.md) | [Blueprint INDEX](../INDEX.md) | [03 — Migrations →](./03-migrations-validation.md)
+
+**Phase:** 4. Directory layout → [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md). Code: `packages/formats/src/project/`.
+
+---
+
+## `project.json`
+
+```json
+{
+  "format": "archadev-project",
+  "formatVersion": 1,
+  "id": "prj_8f2k1x9q0a",
+  "name": "youdo-fe",
+  "defaultDesign": "app",
+  "codeTarget": { "devUrl": "http://localhost:5173", "srcDir": "src", "framework": "vite-react" },
+  "designerProfile": "default",
+  "git": { "includeRounds": false, "includeActivity": false }
+}
+```
+
+## `agents.json`
+
+```json
+{
+  "enabled": ["claude", "agy", "codex"],
+  "default": "claude",
+  "models": { "claude": "opus", "agy": "gemini-3.8-pro" },
+  "isolation": "worktree",
+  "maxParallel": { "claude": 3, "agy": 3 }
+}
+```
+
+No credentials, ever. Profiles are referenced by id; the profile itself lives in `~/.archadev/profiles/`.
+
+## `plugins.json`
+
+```json
+{ "plugins": [{ "id": "com.example.bg-remove", "version": "^1.2.0", "granted": ["document:write", "assets:write"] }] }
+```
+
+---
+
+## Init Flow (`archa init` / first open)
+
+1. Confirm creating `.archadev/` in `<dir>` (never silent).
+2. Write `project.json`, `.gitignore`, empty `designs/`, `tokens/`.
+3. Detect: git repo? package.json framework? dev script? → propose `codeTarget`.
+4. Ask one question at a time:
+   - Install the ArchaDev skill for detected agents? → [MCP/04](../MCP/04-local-skill.md)
+   - Register the MCP server in the agents' project config? (show the diff first)
+   - Create a first design, or import (`.archa`, SVG, URL, `.pen`)?
+5. Record answers; `archa init --yes` accepts defaults for scripts.
+
+---
+
+## Opening an Existing Project
+
+| Situation | Behaviour |
+|---|---|
+| `formatVersion` older | Migrate in place after a backup to `.archadev/.backup-<date>/` → [03](./03-migrations-validation.md) |
+| `formatVersion` newer than app | Open read-only, prompt to update the app |
+| `runtime/core.lock` held by live pid | Connect as client → [ARCHITECTURE/04](../ARCHITECTURE/04-single-writer-sync.md) |
+| Nested project (parent folder also has `.archadev/`) | Use the nearest one; warn once |
