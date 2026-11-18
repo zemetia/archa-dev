@@ -16,6 +16,8 @@
 | Viewport (zoom, scroll), active tool, panel sizes, collapsed tree rows | Renderer Zustand | `useViewStore` |
 | Agent runs, decisions, activity | Core host | `useRuns()`, `useDecisions()` (event-fed) |
 | Settings | `~/.archadev/config.json` via core RPC | `useSettings()` |
+| Agent accounts (login profiles) | **Core host** (`~/.archadev/profiles/`) | `accounts` in the store, re-read from `accounts.overview` on `accounts.changed` ([AGENT_BRIDGE/02](../AGENT_BRIDGE/02-roster-profiles.md)) |
+| Settings dialog open | Renderer Zustand (`settingsOpen`) | — |
 | Remembered UI (last tab, panel widths) | Zustand `persist` → localStorage | — |
 
 ---

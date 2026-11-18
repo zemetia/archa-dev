@@ -1,4 +1,4 @@
-import { FileText, FolderOpen, Hexagon, Plus, Save, X } from 'lucide-react';
+import { FileText, FolderOpen, Hexagon, Plus, Save, Settings, X } from 'lucide-react';
 import { activate, closeDoc, newDoc, openFile, save, useStore } from '../lib/store';
 import { cn, IconButton } from './controls';
 
@@ -38,6 +38,7 @@ export function TitleBar() {
       </div>
       <IconButton title="Open (Ctrl+O)" onClick={() => void openFile()}><FolderOpen size={16} /></IconButton>
       <IconButton title="Save (Ctrl+S)" onClick={() => void save()}><Save size={16} /></IconButton>
+      <IconButton title="Settings (Ctrl+,)" onClick={() => useStore.setState({ settingsOpen: true })}><Settings size={16} /></IconButton>
     </div>
   );
 }

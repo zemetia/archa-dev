@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, type AccountsOverview, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodePng } from '@archa/render';
 
@@ -29,12 +29,16 @@ type State = {
   editingText: string | null;
   toasts: Toast[];
   fitRequest: number;
+  settingsOpen: boolean;
+  /** Agent CLIs + saved login profiles (Settings → Agents, chat account picker). */
+  accounts: AccountsOverview | null;
 };
 
 export const useStore = create<State>(() => ({
   client: null, info: null, docs: [], activeDocId: null, doc: null, rev: 0,
   selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers',
   agents: [], activity: [], chat: [], runningRun: null, agentFocus: null, editingText: null, toasts: [], fitRequest: 0,
+  settingsOpen: false, accounts: null,
 }));
 
 const set = useStore.setState;
@@ -102,6 +106,8 @@ export async function init() {
     if (r.status === 'running') set({ runningRun: r.runId });
     else if (get().runningRun === r.runId) set({ runningRun: null });
   });
+  let accountsTimer: ReturnType<typeof setTimeout> | undefined;
+  client.on('accounts.changed', () => { clearTimeout(accountsTimer); accountsTimer = setTimeout(() => void loadAccounts(), 120); });
   client.on('render.request', async ({ requestId, docId, nodeId, scale }) => {
     try {
       let doc = get().doc;
@@ -123,7 +129,18 @@ export async function init() {
 
   const [docs, agents, info] = await Promise.all([client.call('workspace.list'), client.call('agents.list'), client.call('app.info')]);
   set({ docs, agents, info });
+  void loadAccounts();
   await activate(docs.at(-1)?.id ?? null);
+}
+
+export async function loadAccounts() {
+  const { client } = get();
+  if (!client) return;
+  try {
+    set({ accounts: await client.call('accounts.overview') });
+  } catch (e) {
+    toast((e as Error).message, 'error');
+  }
 }
 
 export async function activate(docId: string | null) {

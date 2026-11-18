@@ -61,6 +61,7 @@ server.listen(path, () => {
 server.on('error', (e) => console.error('[core] socket error', e));
 
 function cleanup() {
+  ws.accounts.shutdown();
   try { rmSync(runtimeFile(), { force: true }); } catch { /* already gone */ }
   server.close();
   process.exit(0);
