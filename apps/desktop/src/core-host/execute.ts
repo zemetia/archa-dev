@@ -1,5 +1,8 @@
 import { getQuickJS, shouldInterruptAfterDeadline, type QuickJSContext, type QuickJSWASMModule } from 'quickjs-emscripten';
-import { applyOps, DocumentError, findEmptySpace, insertOpsFor, lint, normaliseInput, type ArchaDocument, type DocumentSession } from '@archa/core';
+import {
+  applyOps, DocumentError, findEmptySpace, insertOpsFor, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, syncInstanceOps,
+  type ArchaDocument, type DocumentSession,
+} from '@archa/core';
 import { isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
 import type { ExecuteResult } from '@archa/protocol';
 import type { Connection, Workspace } from './workspace';
@@ -23,6 +26,11 @@ var getPage = () => __call('page', []);
 var getSelection = () => __call('selection', []);
 var findEmptySpace = (width, height) => __call('space', [width, height]);
 var screenshot = (ref, opts) => __call('screenshot', [ref, opts || {}]);
+var components = () => __call('components', []);
+var makeComponent = (ref, description) => __call('makeComponent', [ref, description || '']);
+var instance = (component, parent, opts) => __call('instance', [component, parent, opts || {}]);
+var syncInstances = (component) => __call('syncInstances', [component]);
+var fromLibrary = (ref, parent, opts) => __call('fromLibrary', [ref, parent, opts || {}]);
 var print = (...v) => __call('print', [v.map((x) => typeof x === 'string' ? x : JSON.stringify(x))]);
 var find = (visitor, opts) => {
   if (!opts || !opts.under) throw new Error('find() needs { under: <frame id or name> } — use get_state for the page overview');
@@ -188,6 +196,39 @@ export class AgentExecutor {
         st.shots.push({ id: ref(args[0]), scale: (args[1] as { scale?: number }).scale ?? 1 });
         return null;
       }
+      case 'components':
+        return listComponents(doc);
+      case 'makeComponent': {
+        const id = ref(args[0]);
+        commit(makeComponentOps(doc, id, String(args[1] ?? '')));
+        st.changed.set(id, doc.require(id).name);
+        return id;
+      }
+      case 'instance': {
+        const [c, parent, opts] = args as [string, string | null | undefined, { x?: number; y?: number; index?: number; name?: string }];
+        const { ops, rootId, created } = instanceOps(doc, ref(c), parent ? ref(parent) : st.pageRoot, opts ?? {});
+        commit(ops);
+        st.created.push(...created.slice(0, 1));
+        return rootId;
+      }
+      case 'fromLibrary': {
+        const [r, parent, opts] = args as [string, string | null | undefined, { x?: number; y?: number; index?: number }];
+        const [library, id] = String(r).split(':');
+        const item = library && id ? this.ws.library.read(library, id) : null;
+        if (!item) throw new Error(`No library component "${String(r)}" — use a ref from the Library list ("library:id")`);
+        const parentId = parent ? ref(parent) : st.pageRoot;
+        const at = opts?.x === undefined || opts?.y === undefined ? { ...findEmptySpace(doc, parentId, item.width, item.height), index: opts?.index } : opts;
+        const res = libraryInsertOps(doc, `${library}:${id}`, item, parentId, at);
+        commit(res.ops);
+        st.created.push(...res.created.slice(0, 1));
+        return res.rootId;
+      }
+      case 'syncInstances': {
+        const id = ref(args[0]);
+        const list = instancesOf(doc, id);
+        for (const inst of list) { commit(syncInstanceOps(doc, inst.id)); st.changed.set(inst.id, inst.name); }
+        return list.length;
+      }
       case 'print':
         st.output.push((args[0] as string[]).join(' '));
         return null;
@@ -237,7 +278,28 @@ export function describeState(ws: Workspace, s: DocumentSession): string {
     `Top-level nodes (${top.length}):`,
     ...top.slice(0, 30).map((n) => `  - ${n.name} "${n.id}" ${n.type} at ${n.x},${n.y} size ${n.width}×${n.height}${isContainer(n) ? ` · ${n.children.length} children` : ''}`),
     ...(top.length > 30 ? [`  … +${top.length - 30} more`] : []),
+    ...describeComponents(doc),
+    ...describeLibrary(ws),
     `Other open documents: ${ws.summaries().filter((d) => d.id !== s.id).map((d) => `${d.name} (${d.id})`).join(', ') || 'none'}`,
   ];
   return lines.join('\n');
+}
+
+/** Components block of the state text: agents must reuse these instead of rebuilding them (DESIGN_SYSTEM/02 v1). */
+function describeComponents(doc: ArchaDocument): string[] {
+  const list = listComponents(doc);
+  if (!list.length) return ['Components: none yet. When you build something that repeats (button, card, nav item, list row), makeComponent() it and reuse it with instance().'];
+  return [
+    `Components (${list.length}) — reuse with instance(id, parent); never rebuild them by hand:`,
+    ...list.slice(0, 40).map((c) => `  - ${c.name} "${c.id}" ${c.width}×${c.height} · ${c.instances} instance${c.instances === 1 ? '' : 's'}${c.description ? ` · ${c.description}` : ''}`),
+  ];
+}
+
+function describeLibrary(ws: Workspace): string[] {
+  const items = ws.library.list();
+  if (!items.length) return [];
+  return [
+    `Library components (${items.length}) — shared across documents; place with fromLibrary(ref, parent):`,
+    ...items.slice(0, 40).map((i) => `  - ${i.name} "${i.ref}" ${i.width}×${i.height}${i.description ? ` · ${i.description}` : ''}`),
+  ];
 }

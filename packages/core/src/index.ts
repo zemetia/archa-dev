@@ -6,3 +6,4 @@ export * from './factory';
 export * from './session';
 export * from './lint';
 export * from './space';
+export * from './components';

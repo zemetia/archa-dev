@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ChevronRight, Circle, Eye, EyeOff, Frame, Group, Lock, Square, Type, Unlock } from 'lucide-react';
+import { ChevronRight, Circle, Component, Copy, Eye, EyeOff, Frame, Group, Lock, Square, Type, Unlock } from 'lucide-react';
+import { componentMeta, instanceOf } from '@archa/core';
 import { isContainer, type Node } from '@archa/schema';
 import { commit, select, useStore } from '../lib/store';
 import { pageRoot } from '../lib/geometry';
@@ -52,7 +53,8 @@ function Row({ id, depth, expanded, toggle }: { id: string; depth: number; expan
   if (!n) return null;
   const kids = isContainer(n) ? [...n.children].reverse() : [];
   const open = expanded.has(id);
-  const Icon = ICON[n.type] ?? Square;
+  const kind = componentMeta(n) ? 'main' : instanceOf(n) ? 'instance' : null;
+  const Icon = kind === 'main' ? Component : kind === 'instance' ? Copy : ICON[n.type] ?? Square;
   const autoLayout = n.type === 'frame' && n.layout !== 'none';
 
   const onClick = (e: React.MouseEvent) => {
@@ -71,7 +73,7 @@ function Row({ id, depth, expanded, toggle }: { id: string; depth: number; expan
         <button onClick={(e) => { e.stopPropagation(); toggle(id); }} className={cn('flex h-4 w-4 items-center justify-center', !kids.length && 'invisible')}>
           <ChevronRight size={12} className={cn('transition-transform', open && 'rotate-90')} />
         </button>
-        <Icon size={13} className={cn('shrink-0', n.type === 'frame' && depth === 0 && 'text-fg')} />
+        <Icon size={13} className={cn('shrink-0', n.type === 'frame' && depth === 0 && 'text-fg', kind && 'text-accent-fg')} />
         {autoLayout && <span className="text-[10px] text-fg-subtle" title={`Auto layout ${n.type === 'frame' ? n.layout : ''}`}>{n.type === 'frame' && n.layout === 'row' ? '⇥' : '⤓'}</span>}
         {renaming ? (
           <input autoFocus defaultValue={n.name} onClick={(e) => e.stopPropagation()}

@@ -7,7 +7,7 @@ import { DocumentError } from '@archa/core';
 import { newId } from '@archa/schema';
 import type { AccountAgent, AccountsOverview, AgentAccount, AgentCli, HostLogin, LoginState } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
-import { findBin } from './agents';
+import { findBin } from './agent-adapters';
 import { keyringRead, keyringWrite } from './keyring';
 
 /*
@@ -61,8 +61,9 @@ function readJson(path: string): Record<string, unknown> | null {
 const obj = (v: unknown) => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 
-export const claudeHostDir = () => process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude');
-export const codexHostDir = () => process.env.CODEX_HOME?.trim() || join(homedir(), '.codex');
+// The host login is always the CLI's own default; an inherited CLAUDE_CONFIG_DIR / CODEX_HOME belongs to whoever launched us.
+export const claudeHostDir = () => join(homedir(), '.claude');
+export const codexHostDir = () => join(homedir(), '.codex');
 
 /** Which account a Claude config folder is signed in to. Tokens are read for presence only. */
 export function claudeIdentity(dir: string): Identity {
@@ -70,7 +71,7 @@ export function claudeIdentity(dir: string): Identity {
   const signedIn = !!str(oauth.refreshToken);
   // Without CLAUDE_CONFIG_DIR the account record sits in ~/.claude.json, next to ~/.claude.
   const records = [join(dir, '.claude.json')];
-  if (!process.env.CLAUDE_CONFIG_DIR && resolve(dir) === resolve(claudeHostDir())) records.unshift(join(dirname(dir), '.claude.json'));
+  if (resolve(dir) === resolve(claudeHostDir())) records.unshift(join(dirname(dir), '.claude.json'));
   const email = records.map((p) => str(obj(readJson(p)?.oauthAccount).emailAddress)).find(Boolean) ?? '';
   return { email, plan: signedIn ? str(oauth.subscriptionType) : '', signedIn };
 }

@@ -8,4 +8,8 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-19] - Chat "did not respond": `claude -p` was spawned with stdin left open (waited 3 s for input), loaded the owner's own hooks/plugins (an antigravity routing hook leaked into design runs), only Claude was offered, models were a hardcoded list - Close stdin always, prompt via stdin, `--setting-sources project,local`, adapters for agy/codex with parsers + `agents.models` from each CLI, streamed `chat.delta` - Spawn every headless agent CLI with an explicit stdin (write+end or ignore) and isolate it from the user's personal config; verify with a live run, not just typecheck.
+
+[2026-11-18] - While visually testing the chat suggestion chips, a Claude Code run started on the dev canvas (chip had filled + focused the composer; the dev window had OS focus while the owner was typing) - Stopped the run immediately via the Stop button; verified chips only set `chatDraft` - When driving the UI in a window the owner can see, never leave a filled composer focused; clear the draft right after the check.
+
 [2026-11-18] - Whole window went black after switching Layers -> Chat -> Layers ("destroy_ is not a function") - `ChatPanel` had `useEffect(() => el?.scrollIntoView(...))`; in Chromium 156 (Electron 45) scrollIntoView returns a Promise, React used it as the cleanup and the throw unmounted the tree. Fixed with braces; added a root `ErrorBoundary`, per-load core reconnect and `render-process-gone` reload - Effects always use a block body; never return an expression from an effect. A UI with no error boundary turns any render/effect throw into a blank window.

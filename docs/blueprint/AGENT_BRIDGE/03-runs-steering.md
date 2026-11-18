@@ -85,3 +85,14 @@ No session id seen yet → new session with the original task + previous output.
 | Continue | New turn with a message | — |
 
 Failover: `rate_limited` event → offer next profile/agent (auto if setting on), carrying the conversation summary.
+
+---
+
+## Chat History (built, 0.2.1)
+
+| Rule | Detail |
+|---|---|
+| Thread | Every `chat.send` carries `threadId` (none = new thread, returned in the result). The CLI session resumes per `threadId:agent:login`, so New chat starts fresh |
+| Storage | `ARCHA_HOME/chats/<docId>.jsonl` (one `ChatMessage` per line) + `chats/sessions.json` (session ids). Best-effort, derivable: deleting it loses history only |
+| Reopen | Activating a document reopens its most recent thread |
+| Delete | `chat.deleteThread` rewrites the file; refused while that thread runs |

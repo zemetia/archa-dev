@@ -6,7 +6,22 @@
 
 ---
 
-## Components
+## Components — v1 (built, 0.2.1)
+
+Linked copies with no `.archa` format change. Code: `packages/core/src/components.ts`.
+
+| Concept | v1 model |
+|---|---|
+| Component (main) | A **frame** with `meta.component = { description }`. No nested mains; instances cannot become mains until detached |
+| Instance | A full copy with `meta.instanceOf = <main id>`; nested instances inside a main stay linked |
+| Sync | `syncInstanceOps`: the instance takes the main's props + children again, keeps its name, x/y, parent sizing. Never automatic |
+| Library link | A main inserted from a library carries `meta.libraryRef = "<library>:<id>"`; later inserts become instances of it |
+| Agents | `describeState` lists components (name, id, size, instances, description) and library items; `execute` adds `components()`, `makeComponent`, `instance`, `syncInstances`, `fromLibrary`; DESIGNER_PROMPT step 7 says reuse before building |
+| Storage | Libraries: `ARCHA_HOME/libraries/<name>/{library.json, components/<id>.json, components/<id>.png}` (`core-host/library.ts`, zod at the RPC boundary) |
+
+The table below is the Phase 7 target (instance nodes + per-property overrides). Moving to it needs `formatVersion` 2 + a migration from v1 `meta` markers.
+
+## Components — Phase 7 target
 
 | Concept | Model |
 |---|---|

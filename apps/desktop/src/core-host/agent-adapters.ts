@@ -1,0 +1,325 @@
+import { spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { delimiter, dirname, join } from 'node:path';
+import { DESIGNER_PROMPT, type ModelOption } from '@archa/protocol';
+
+/*
+ * Launch-mode adapters (blueprint AGENT_BRIDGE/01-02), ported from Gungnir's remediate/ package.
+ * Each one builds an argv (the prompt is ONE argv element or stdin — never a shell string),
+ * parses the CLI's JSON stream into chat events, and lists the models the installed CLI offers.
+ */
+
+export type McpCommand = { command: string; args: string[]; env: Record<string, string> };
+
+export type BuildInput = {
+  prompt: string;
+  /** Per-run MCP server for the archadev tools. */
+  mcp: McpCommand;
+  mcpConfigFile: string;
+  model?: string;
+  sessionId?: string;
+};
+export type Built = { args: string[]; stdin?: string };
+
+/** What a stream line means for the chat. `delta` is in-progress text; `text` is a finished message. */
+export type AgentEvent =
+  | { kind: 'session'; id: string }
+  | { kind: 'delta'; text: string }
+  | { kind: 'text'; text: string }
+  | { kind: 'tool'; text: string }
+  | { kind: 'error'; text: string }
+  | { kind: 'final'; text: string };
+
+export interface StreamParser { line(line: string): AgentEvent[] }
+
+export type Adapter = {
+  id: 'claude' | 'agy' | 'codex';
+  label: string;
+  bin: string;
+  /**
+   * Called before a run with the base `archa mcp` command (no --doc/--agent): agy has no per-run
+   * MCP flag, so the server is registered in its global config and finds the doc via ARCHA_DOC_ID.
+   */
+  prepare?: (bin: string, mcp: McpCommand) => Promise<void>;
+  build: (o: BuildInput) => Built;
+  parser: () => StreamParser;
+  models: (bin: string | null, env: Record<string, string>) => Promise<{ models: ModelOption[]; source: string }>;
+};
+
+export const MCP_TOOLS = ['get_state', 'execute', 'screenshot', 'export_svg', 'say', 'browser'];
+/** Windows caps a command line near 32 KiB. */
+const MAX_ARG_PROMPT = 28_000;
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/[\]@+-]{0,127}$/;
+
+/* ---------------------------------- bins ---------------------------------- */
+
+export function findBin(name: string): string | null {
+  const exts = process.platform === 'win32' ? ['.exe', ''] : [''];
+  const dirs = (process.env.PATH ?? '').split(delimiter);
+  // fnm's per-shell folders vanish when that shell closes; anything saved for later must not point there.
+  const stable = dirs.filter((d) => !/fnm_multishells/i.test(d));
+  for (const dir of [...stable, ...dirs.filter((d) => !stable.includes(d))]) {
+    for (const ext of exts) {
+      const p = join(dir, name + ext);
+      if (existsSync(p)) return p;
+    }
+  }
+  const home = process.env.USERPROFILE ?? process.env.HOME ?? '';
+  const extra = [join(home, '.local', 'bin')];
+  if (process.platform === 'win32') extra.push(join(process.env.LOCALAPPDATA ?? join(home, 'AppData', 'Local'), name, 'bin'));
+  for (const dir of extra) for (const ext of exts) if (existsSync(join(dir, name + ext))) return join(dir, name + ext);
+  return null;
+}
+
+function runQuiet(bin: string, args: string[], timeoutMs: number, env: Record<string, string> = {}): Promise<{ out: string; code: number | null }> {
+  return new Promise((done) => {
+    const child = spawn(bin, args, { shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env, NO_COLOR: '1' } });
+    let out = '';
+    const timer = setTimeout(() => child.kill(), timeoutMs);
+    child.stdout.setEncoding('utf8').on('data', (c: string) => { out += c; });
+    child.stderr.setEncoding('utf8').on('data', (c: string) => { out += c; });
+    child.on('error', () => { clearTimeout(timer); done({ out, code: -1 }); });
+    child.on('close', (code) => { clearTimeout(timer); done({ out, code }); });
+  });
+}
+
+const readJson = (p: string): Record<string, unknown> | null => {
+  try { return JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>; } catch { return null; }
+};
+const clip = (t: string, n = 4000) => (t.length > n ? `${t.slice(0, n)}…` : t);
+
+/** The canvas state is a convenience; past the argv limit the agent fetches it with get_state. */
+function withState(prompt: string, limit: number) {
+  if (prompt.length <= limit) return prompt;
+  const cut = prompt.indexOf('\n\n---\nCurrent canvas state');
+  return (cut > 0 ? prompt.slice(0, cut) : prompt.slice(0, limit)) + '\n\n(Call get_state first to read the canvas.)';
+}
+
+/* --------------------------------- models --------------------------------- */
+
+const CLAUDE_ALIASES: ModelOption[] = [
+  { id: 'fable', label: 'Fable', description: 'Latest Fable' },
+  { id: 'opus', label: 'Opus', description: 'Latest Opus' },
+  { id: 'sonnet', label: 'Sonnet', description: 'Latest Sonnet' },
+  { id: 'haiku', label: 'Haiku', description: 'Latest Haiku — fastest' },
+];
+
+/** Claude Code aliases plus the models the CLI cached for this account. */
+async function claudeModels(_bin: string | null, env: Record<string, string>) {
+  const models = [...CLAUDE_ALIASES];
+  const dir = env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
+  const files = env.CLAUDE_CONFIG_DIR ? [join(dir, '.claude.json')] : [join(dirname(dir), '.claude.json'), join(dir, '.claude.json')];
+  for (const f of files) {
+    const extra = readJson(f)?.additionalModelOptionsCache;
+    if (!Array.isArray(extra)) continue;
+    for (const m of extra as Array<Record<string, unknown>>) {
+      const id = typeof m.value === 'string' ? m.value : '';
+      if (MODEL_ID.test(id) && !models.some((o) => o.id === id)) models.push({ id, label: String(m.label ?? id), description: typeof m.description === 'string' ? m.description : undefined });
+    }
+    break;
+  }
+  return { models, source: 'Claude Code aliases + account model cache' };
+}
+
+let agyCache: { at: number; models: ModelOption[] } | null = null;
+/** `agy models` prints "<id>\t<label>" per line; cached for 10 minutes (it calls the network). */
+async function agyModels(bin: string | null) {
+  if (!bin) return { models: [], source: 'agy not installed' };
+  if (agyCache && Date.now() - agyCache.at < 600_000) return { models: agyCache.models, source: 'agy models' };
+  const { out } = await runQuiet(bin, ['models'], 45_000);
+  const models: ModelOption[] = [];
+  for (const line of out.split(/\r?\n/)) {
+    const [id, label] = line.split('\t').map((p) => p?.trim());
+    if (id && MODEL_ID.test(id) && label) models.push({ id, label });
+  }
+  if (models.length) agyCache = { at: Date.now(), models };
+  return { models, source: models.length ? 'agy models' : 'agy models returned nothing (signed in?)' };
+}
+
+async function codexModels(_bin: string | null, env: Record<string, string>) {
+  const home = env.CODEX_HOME || join(homedir(), '.codex');
+  const doc = readJson(join(home, 'models_cache.json'));
+  const list = Array.isArray(doc?.models) ? (doc.models as Array<Record<string, unknown>>) : [];
+  const models: ModelOption[] = [];
+  for (const m of list) {
+    const id = String(m.slug ?? m.id ?? '');
+    if (MODEL_ID.test(id)) models.push({ id, label: String(m.display_name ?? id), description: typeof m.description === 'string' ? m.description : undefined });
+  }
+  return { models, source: models.length ? 'Codex model cache' : 'No Codex model cache yet (run codex once)' };
+}
+
+/* --------------------------------- parsers -------------------------------- */
+
+/** `claude -p --output-format stream-json --verbose --include-partial-messages` */
+function claudeParser(): StreamParser {
+  let live = '';
+  return {
+    line(line) {
+      const ev = parse(line);
+      if (!ev) return [];
+      const out: AgentEvent[] = [];
+      if (typeof ev.session_id === 'string') out.push({ kind: 'session', id: ev.session_id });
+      if (ev.type === 'stream_event') {
+        const e = ev.event as { type?: string; delta?: { type?: string; text?: string } } | undefined;
+        if (e?.type === 'content_block_delta' && e.delta?.type === 'text_delta' && e.delta.text) {
+          live += e.delta.text;
+          out.push({ kind: 'delta', text: live });
+        }
+        if (e?.type === 'message_start') live = '';
+      } else if (ev.type === 'assistant') {
+        const content = (ev.message as { content?: Array<Record<string, unknown>> } | undefined)?.content ?? [];
+        for (const c of content) {
+          if (c.type === 'text' && typeof c.text === 'string' && c.text.trim()) { live = ''; out.push({ kind: 'text', text: c.text }); }
+          if (c.type === 'tool_use') out.push({ kind: 'tool', text: toolSummary(String(c.name), c.input) });
+        }
+      } else if (ev.type === 'result') {
+        if (ev.is_error) out.push({ kind: 'error', text: clip(String(ev.result ?? (Array.isArray(ev.errors) ? ev.errors.join('\n') : '') ?? 'Agent run failed')) });
+        else if (typeof ev.result === 'string') out.push({ kind: 'final', text: ev.result });
+      }
+      return out;
+    },
+  };
+}
+
+/** `agy --output-format stream-json`: step_update events, text arrives as text_delta per step. */
+function agyParser(): StreamParser {
+  const text = new Map<number, string>();
+  return {
+    line(line) {
+      const ev = parse(line);
+      if (!ev) return [];
+      const out: AgentEvent[] = [];
+      if (typeof ev.conversation_id === 'string') out.push({ kind: 'session', id: ev.conversation_id });
+      const s = ev.step_update as { conversation_id?: string; step_index?: number; state?: string; step_type?: string; text_delta?: string; tool_name?: string; tool_info?: { parameters?: Record<string, unknown> }; error?: string } | undefined;
+      if (ev.event === 'step_update' && s) {
+        if (s.conversation_id) out.push({ kind: 'session', id: s.conversation_id });
+        const i = s.step_index ?? 0;
+        if (s.step_type === 'agent_response') {
+          const t = (text.get(i) ?? '') + (s.text_delta ?? '');
+          text.set(i, t);
+          if (s.state === 'DONE') {
+            text.delete(i);
+            if (t.trim()) out.push({ kind: 'text', text: t.trim() });
+          } else if (s.text_delta) out.push({ kind: 'delta', text: t });
+        } else if (s.step_type === 'tool' && s.state === 'ACTIVE') {
+          const p = s.tool_info?.parameters ?? {};
+          // MCP calls come through agy's call_mcp_tool wrapper; show the archadev tool itself.
+          out.push({ kind: 'tool', text: s.tool_name === 'call_mcp_tool' ? toolSummary(String(p.ToolName ?? 'mcp'), p.Arguments) : s.tool_name ?? 'tool' });
+        } else if (s.step_type === 'error_message' && s.error) out.push({ kind: 'error', text: clip(s.error) });
+      } else if (ev.event === 'result') {
+        const r = (ev.result ?? {}) as { status?: string; response?: string; error?: string };
+        if (r.status && r.status !== 'SUCCESS') out.push({ kind: 'error', text: clip(r.error || `Antigravity run ended: ${r.status}`) });
+        else if (r.response) out.push({ kind: 'final', text: r.response });
+      }
+      return out;
+    },
+  };
+}
+
+/** `codex exec --json` */
+function codexParser(): StreamParser {
+  return {
+    line(line) {
+      const ev = parse(line);
+      if (!ev) return [];
+      const it = (ev.item ?? {}) as Record<string, unknown>;
+      if (ev.type === 'thread.started' && typeof ev.thread_id === 'string') return [{ kind: 'session', id: ev.thread_id }];
+      if (ev.type === 'item.completed' && it.type === 'agent_message' && typeof it.text === 'string' && it.text.trim()) return [{ kind: 'text', text: it.text }];
+      if (ev.type === 'item.started' && it.type === 'mcp_tool_call') return [{ kind: 'tool', text: toolSummary(String(it.tool ?? 'mcp'), it.arguments) }];
+      if (ev.type === 'turn.failed' || ev.type === 'error') {
+        const msg = (ev.error as { message?: string } | undefined)?.message ?? String(ev.message ?? 'Codex run failed');
+        return [{ kind: 'error', text: clip(msg) }];
+      }
+      return [];
+    },
+  };
+}
+
+function parse(line: string): Record<string, unknown> | null {
+  try { return JSON.parse(line) as Record<string, unknown>; } catch { return null; }
+}
+
+export function toolSummary(name: string, input: unknown): string {
+  const short = name.replace(/^mcp__archadev__/, '');
+  const i = (input ?? {}) as Record<string, unknown>;
+  if (short === 'execute' && typeof i.code === 'string') return `execute · ${i.code.split('\n').length} lines`;
+  if (short === 'execute' && i.editId) return `execute · patch ${String(i.editId)}`;
+  if (short === 'screenshot') return `screenshot · ${String(i.node ?? '')}`;
+  if (short === 'say') return String(i.text ?? '');
+  if (short === 'browser') return `browser · ${String(i.action ?? '')}${i.url ? ` ${String(i.url)}` : i.ref ? ` ${String(i.ref)}` : ''}`;
+  return short;
+}
+
+/* -------------------------------- adapters -------------------------------- */
+
+const toml = (v: unknown) => JSON.stringify(v); // JSON strings/arrays are valid TOML values
+
+let agyRegistered = '';
+export const ADAPTERS: Adapter[] = [
+  {
+    id: 'claude',
+    label: 'Claude Code',
+    bin: 'claude',
+    // Prompt on stdin (no argv limit, and stdin is closed so the CLI never waits for more).
+    // setting-sources without "user": the person's own hooks and plugins stay out of design runs.
+    build: ({ prompt, mcpConfigFile, model, sessionId }) => ({
+      args: [
+        '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
+        '--setting-sources', 'project,local',
+        '--mcp-config', mcpConfigFile, '--strict-mcp-config',
+        '--allowedTools', MCP_TOOLS.map((t) => `mcp__archadev__${t}`).join(','),
+        '--append-system-prompt', DESIGNER_PROMPT,
+        ...(model ? ['--model', model] : []),
+        ...(sessionId ? ['--resume', sessionId] : []),
+      ],
+      stdin: prompt,
+    }),
+    parser: claudeParser,
+    models: claudeModels,
+  },
+  {
+    id: 'agy',
+    label: 'Antigravity',
+    bin: 'agy',
+    // agy has no per-run MCP flag: register (or refresh) the archadev server in its own config.
+    prepare: async (bin, mcp) => {
+      const key = JSON.stringify(mcp);
+      if (agyRegistered === key) return;
+      const env = Object.entries(mcp.env).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
+      const r = await runQuiet(bin, ['mcp', 'add', ...env, 'archadev', '--', mcp.command, ...mcp.args, '--agent', 'agy'], 30_000);
+      if (r.code !== 0) throw new Error(`Could not register the ArchaDev MCP server with agy: ${r.out.trim().slice(0, 300)}`);
+      agyRegistered = key;
+    },
+    build: ({ prompt, model, sessionId }) => ({
+      args: [
+        '--dangerously-skip-permissions', '--disable-slash-commands', '--output-format', 'stream-json', '--print-timeout', '30m',
+        ...(model ? ['--model', model] : []),
+        ...(sessionId ? ['--conversation', sessionId] : []),
+        '-p', withState(`${sessionId ? '' : `${DESIGNER_PROMPT}\n\n---\n`}${prompt}`, MAX_ARG_PROMPT),
+      ],
+    }),
+    parser: agyParser,
+    models: (bin) => agyModels(bin),
+  },
+  {
+    id: 'codex',
+    label: 'Codex',
+    bin: 'codex',
+    build: ({ prompt, mcp, model, sessionId }) => {
+      const flags = [
+        '--json', '--full-auto', '--skip-git-repo-check',
+        '-c', `mcp_servers.archadev.command=${toml(mcp.command)}`,
+        '-c', `mcp_servers.archadev.args=${toml([...mcp.args])}`,
+        ...Object.entries(mcp.env).flatMap(([k, v]) => ['-c', `mcp_servers.archadev.env.${k}=${toml(v)}`]),
+        ...(model ? ['--model', model] : []),
+      ];
+      return {
+        args: ['exec', ...flags, ...(sessionId ? ['resume', sessionId] : []), '-'],
+        stdin: sessionId ? prompt : `${DESIGNER_PROMPT}\n\n---\n${prompt}`,
+      };
+    },
+    parser: codexParser,
+    models: codexModels,
+  },
+];

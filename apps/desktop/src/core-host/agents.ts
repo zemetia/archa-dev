@@ -1,105 +1,151 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { newId } from '@archa/schema';
-import { DESIGNER_PROMPT, type ChatMessage } from '@archa/protocol';
+import type { ChatMessage, ModelOption } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import type { Workspace } from './workspace';
 import { describeState } from './execute';
+import { ADAPTERS, type AgentEvent, type McpCommand } from './agent-adapters';
+import { resolveCli } from './accounts';
 
 /*
  * Launch mode (blueprint AGENT_BRIDGE): the app starts the agent's own CLI headless,
- * gives it only the ArchaDev MCP server, and turns its stream into chat messages.
- * Ported from Gungnir's remediate/ adapters. The prompt is one argv element — never a shell string.
+ * gives it the ArchaDev MCP server, and turns its stream into chat messages.
+ * Adapters (argv, stream parsers, model lists) live in agent-adapters.ts.
  */
 
-type Adapter = {
-  id: string;
-  label: string;
-  bin: string;
-  models: string[];
-  args: (o: { prompt: string; mcpConfig: string; model?: string; sessionId?: string; tools: string[] }) => string[];
-};
+export { ADAPTERS, findBin, type McpCommand } from './agent-adapters';
 
-const MCP_TOOLS = ['get_state', 'execute', 'screenshot', 'export_svg', 'say', 'browser'];
+type Run = { id: string; docId: string; threadId: string; agent: string; child: ChildProcess | null; stopped: boolean; replied: boolean; failed: boolean };
 
-export const ADAPTERS: Adapter[] = [
-  {
-    id: 'claude',
-    label: 'Claude Code',
-    bin: 'claude',
-    models: ['opus', 'sonnet', 'haiku'],
-    args: ({ prompt, mcpConfig, model, sessionId, tools }) => [
-      '-p', prompt,
-      '--output-format', 'stream-json', '--verbose',
-      '--mcp-config', mcpConfig, '--strict-mcp-config',
-      '--allowedTools', tools.map((t) => `mcp__archadev__${t}`).join(','),
-      '--append-system-prompt', DESIGNER_PROMPT,
-      ...(model ? ['--model', model] : []),
-      ...(sessionId ? ['--resume', sessionId] : []),
-    ],
-  },
-];
-
-export function findBin(name: string): string | null {
-  const exts = process.platform === 'win32' ? ['.exe', ''] : [''];
-  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
-    for (const ext of exts) {
-      const p = join(dir, name + ext);
-      if (existsSync(p)) return p;
-    }
-  }
-  const home = process.env.USERPROFILE ?? process.env.HOME ?? '';
-  for (const p of [join(home, '.local', 'bin', `${name}.exe`), join(home, '.local', 'bin', name)]) if (existsSync(p)) return p;
-  return null;
-}
-
-export type McpCommand = { command: string; args: string[]; env: Record<string, string> };
-
-type Run = { id: string; docId: string; agent: string; child: ChildProcess; stopped: boolean };
+/*
+ * Chat history lives in ARCHA_HOME/chats/<docId>.jsonl (one message per line) and the agent CLI
+ * session ids in chats/sessions.json, so a thread can be resumed after a restart. Deleting the
+ * folder only loses history, never design data.
+ */
+const chatsDir = () => join(archaHome(), 'chats');
+const safeName = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80) || 'doc';
 
 export class ChatRunner {
   private runs = new Map<string, Run>();
-  private sessions = new Map<string, string>(); // docId:agent → CLI session id
-  readonly messages = new Map<string, ChatMessage[]>();
+  private sessions: Map<string, string> | null = null; // threadId:agent:login -> CLI session id
+  private messages = new Map<string, ChatMessage[]>();
 
   constructor(private ws: Workspace, private mcpCommand: () => McpCommand) {}
 
-  private emit(docId: string, runId: string, agent: string, role: ChatMessage['role'], text: string) {
-    const m: ChatMessage = { id: newId(), docId, runId, role, agent, text, ts: Date.now() };
-    const list = this.messages.get(docId) ?? [];
-    list.push(m);
-    this.messages.set(docId, list);
+  list(docId: string): ChatMessage[] {
+    let list = this.messages.get(docId);
+    if (!list) {
+      list = [];
+      const file = join(chatsDir(), `${safeName(docId)}.jsonl`);
+      if (existsSync(file)) {
+        for (const line of readFileSync(file, 'utf8').split('\n')) {
+          if (!line.trim()) continue;
+          try { list.push(JSON.parse(line) as ChatMessage); } catch { /* skip a torn line */ }
+        }
+      }
+      this.messages.set(docId, list);
+    }
+    return list;
+  }
+
+  deleteThread(docId: string, threadId: string) {
+    if ([...this.runs.values()].some((r) => r.threadId === threadId)) throw new Error('Stop the running agent before deleting this conversation');
+    const kept = this.list(docId).filter((m) => (m.threadId ?? m.runId) !== threadId);
+    this.messages.set(docId, kept);
+    mkdirSync(chatsDir(), { recursive: true });
+    writeFileSync(join(chatsDir(), `${safeName(docId)}.jsonl`), kept.map((m) => JSON.stringify(m)).join('\n') + (kept.length ? '\n' : ''));
+  }
+
+  private sessionMap(): Map<string, string> {
+    if (this.sessions) return this.sessions;
+    this.sessions = new Map();
+    try {
+      const raw = JSON.parse(readFileSync(join(chatsDir(), 'sessions.json'), 'utf8')) as Record<string, unknown>;
+      for (const [k, v] of Object.entries(raw)) if (typeof v === 'string') this.sessions.set(k, v);
+    } catch { /* first run */ }
+    return this.sessions;
+  }
+
+  private rememberSession(key: string, id: string) {
+    const map = this.sessionMap();
+    if (map.get(key) === id) return;
+    map.set(key, id);
+    try {
+      mkdirSync(chatsDir(), { recursive: true });
+      writeFileSync(join(chatsDir(), 'sessions.json'), JSON.stringify(Object.fromEntries(map), null, 2));
+    } catch { /* resume is best-effort */ }
+  }
+
+  private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent'>, role: ChatMessage['role'], text: string) {
+    const m: ChatMessage = { id: newId(), docId: run.docId, runId: run.id, threadId: run.threadId, role, agent: run.agent, text, ts: Date.now() };
+    this.list(run.docId).push(m);
+    try {
+      mkdirSync(chatsDir(), { recursive: true });
+      appendFileSync(join(chatsDir(), `${safeName(run.docId)}.jsonl`), JSON.stringify(m) + '\n');
+    } catch { /* history is best-effort; the live chat still works */ }
     this.ws.broadcast('chat.message', m);
   }
 
-  send(docId: string, agentId: string, prompt: string, model?: string, account?: string): string {
+  send(docId: string, agentId: string, prompt: string, model?: string, account?: string, threadId = newId()): { runId: string; threadId: string } {
     const adapter = ADAPTERS.find((a) => a.id === agentId);
     if (!adapter) throw new Error(`Unknown agent "${agentId}"`);
-    const bin = findBin(adapter.bin);
-    if (!bin) throw new Error(`${adapter.label} CLI ("${adapter.bin}") was not found on PATH`);
+    const cli = resolveCli(adapter.bin);
+    if (!cli) throw new Error(`${adapter.label} CLI ("${adapter.bin}") was not found on PATH`);
+    if ([...this.runs.values()].some((r) => r.docId === docId)) throw new Error('An agent is already working on this document — stop it first');
     // A saved account runs in its own config folder (blueprint AGENT_BRIDGE/02).
     const login = this.ws.accounts.runEnv(adapter.id, account);
     const session = this.ws.session(docId);
     const runId = newId();
 
-    const mcp = this.mcpCommand();
+    const base = this.mcpCommand();
+    const mcp: McpCommand = { ...base, args: [...base.args, '--doc', docId, '--agent', adapter.id] };
     const cfgDir = join(archaHome(), 'runtime');
     mkdirSync(cfgDir, { recursive: true });
-    const mcpConfig = join(cfgDir, `mcp-${runId}.json`);
-    writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { archadev: { command: mcp.command, args: [...mcp.args, '--doc', docId, '--agent', adapter.id], env: mcp.env } } }, null, 2));
+    const mcpConfigFile = join(cfgDir, `mcp-${runId}.json`);
+    writeFileSync(mcpConfigFile, JSON.stringify({ mcpServers: { archadev: { command: mcp.command, args: mcp.args, env: mcp.env } } }, null, 2));
 
-    const sessionKey = `${docId}:${agentId}:${login.label ? Object.values(login.env).join() : 'host'}`;
+    const sessionKey = `${threadId}:${agentId}:${login.label ? Object.values(login.env).join() : 'host'}`;
+    const sessionId = this.sessionMap().get(sessionKey);
     const fullPrompt = `${prompt}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}`;
-    const child = spawn(bin, adapter.args({ prompt: fullPrompt, mcpConfig, model, sessionId: this.sessions.get(sessionKey), tools: MCP_TOOLS }), {
-      cwd: cfgDir, shell: false, windowsHide: true, env: { ...process.env, ...login.env, ARCHA_RUN_ID: runId },
-    });
-    const run: Run = { id: runId, docId, agent: agentId, child, stopped: false };
+    const run: Run = { id: runId, docId, threadId, agent: agentId, child: null, stopped: false, replied: false, failed: false };
     this.runs.set(runId, run);
-    this.emit(docId, runId, agentId, 'user', prompt);
-    if (login.label) this.emit(docId, runId, agentId, 'status', `Running as ${login.label}`);
+    this.emit(run, 'user', prompt);
+    if (login.label) this.emit(run, 'status', `Running as ${login.label}`);
     this.ws.broadcast('chat.run', { runId, docId, status: 'running' });
 
+    const fail = (text: string) => {
+      this.runs.delete(runId);
+      rmSync(mcpConfigFile, { force: true });
+      this.emit(run, 'error', text);
+      this.ws.broadcast('chat.run', { runId, docId, status: 'failed' });
+    };
+    const start = () => {
+      if (run.stopped) {
+        this.runs.delete(runId);
+        rmSync(mcpConfigFile, { force: true });
+        this.ws.broadcast('chat.run', { runId, docId, status: 'stopped' });
+        return;
+      }
+      const built = adapter.build({ prompt: fullPrompt, mcp, mcpConfigFile, model, sessionId });
+      const child = spawn(cli.bin, [...cli.pre, ...built.args], {
+        cwd: cfgDir, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, ...login.env, ARCHA_RUN_ID: runId, ARCHA_DOC_ID: docId, NO_COLOR: '1' },
+      });
+      run.child = child;
+      // Always close stdin: a CLI left with an open pipe waits for more input before it starts.
+      child.stdin.on('error', () => { /* the CLI exited before reading; the close handler reports it */ });
+      child.stdin.end(built.stdin ?? '');
+      this.pipe(run, child, adapter.parser(), sessionKey, mcpConfigFile);
+    };
+    if (adapter.prepare) adapter.prepare(cli.bin, base).then(start, (e: Error) => fail(e.message));
+    else start();
+    return { runId, threadId };
+  }
+
+  private pipe(run: Run, child: ChildProcess, parser: { line(l: string): AgentEvent[] }, sessionKey: string, mcpConfigFile: string) {
+    const { id: runId, docId } = run;
     let buf = '';
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => {
@@ -108,53 +154,52 @@ export class ChatRunner {
       while ((i = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, i).trim();
         buf = buf.slice(i + 1);
-        if (line) this.parseClaude(run, line, sessionKey);
+        if (line) for (const ev of parser.line(line)) this.onEvent(run, ev, sessionKey);
       }
     });
     let stderr = '';
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', (c: string) => { stderr = (stderr + c).slice(-4000); });
-    child.on('error', (e) => this.emit(docId, runId, agentId, 'error', e.message));
-    child.on('exit', (code) => {
+    child.on('error', (e) => { run.failed = true; this.emit(run, 'error', e.message); });
+    child.on('close', (code) => {
+      if (buf.trim()) for (const ev of parser.line(buf.trim())) this.onEvent(run, ev, sessionKey);
       this.runs.delete(runId);
-      const status = run.stopped ? 'stopped' : code === 0 ? 'finished' : 'failed';
-      if (status === 'failed') this.emit(docId, runId, agentId, 'error', stderr.trim() || `Agent exited with code ${code}`);
+      rmSync(mcpConfigFile, { force: true });
+      this.ws.broadcast('chat.delta', { docId, runId, threadId: run.threadId, agent: run.agent, text: '' });
+      const status = run.stopped ? 'stopped' : code === 0 && !run.failed ? 'finished' : 'failed';
+      if (status === 'failed' && !run.failed) this.emit(run, 'error', stderr.trim() || `Agent exited with code ${code}`);
+      if (status === 'finished' && !run.replied) this.emit(run, 'status', 'Finished without a reply');
+      if (status === 'stopped') this.emit(run, 'status', 'Stopped');
       this.ws.broadcast('chat.run', { runId, docId, status });
     });
-    return runId;
+  }
+
+  private onEvent(run: Run, ev: AgentEvent, sessionKey: string) {
+    if (ev.kind === 'session') this.rememberSession(sessionKey, ev.id);
+    else if (ev.kind === 'delta') this.ws.broadcast('chat.delta', { docId: run.docId, runId: run.id, threadId: run.threadId, agent: run.agent, text: ev.text });
+    else if (ev.kind === 'text') { run.replied = true; this.emit(run, 'agent', ev.text); }
+    else if (ev.kind === 'tool') this.emit(run, 'tool', ev.text);
+    else if (ev.kind === 'error') { run.failed = true; this.emit(run, 'error', ev.text); }
+    // The final answer repeats the last message; show it only when nothing was said along the way.
+    else if (ev.kind === 'final' && !run.replied && ev.text.trim()) { run.replied = true; this.emit(run, 'agent', ev.text.trim()); }
   }
 
   stop(runId: string) {
     const run = this.runs.get(runId);
     if (!run) return;
     run.stopped = true;
-    if (process.platform === 'win32' && run.child.pid) spawn('taskkill', ['/pid', String(run.child.pid), '/T', '/F'], { windowsHide: true });
-    else run.child.kill('SIGTERM');
+    const child = run.child;
+    if (!child) return;
+    if (process.platform === 'win32' && child.pid) spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
+    else child.kill('SIGTERM');
   }
 
-  private parseClaude(run: Run, line: string, sessionKey: string) {
-    let ev: Record<string, unknown>;
-    try { ev = JSON.parse(line) as Record<string, unknown>; } catch { return; }
-    if (typeof ev.session_id === 'string') this.sessions.set(sessionKey, ev.session_id);
-    const content = (ev.message as { content?: Array<Record<string, unknown>> } | undefined)?.content ?? [];
-    if (ev.type === 'assistant') {
-      for (const c of content) {
-        if (c.type === 'text' && typeof c.text === 'string' && c.text.trim()) this.emit(run.docId, run.id, run.agent, 'agent', c.text);
-        if (c.type === 'tool_use') this.emit(run.docId, run.id, run.agent, 'tool', toolSummary(String(c.name), c.input));
-      }
-    } else if (ev.type === 'result' && ev.is_error) {
-      this.emit(run.docId, run.id, run.agent, 'error', String(ev.result ?? 'Agent run failed'));
-    }
+  /** Models the installed CLI offers, for the composer's picker. */
+  async models(agentId: string, account?: string): Promise<{ models: ModelOption[]; source: string }> {
+    const adapter = ADAPTERS.find((a) => a.id === agentId);
+    if (!adapter) throw new Error(`Unknown agent "${agentId}"`);
+    let env: Record<string, string> = {};
+    try { env = this.ws.accounts.runEnv(adapter.id, account).env; } catch { /* signed-out account: list the host's models */ }
+    return adapter.models(resolveCli(adapter.bin)?.bin ?? null, env);
   }
-}
-
-function toolSummary(name: string, input: unknown): string {
-  const short = name.replace(/^mcp__archadev__/, '');
-  const i = (input ?? {}) as Record<string, unknown>;
-  if (short === 'execute' && typeof i.code === 'string') return `execute · ${i.code.split('\n').length} lines`;
-  if (short === 'execute' && i.editId) return `execute · patch ${String(i.editId)}`;
-  if (short === 'screenshot') return `screenshot · ${String(i.node ?? '')}`;
-  if (short === 'say') return String(i.text ?? '');
-  if (short === 'browser') return `browser · ${String(i.action ?? '')}${i.url ? ` ${String(i.url)}` : i.ref ? ` ${String(i.ref)}` : ''}`;
-  return short;
 }

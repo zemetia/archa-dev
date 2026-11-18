@@ -1,14 +1,22 @@
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { ArchaDocument, DocumentError, DocumentSession, subtreeHash } from '@archa/core';
+import { ArchaDocument, DocumentError, DocumentSession, findEmptySpace, libraryInsertOps, subtreeHash } from '@archa/core';
 import { decodeArcha, encodeArcha, exportSvg } from '@archa/formats';
 import { newId, opSchema, type Author, type Op } from '@archa/schema';
 import { browserCommandSchema, type ActivityEntry, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
 import { z } from 'zod';
 import { AgentExecutor, describeState } from './execute';
 import { ADAPTERS, ChatRunner, findBin, type McpCommand } from './agents';
-import { AccountManager } from './accounts';
+import { AccountManager, resolveCli } from './accounts';
+import { LibraryStore, libraryInsertSchema, libraryItemSchema, libraryPublishSchema } from './library';
 import { callBrowser } from './main-bridge';
+
+const chatSendSchema = z.object({
+  docId: z.string().min(1), agent: z.string().min(1), prompt: z.string().min(1).max(100_000),
+  model: z.string().max(100).optional(), account: z.string().max(100).optional(), threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+});
+const agentModelsSchema = z.object({ agent: z.enum(['claude', 'agy', 'codex']), account: z.string().max(100).optional() });
+const chatThreadSchema = z.object({ docId: z.string().min(1), threadId: z.string().min(1).max(64) });
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -39,6 +47,7 @@ export class Workspace {
   private lastDocId: string | null = null;
   readonly accounts = new AccountManager((accountId) => this.broadcast('accounts.changed', accountId ? { accountId } : {}));
   readonly chat = new ChatRunner(this, mcpCommand);
+  readonly library = new LibraryStore();
 
   constructor() {
     this.newDoc('Untitled');
@@ -248,10 +257,10 @@ export class Workspace {
     'app.info': () => {
       const m = mcpCommand();
       return {
-        version: '0.1.0',
+        version: '0.2.2',
         cliPath: cliPath(),
         mcpCommand: [m.command, ...m.args],
-        agents: ADAPTERS.map((a) => ({ id: a.id, label: a.label, available: !!findBin(a.bin) && existsSync(cliPath()), models: a.models })),
+        agents: ADAPTERS.map((a) => ({ id: a.id, label: a.label, available: !!resolveCli(a.bin) && existsSync(cliPath()) })),
       };
     },
     'export.save': async ({ docId, nodeId, format, path, png }) => {
@@ -260,9 +269,42 @@ export class Workspace {
       await writeFile(path, data);
       return { path };
     },
-    'chat.send': ({ docId, agent, model, account, prompt }) => ({ runId: this.chat.send(this.session(docId).id, agent, prompt, model, account) }),
+    'chat.send': (params) => {
+      const p = chatSendSchema.parse(params);
+      return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId);
+    },
     'chat.stop': ({ runId }) => this.chat.stop(runId),
-    'chat.list': ({ docId }) => this.chat.messages.get(docId) ?? [],
+    'chat.list': ({ docId }) => this.chat.list(this.session(docId).id),
+    'library.list': () => this.library.list(),
+    'library.publish': (params) => {
+      const p = libraryPublishSchema.parse(params);
+      return this.library.publish(this.session(p.docId).doc, p.nodeId, p.library, p.png);
+    },
+    'library.remove': (params) => {
+      const p = libraryItemSchema.parse(params);
+      this.library.remove(p.library, p.id);
+    },
+    'library.insert': (params, conn) => {
+      const p = libraryInsertSchema.parse(params);
+      const s = this.session(p.docId);
+      const item = this.library.read(p.library, p.id);
+      if (!item) throw new DocumentError('NOT_FOUND', `Library component ${p.library}:${p.id} not found`);
+      const parentId = p.parentId ?? s.doc.pages[0]!.rootId;
+      const spot = p.x === undefined || p.y === undefined ? findEmptySpace(s.doc, parentId, item.width, item.height) : { x: p.x, y: p.y };
+      const r = libraryInsertOps(s.doc, `${p.library}:${p.id}`, item, parentId, spot);
+      const wasDirty = s.dirty;
+      s.apply({ author: conn.author, label: `Insert ${item.name} from library`, baseRevision: s.revision, ops: r.ops });
+      if (!wasDirty) this.broadcast('workspace.changed', this.summaries());
+      return { nodeId: r.rootId, placed: r.placed };
+    },
+    'agents.models': (params) => {
+      const p = agentModelsSchema.parse(params);
+      return this.chat.models(p.agent, p.account);
+    },
+    'chat.deleteThread': (params) => {
+      const p = chatThreadSchema.parse(params);
+      this.chat.deleteThread(this.session(p.docId).id, p.threadId);
+    },
     'accounts.overview': () => this.accounts.overview(),
     'accounts.create': (p) => this.accounts.create(p),
     'accounts.update': (p) => this.accounts.update(p),

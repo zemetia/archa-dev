@@ -61,6 +61,34 @@ A tool is `{ id, cursor, onPointerDown/Move/Up, onKey }` producing ops through t
 
 ---
 
+## Collapsible Sidebars
+
+| Rule | Detail |
+|---|---|
+| Toggle | Left: Ctrl+\ or the tool-rail top button. Right: Ctrl+Shift+\ (`e.code === 'Backslash'`), header button; a floating "Design" button reopens it |
+| Layout | Wrapper animates `width` to 0 and carries its own 8px gutter; the inner column keeps a fixed width so nothing reflows mid-animation. Canvas follows via its ResizeObserver |
+| State | `leftOpen` / `rightOpen` in the view store, remembered in localStorage (`archa.leftOpen`, `archa.rightOpen`), try/catch, default open |
+| Chat composer | Thread lives in the left card; the composer is its own card below (agent colour dot, violet send, target-document chip). Suggestion chips fill `chatDraft`, never send |
+
+---
+
+## Left Menu
+
+Header row (`LeftTab` in the store): **Chat** on the left (also active while History is open), **Layers · Components · Slides · Library** right-aligned. No History or collapse button in this row — History opens from the chat header, collapsing from the tool rail / Ctrl+\. Non-chat tabs get a title row.
+
+| Tab | Content | Code |
+|---|---|---|
+| Chat | Current conversation (`chatThread`; null = new). Header: History, New chat | `ui/ChatPanel.tsx` |
+| History | Conversations of this document, newest first (`chatThreads()`), open = resume, two-click delete | `ui/HistoryPanel.tsx` |
+| Layers | Tree; components/instances show a violet icon | `ui/LayersPanel.tsx` |
+| Components | Make from selected frame, description (agents read it), Insert, Sync, Publish, Unmake; instance bar: Reset / Go to main / Detach | `ui/ComponentsPanel.tsx` |
+| Slides | Every visible top-level frame as a thumbnail at its own aspect ratio (height capped at 420), click = select + zoom | `ui/SlidesPanel.tsx` |
+| Library | Global library items with search; click inserts (main first, then instances); two-click remove | `ui/LibraryPanel.tsx` |
+
+Thumbnails: `lib/thumbs.ts` renders with `renderNodePng`, cached by subtree hash, debounced 250 ms.
+
+---
+
 ## Panels
 
 | Panel | Content |
