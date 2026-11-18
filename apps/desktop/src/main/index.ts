@@ -52,7 +52,9 @@ function onCoreMessage(msg: unknown) {
 }
 
 function startCore() {
-  core = utilityProcess.fork(join(__dirname, 'core-host.js'), [], { serviceName: 'ArchaDev Core', stdio: 'inherit' });
+  // Packaged builds ship the CLI under resources/cli (electron-builder extraResources).
+  const env = app.isPackaged ? { ...process.env, ARCHA_CLI: join(process.resourcesPath, 'cli', 'archa.cjs') } : process.env;
+  core = utilityProcess.fork(join(__dirname, 'core-host.js'), [], { serviceName: 'ArchaDev Core', stdio: 'inherit', env });
   core.on('message', onCoreMessage);
   core.on('exit', (code) => {
     core = null;

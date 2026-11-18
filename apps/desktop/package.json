@@ -8,7 +8,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "dist": "electron-vite build && electron-builder --win --config electron-builder.yml"
   },
   "dependencies": {
     "@archa/core": "workspace:*",
@@ -25,6 +26,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "electron": "^45.3.4",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "lucide-react": "^1.75.0",
     "react": "^19.3.1",
@@ -32,5 +34,7 @@
     "tailwindcss": "^4.3.5",
     "vite": "^8.3.8",
     "zustand": "^5.1.0"
-  }
+  },
+  "productName": "ArchaDev",
+  "author": "Zemetia"
 }

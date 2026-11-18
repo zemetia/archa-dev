@@ -1,0 +1,38 @@
+appId: dev.archa.desktop
+productName: ArchaDev
+copyright: Copyright © 2026 Zemetia
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+extraResources:
+  # The `archa` CLI (MCP server for agents) ships inside the app.
+  - from: ../cli/dist/archa.cjs
+    to: cli/archa.cjs
+asar: true
+asarUnpack:
+  - '**/*.wasm'
+fileAssociations:
+  - ext: archa
+    name: ArchaDev Document
+    description: ArchaDev design file
+    mimeType: application/vnd.archadev.archa+zip
+    role: Editor
+protocols:
+  - name: ArchaDev
+    schemes: [archadev]
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ArchaDev-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: ArchaDev
+publish: null
+electronVersion: 45.3.4
