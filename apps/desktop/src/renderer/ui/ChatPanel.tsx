@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, Bot, Copy, Loader2, Square, Wrench } from 'lucide-react';
+import { ArrowUp, Bot, Copy, Loader2, Settings, Square, UserRound, Wrench } from 'lucide-react';
 import { select, toast, useStore } from '../lib/store';
 import { cn } from './controls';
 
@@ -18,9 +18,15 @@ export function ChatPanel() {
   const [prompt, setPrompt] = useState('');
   const [agent, setAgent] = useState('claude');
   const [model, setModel] = useState('');
+  const [account, setAccount] = useState('');
+  const accounts = useStore((s) => s.accounts?.accounts);
   const end = useRef<HTMLDivElement>(null);
 
   const available = info?.agents.find((a) => a.id === agent);
+  // Saved login profiles for this agent ('' = its default account, 'host' = this computer's login).
+  const agentAccounts = (accounts ?? []).filter((a) => a.agent === agent && a.enabled);
+  const defaultAccount = agentAccounts.find((a) => a.isDefault);
+  useEffect(() => { if (account && account !== 'host' && !agentAccounts.some((a) => a.id === account)) setAccount(''); }, [account, agentAccounts]);
   // Listen-mode agents (connected through `archa mcp` from a terminal) show up as activity.
   const items = useMemo(() => {
     const listen = activity.filter((a) => a.docId === docId && a.author.kind === 'agent' && !chat.some((c) => Math.abs(c.ts - a.ts) < 50))
@@ -33,7 +39,7 @@ export function ChatPanel() {
   const send = async () => {
     if (!client || !docId || !prompt.trim() || running) return;
     try {
-      await client.call('chat.send', { docId, agent, model: model || undefined, prompt: prompt.trim() });
+      await client.call('chat.send', { docId, agent, model: model || undefined, account: account || undefined, prompt: prompt.trim() });
       setPrompt('');
     } catch (e) {
       toast((e as Error).message, 'error');
@@ -68,6 +74,7 @@ export function ChatPanel() {
                 <Wrench size={11} className="shrink-0" /><span className="truncate">{m.text}</span>
               </button>
             )}
+            {m.role === 'status' && <div className="flex items-center gap-1.5 px-1 text-[11px] text-fg-subtle"><UserRound size={11} className="shrink-0" /><span className="truncate">{m.text}</span></div>}
             {m.role === 'error' && <div className="whitespace-pre-wrap rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{m.text}</div>}
           </div>
         ))}
@@ -99,6 +106,19 @@ export function ChatPanel() {
               </button>
             )}
           </div>
+        </div>
+        <div className="mt-1.5 flex items-center gap-1 text-[11px] text-fg-subtle">
+          <UserRound size={11} className="shrink-0" />
+          {agentAccounts.length > 0 ? (
+            <select value={account} onChange={(e) => setAccount(e.target.value)} title="Account this run signs in as"
+              className="h-6 min-w-0 flex-1 truncate rounded-md bg-transparent px-1 text-[11px] text-fg-muted hover:bg-panel-3">
+              <option value="" className="bg-panel">Default · {defaultAccount ? defaultAccount.email || defaultAccount.name : "this computer's login"}</option>
+              <option value="host" className="bg-panel">This computer's login</option>
+              {agentAccounts.map((a) => <option key={a.id} value={a.id} className="bg-panel">{a.email || a.name}{a.signedIn ? '' : ' (not signed in)'}</option>)}
+            </select>
+          ) : <span className="min-w-0 flex-1 truncate px-1">This computer's login</span>}
+          <button title="Manage agent accounts" onClick={() => useStore.setState({ settingsOpen: true })}
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 hover:bg-panel-3 hover:text-fg-muted"><Settings size={11} />Accounts</button>
         </div>
         {available && !available.available && <p className="mt-2 text-[11px] text-warn">{available.label} CLI not found on PATH, or the archa CLI is not built (pnpm cli).</p>}
       </div>

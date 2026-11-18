@@ -42,6 +42,20 @@ Stored in `~/.archadev/profiles/<agent>/<profileId>/` — never in a project, ne
 
 Runs with the same agy profile may run in parallel (shared lease); different agy profiles serialise the swap.
 
+### MVP implementation (2026-11-18)
+
+Code: `apps/desktop/src/core-host/accounts.ts` (+ `keyring.ts`); moves to `packages/agents/src/profiles/` with the adapters.
+
+| Item | Contract |
+|---|---|
+| Store | `~/.archadev/profiles/accounts.json` (0600): `{ accounts[], defaults{agent→id} }`. Managed folders `profiles/<agent>/<id>/`; a **linked** existing folder (e.g. Orca's) is never deleted |
+| Identity | Read from files only, tokens never cross the protocol: Claude `.credentials.json` + `.claude.json`; Codex `auth.json` (id_token email/plan, or API key); agy keyring blob `id_token_email` |
+| Sign-in | Claude: `claude auth login [--email]` with `CLAUDE_CONFIG_DIR`, `BROWSER=none` → link + pasted code on stdin. Codex: `codex login` with `CODEX_HOME` (browser callback) or API key written to `auth.json`. agy: "Save current agy login" / "Use on this computer" (current login saved first) |
+| Keyring | Windows Credential Manager via PowerShell P/Invoke (script constant, data in env); macOS `security`; Linux `secret-tool` |
+| Protocol | `accounts.overview/create/update/delete/captureHost/useOnHost/login.start/login.code/login.cancel`, event `accounts.changed`; params zod-validated in the core host |
+| Runs | `chat.send.account`: id, `'host'`, or omitted = agent default → else host login. Claude gets `CLAUDE_CONFIG_DIR`; Codex `CODEX_HOME`. Disabled / signed-out account = error, no silent fallback |
+| Not yet | agy run lease swap (no agy adapter yet), rate-limit rotation across accounts, Hermes |
+
 ---
 
 ## Models
@@ -52,9 +66,16 @@ Runs with the same agy profile may run in parallel (shared lease); different agy
 
 ## Settings → Agents Page
 
-| Section | Content |
-|---|---|
-| Detected | Each CLI: path, version, signed-in account |
-| Profiles | List, add (sign in), save host login, use on host, delete |
-| Defaults | Default model, max parallel runs, per-turn timeout |
-| Check | **Test connection** = `archa status <agent>`: binary runs → profile valid → MCP reachable from the agent → round-trip `say` |
+Opened from the title bar gear, `Ctrl+,`, or "Accounts" under the chat composer. Code: `renderer/ui/SettingsDialog.tsx`.
+
+| Section | Content | Built |
+|---|---|---|
+| Nav | One entry per agent: mark, label, account count, dot (green ready · amber no signed-in account · grey CLI missing) | ✓ |
+| Header | Label, `Installed · <version>` / `Not installed`, re-check button | ✓ |
+| This computer | Host login (email, plan, saved?), whether runs use it; agy: "Save as account" | ✓ |
+| Accounts | Row: avatar, name, email, plan, status chip, default ★, enable switch, sign in / use on this computer, open folder, remove (inline confirm) | ✓ |
+| Sign-in panel | Claude: open link → sign in → paste code. Codex: browser finishes, panel closes itself. Errors stay with "Try again" | ✓ |
+| Add account | Claude: e-mail/name → sign in. Codex: ChatGPT or API key. Both: link an existing folder. agy: 3-step save flow | ✓ |
+| Chat picker | Default · <account> / This computer's login / each enabled account | ✓ |
+| Defaults | Default model, max parallel runs, per-turn timeout | — |
+| Check | **Test connection** = `archa status <agent>`: binary runs → profile valid → MCP reachable from the agent → round-trip `say` | — |

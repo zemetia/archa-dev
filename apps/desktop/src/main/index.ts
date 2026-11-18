@@ -117,6 +117,15 @@ if (!app.requestSingleInstanceLock()) {
       const r = await dialog.showSaveDialog(win, { defaultPath: suggested, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
       return r.canceled ? null : r.filePath;
     });
+    ipcMain.handle('dialog:folder', async (e, title: string) => {
+      const win = BrowserWindow.fromWebContents(e.sender)!;
+      const r = await dialog.showOpenDialog(win, { title, properties: ['openDirectory', 'showHiddenFiles'] });
+      return r.canceled ? null : r.filePaths[0];
+    });
+    ipcMain.handle('shell:open-path', async (_e, path: string) => {
+      if (typeof path !== 'string' || !existsSync(path) || !statSync(path).isDirectory()) return 'Folder not found';
+      return shell.openPath(path);
+    });
     createWindow(parseArgv(process.argv, process.cwd()));
   });
 

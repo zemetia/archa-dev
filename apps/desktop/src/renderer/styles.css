@@ -18,6 +18,10 @@
   --color-warn: #f59e0b;
   --color-danger: #ef4444;
   --color-agent: #f97316;
+  /* Agent CLI marks (Settings → Agents, chat) */
+  --color-claude: #d97757;
+  --color-agy: #5b8def;
+  --color-codex: #10a37f;
   --font-sans: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
 }

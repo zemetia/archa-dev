@@ -24,7 +24,7 @@ Phases are ordered by dependency. Each has a "done when" that can be checked, no
 
 ## Status (2026-11-18)
 
-MVP built on branch `zemetia/mvp-app`. Covers phase 0 except lint/CI, phase 1, most of phase 2, and phase 5 (listen mode), plus Claude launch mode from phase 6.
+MVP built on branch `zemetia/mvp-app`. Covers phase 0 except lint/CI, phase 1, most of phase 2, and phase 5 (listen mode), plus Claude launch mode from phase 6 and Settings → Agents login profiles (Claude, agy, Codex — blueprint AGENT_BRIDGE/02).
 
 | Departure from the blueprint | Reason | Follow-up |
 |---|---|---|

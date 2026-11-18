@@ -8,6 +8,7 @@ import { RightPanel } from './ui/RightPanel';
 import { ToolRail, TOOLS } from './ui/ToolRail';
 import { ZoomBar } from './ui/ZoomBar';
 import { cn } from './ui/controls';
+import { SettingsDialog } from './ui/SettingsDialog';
 
 export function App() {
   const ready = useStore((s) => !!s.doc);
@@ -31,6 +32,7 @@ export function App() {
         </main>
         <RightPanel />
       </div>
+      <SettingsDialog />
       <div className="pointer-events-none fixed bottom-16 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">
         {toasts.map((t) => (
           <div key={t.id} className={cn('max-w-[560px] rounded-lg px-3 py-2 text-[12px] shadow-xl', t.kind === 'error' ? 'bg-danger text-white' : 'bg-fg text-app')}>{t.text}</div>
@@ -46,6 +48,9 @@ function onKey(e: KeyboardEvent) {
   const mod = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
   const run = (fn: () => unknown) => { e.preventDefault(); void fn(); };
+  // The settings dialog handles its own keys; canvas shortcuts stay off underneath it.
+  if (useStore.getState().settingsOpen) return;
+  if (mod && k === ',') return run(() => useStore.setState({ settingsOpen: true }));
 
   if (mod) {
     if (k === 'z' && e.shiftKey) return run(redo);
