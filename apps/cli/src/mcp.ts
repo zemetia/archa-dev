@@ -17,7 +17,7 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
   // Launched runs pass --doc; agy's globally registered server falls back to the run's env.
   const docId = opts.doc ?? process.env.ARCHA_DOC_ID;
 
-  const server = new McpServer({ name: 'archadev', version: '0.2.3' });
+  const server = new McpServer({ name: 'archadev', version: '0.2.4' });
   const guard = async (fn: (c: RpcClient) => Promise<Content[]>) => {
     try {
       return { content: await fn(await getCore()) };

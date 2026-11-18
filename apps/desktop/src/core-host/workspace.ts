@@ -266,7 +266,7 @@ export class Workspace {
     'app.info': () => {
       const m = mcpCommand();
       return {
-        version: '0.2.3',
+        version: '0.2.4',
         cliPath: cliPath(),
         mcpCommand: [m.command, ...m.args],
         agents: ADAPTERS.map((a) => ({ id: a.id, label: a.label, available: !!resolveCli(a.bin) && existsSync(cliPath()) })),
