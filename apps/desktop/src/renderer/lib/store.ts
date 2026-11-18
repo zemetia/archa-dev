@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, type AccountsOverview, type McpServer, type SkillsOverview, type BrowserState, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, threadOf, type AccountsOverview, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodePng } from '@archa/render';
 
+export type LeftTab = 'chat' | 'history' | 'layers' | 'components' | 'slides' | 'library';
 export type Tool = 'select' | 'frame' | 'rect' | 'ellipse' | 'text' | 'hand';
 export type Camera = { x: number; y: number; zoom: number };
 type Toast = { id: number; text: string; kind: 'info' | 'error' };
@@ -20,11 +21,22 @@ type State = {
   hover: string | null;
   tool: Tool;
   camera: Camera;
-  leftTab: 'layers' | 'chat';
+  leftTab: LeftTab;
+  /** Conversation shown in the Chat tab; null = a new conversation (blueprint APP_UI/01 → Left menu). */
+  chatThread: string | null;
+  /** Global library components (Library tab, DESIGN_SYSTEM/02). Loaded on demand. */
+  library: LibraryItem[] | null;
+  /** Sidebar visibility; remembered per machine (localStorage), never part of the document. */
+  leftOpen: boolean;
+  rightOpen: boolean;
+  /** Chat composer text, shared by the composer and the empty-state suggestions. */
+  chatDraft: string;
   agents: AgentClient[];
   activity: ActivityEntry[];
   chat: ChatMessage[];
   runningRun: string | null;
+  /** Reply the launched agent is still writing (streamed); null when none. */
+  chatLive: { runId: string; threadId: string; agent: string; text: string } | null;
   agentFocus: { name: string; nodeIds: string[]; ts: number } | null;
   editingText: string | null;
   toasts: Toast[];
@@ -44,11 +56,23 @@ type State = {
 
 export const useStore = create<State>(() => ({
   client: null, info: null, docs: [], activeDocId: null, doc: null, rev: 0,
-  selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers',
-  agents: [], activity: [], chat: [], runningRun: null, agentFocus: null, editingText: null, toasts: [], fitRequest: 0,
+  selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, library: null,
+  leftOpen: readFlag('archa.leftOpen'), rightOpen: readFlag('archa.rightOpen'), chatDraft: '',
+  agents: [], activity: [], chat: [], runningRun: null, chatLive: null, agentFocus: null, editingText: null, toasts: [], fitRequest: 0,
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
   browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
 }));
+
+function readFlag(key: string) {
+  try { return localStorage.getItem(key) !== '0'; } catch { return true; }
+}
+
+export function togglePanel(side: 'left' | 'right', open?: boolean) {
+  const key = side === 'left' ? 'leftOpen' : 'rightOpen';
+  const next = open ?? !useStore.getState()[key];
+  useStore.setState({ [key]: next });
+  try { localStorage.setItem(`archa.${key}`, next ? '1' : '0'); } catch { /* storage blocked: keep in-memory state */ }
+}
 
 const set = useStore.setState;
 const get = useStore.getState;
@@ -110,9 +134,18 @@ export async function init() {
     set((s) => ({ activity: [...s.activity.slice(-300), a] }));
     if (a.author.kind === 'agent' && a.nodeIds.length) set({ agentFocus: { name: a.author.name ?? a.author.id, nodeIds: a.nodeIds, ts: Date.now() } });
   });
-  client.on('chat.message', (m) => { if (m.docId === get().activeDocId) set((s) => ({ chat: [...s.chat, m] })); });
+  client.on('chat.message', (m) => {
+    if (m.docId !== get().activeDocId) return;
+    // A finished agent message replaces the streamed preview of the same run.
+    set((s) => ({ chat: [...s.chat, m], chatLive: m.role === 'agent' && s.chatLive?.runId === m.runId ? null : s.chatLive }));
+  });
+  client.on('chat.delta', (d) => {
+    if (d.docId !== get().activeDocId) return;
+    set({ chatLive: d.text ? { runId: d.runId, threadId: d.threadId, agent: d.agent, text: d.text } : null });
+  });
   client.on('chat.run', (r) => {
-    if (r.status === 'running') set({ runningRun: r.runId });
+    // A run started elsewhere (another window, the CLI) opens its conversation when none is shown.
+    if (r.status === 'running') set((s) => ({ runningRun: r.runId, chatThread: s.chatThread === null && r.docId === s.activeDocId ? r.threadId : s.chatThread }));
     else if (get().runningRun === r.runId) set({ runningRun: null });
   });
   let accountsTimer: ReturnType<typeof setTimeout> | undefined;
@@ -172,6 +205,16 @@ export async function loadMcpServers() {
   }
 }
 
+export async function loadLibrary() {
+  const { client } = get();
+  if (!client) return;
+  try {
+    set({ library: await client.call('library.list') });
+  } catch (e) {
+    toast((e as Error).message, 'error');
+  }
+}
+
 export async function loadAccounts() {
   const { client } = get();
   if (!client) return;
@@ -187,7 +230,9 @@ export async function activate(docId: string | null) {
   if (!client || !docId) { set({ activeDocId: null, doc: null }); return; }
   const snap = await client.call('doc.snapshot', { docId });
   const chat = await client.call('chat.list', { docId });
-  set((s) => ({ activeDocId: docId, doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1, selection: [], chat, editingText: null, fitRequest: s.fitRequest + 1 }));
+  // Reopen the most recent conversation of this document.
+  const last = chat.at(-1);
+  set((s) => ({ activeDocId: docId, doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1, selection: [], chat, chatThread: last ? threadOf(last) : null, editingText: null, fitRequest: s.fitRequest + 1 }));
 }
 
 export async function resync() {

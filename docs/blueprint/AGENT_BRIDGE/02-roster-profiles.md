@@ -53,8 +53,23 @@ Code: `apps/desktop/src/core-host/accounts.ts` (+ `keyring.ts`); moves to `packa
 | Sign-in | Claude: `claude auth login [--email]` with `CLAUDE_CONFIG_DIR`, `BROWSER=none` → link + pasted code on stdin. Codex: `codex login` with `CODEX_HOME` (browser callback) or API key written to `auth.json`. agy: "Save current agy login" / "Use on this computer" (current login saved first) |
 | Keyring | Windows Credential Manager via PowerShell P/Invoke (script constant, data in env); macOS `security`; Linux `secret-tool` |
 | Protocol | `accounts.overview/create/update/delete/captureHost/useOnHost/login.start/login.code/login.cancel`, event `accounts.changed`; params zod-validated in the core host |
+| Isolation | ArchaDev stands alone: main drops inherited `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ORCA_*` before forking the core host, and the host login is always `~/.claude` / `~/.codex`. Launching from another tool's terminal (e.g. Orca) never picks up that tool's profile |
 | Runs | `chat.send.account`: id, `'host'`, or omitted = agent default → else host login. Claude gets `CLAUDE_CONFIG_DIR`; Codex `CODEX_HOME`. Disabled / signed-out account = error, no silent fallback |
-| Not yet | agy run lease swap (no agy adapter yet), rate-limit rotation across accounts, Hermes |
+| Not yet | agy run lease swap, rate-limit rotation across accounts, Hermes |
+
+### Launch adapters — MVP (2026-11-19)
+
+Code: `apps/desktop/src/core-host/agent-adapters.ts` (argv, parsers, models) + `agents.ts` (`ChatRunner`). Tests: `apps/desktop/test/agent-adapters.test.ts`; live `agents-live.test.ts` behind `ARCHA_AGENT_IT=1`.
+
+| Agent | Invocation | MCP | Models |
+|---|---|---|---|
+| Claude | `-p --output-format stream-json --verbose --include-partial-messages --setting-sources project,local`; prompt on **stdin** | per-run `--mcp-config` + `--strict-mcp-config` | aliases + `additionalModelOptionsCache` in `.claude.json` |
+| agy | `--dangerously-skip-permissions --disable-slash-commands --output-format stream-json --print-timeout 30m -p <prompt>` (argv; canvas state dropped past 28 000 chars) | no per-run flag: `agy mcp add archadev …` once per app start; doc from `ARCHA_DOC_ID` | `agy models`, cached 10 min |
+| Codex | `exec --json --full-auto --skip-git-repo-check -c mcp_servers.archadev.*=… -`; prompt on stdin | `-c` overrides | `CODEX_HOME/models_cache.json` |
+
+agy reads MCP tool descriptions from schema files instead of its context, so its prompt carries the tool list + `EXECUTE_API_DOC` (`AGY_TOOLS_NOTE`). Launched runs tag their `archa mcp` connection with `ARCHA_RUN_ID` (`ClientInfo.runId`), and the chat hides that activity so it is not shown twice.
+
+Rules: stdin is always closed (an open pipe makes `claude -p` wait); `chat.delta` streams in-progress text; one run per document; `agents.models` feeds the composer picker.
 
 ---
 

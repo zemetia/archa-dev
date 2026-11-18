@@ -11,7 +11,7 @@ import { DocumentError } from '@archa/core';
 import { newId } from '@archa/schema';
 import type { McpImportCandidate, McpImportSource, McpServer, McpTestResult, McpTransport, SecretEntry } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
-import { claudeHostDir, parse } from './accounts';
+import { parse } from './accounts';
 
 /*
  * Settings → MCP servers (blueprint AGENT_BRIDGE/05): external MCP servers that chat runs get next
@@ -201,7 +201,8 @@ type Foreign = Omit<Stored, 'id' | 'name' | 'enabled' | 'createdAt'>;
 
 /** User-level servers from another client's config. Missing or malformed files give nothing. */
 function foreignServers(source: McpImportSource): Record<string, Foreign> {
-  const path = source === 'claude' ? (process.env.CLAUDE_CONFIG_DIR ? join(claudeHostDir(), '.claude.json') : join(homedir(), '.claude.json'))
+  // Same host login as accounts.ts: ~/.claude.json, never an inherited CLAUDE_CONFIG_DIR.
+  const path = source === 'claude' ? join(homedir(), '.claude.json')
     : source === 'antigravity' ? join(homedir(), '.gemini', 'antigravity', 'mcp_config.json')
     : join(homedir(), '.cursor', 'mcp.json');
   if (!existsSync(path)) return {};

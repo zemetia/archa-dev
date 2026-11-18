@@ -39,7 +39,7 @@ describe('skill frontmatter', () => {
 
 describe('SkillManager', () => {
   it('creates, toggles and deletes library skills, and lists agent skills read-only', () => {
-    writeSkill(join(root, 'claude', 'skills', 'review'), 'name: review\ndescription: Reviews code');
+    writeSkill(join(root, '.claude', 'skills', 'review'), 'name: review\ndescription: Reviews code');
     const m = new SkillManager(() => changes++);
     const s = m.create({ name: 'brand', description: 'Brand rules', body: '# Brand' });
     expect(s).toMatchObject({ id: 'archadev:brand', source: 'archadev', enabled: true, description: 'Brand rules' });
@@ -98,8 +98,7 @@ describe('McpServerManager', () => {
   });
 
   it('imports user-level servers from Claude Code and Antigravity', () => {
-    mkdirSync(join(root, 'claude'), { recursive: true });
-    writeFileSync(join(root, 'claude', '.claude.json'), JSON.stringify({ mcpServers: { pencil: { command: 'pencil', args: ['mcp'] }, web: { type: 'sse', url: 'https://w/sse' } } }));
+    writeFileSync(join(root, '.claude.json'), JSON.stringify({ mcpServers: { pencil: { command: 'pencil', args: ['mcp'] }, web: { type: 'sse', url: 'https://w/sse' } } }));
     mkdirSync(join(root, '.gemini', 'antigravity'), { recursive: true });
     writeFileSync(join(root, '.gemini', 'antigravity', 'mcp_config.json'), JSON.stringify({ mcpServers: { remote: { serverUrl: 'https://r/mcp' } } }));
     const m = new McpServerManager(() => changes++);

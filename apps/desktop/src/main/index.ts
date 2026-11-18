@@ -51,9 +51,14 @@ function onCoreMessage(msg: unknown) {
   );
 }
 
+// ArchaDev keeps its own agent logins (~/.archadev/profiles). Drop the config dirs and session markers a parent
+// tool (Orca, another agent's terminal) hands down, so the core host and every agent it spawns see the real host login.
+const INHERITED_AGENT_ENV = /^(CLAUDE_CONFIG_DIR|CODEX_HOME|CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|ORCA_.+)$/i;
+const ownEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !INHERITED_AGENT_ENV.test(k)));
+
 function startCore() {
   // Packaged builds ship the CLI under resources/cli (electron-builder extraResources).
-  const env = app.isPackaged ? { ...process.env, ARCHA_CLI: join(process.resourcesPath, 'cli', 'archa.cjs') } : process.env;
+  const env = app.isPackaged ? { ...ownEnv(), ARCHA_CLI: join(process.resourcesPath, 'cli', 'archa.cjs') } : ownEnv();
   core = utilityProcess.fork(join(__dirname, 'core-host.js'), [], { serviceName: 'ArchaDev Core', stdio: 'inherit', env });
   core.on('message', onCoreMessage);
   core.on('exit', (code) => {

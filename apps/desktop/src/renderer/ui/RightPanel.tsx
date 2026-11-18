@@ -1,31 +1,54 @@
 import type { ReactNode } from 'react';
 import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
-  ArrowDown, ArrowRight, Eye, EyeOff, LayoutGrid, Minus, Plus, TextAlignCenter, TextAlignEnd, TextAlignStart,
+  ArrowDown, ArrowRight, Eye, EyeOff, LayoutGrid, Minus, PanelRightClose, Plus, TextAlignCenter, TextAlignEnd, TextAlignStart,
 } from 'lucide-react';
 import { hexToColor, type Node, type Paint, type Shadow, type Stroke } from '@archa/schema';
 import type { Op } from '@archa/schema';
-import { commit, exportNode, useStore } from '../lib/store';
+import { commit, exportNode, togglePanel, useStore } from '../lib/store';
 import { originOf, selectionBounds } from '../lib/geometry';
-import { ColorField, IconButton, NumberField, Section, Segmented, Select } from './controls';
+import { cn, ColorField, IconButton, NumberField, Section, Segmented, Select } from './controls';
 
 const patchAll = (ids: string[], patch: Record<string, unknown>, label: string) =>
   commit(label, ids.map((id) => ({ op: 'update' as const, id, patch })));
 
+export const RIGHT_WIDTH = 280;
+
+/* Right sidebar: collapses to zero width (Ctrl+Shift+\ or its header button); content keeps its width while animating. */
 export function RightPanel() {
+  const open = useStore((s) => s.rightOpen);
+  return (
+    <div aria-hidden={!open} style={{ width: open ? RIGHT_WIDTH + 8 : 0 }}
+      className="flex shrink-0 justify-end overflow-hidden transition-[width] duration-200 ease-out">
+      <aside style={{ width: RIGHT_WIDTH }} className={cn('flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-panel transition-opacity duration-150', !open && 'opacity-0')}>
+        <DesignPanel />
+      </aside>
+    </div>
+  );
+}
+
+function DesignPanel() {
   const doc = useStore((s) => s.doc);
   useStore((s) => s.rev);
   const selection = useStore((s) => s.selection);
   const docs = useStore((s) => s.docs);
   const activeDocId = useStore((s) => s.activeDocId);
   const client = useStore((s) => s.client);
-  if (!doc) return <aside className="w-[280px] shrink-0 rounded-2xl border border-line bg-panel" />;
-  const nodes = selection.map((id) => doc.get(id)).filter((n): n is Node => !!n);
+  const nodes = doc ? selection.map((id) => doc.get(id)).filter((n): n is Node => !!n) : [];
   const summary = docs.find((d) => d.id === activeDocId);
+  const title = nodes.length > 1 ? `${nodes.length} selected` : nodes.length === 1 ? nodes[0]!.name : 'Design';
 
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-panel">
-      <div className="min-h-0 flex-1 overflow-y-auto">
+    <>
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line pl-4 pr-1.5">
+        <span className="h-3 w-[3px] shrink-0 rounded-full bg-accent" />
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{title}</span>
+        <button title="Hide design panel (Ctrl+Shift+\)" onClick={() => togglePanel('right', false)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle hover:bg-panel-2 hover:text-fg">
+          <PanelRightClose size={15} />
+        </button>
+      </div>
+      {doc && <div className="min-h-0 flex-1 overflow-y-auto">
         {nodes.length === 0 && (
           <>
             <Section title="Document">
@@ -37,7 +60,7 @@ export function RightPanel() {
             </Section>
             <Section title="Shortcuts">
               <dl className="grid grid-cols-[1fr_auto] gap-y-1.5 text-[11.5px] text-fg-muted">
-                {[['Frame / Rect / Ellipse / Text', 'F R O T'], ['Wrap selection in auto-layout', 'Shift+A'], ['Group into frame', 'Ctrl+Alt+G'], ['Duplicate', 'Ctrl+D'], ['Undo / Redo', 'Ctrl+Z / Ctrl+Shift+Z'], ['Zoom to fit', 'Shift+1'], ['Pan', 'Space + drag'], ['Deep select', 'Ctrl+click']].map(([a, b]) => (
+                {[['Frame / Rect / Ellipse / Text', 'F R O T'], ['Wrap selection in auto-layout', 'Shift+A'], ['Group into frame', 'Ctrl+Alt+G'], ['Duplicate', 'Ctrl+D'], ['Undo / Redo', 'Ctrl+Z / Ctrl+Shift+Z'], ['Zoom to fit', 'Shift+1'], ['Pan', 'Space + drag'], ['Deep select', 'Ctrl+click'], ['Toggle left / right sidebar', 'Ctrl+\\ / Ctrl+Shift+\\']].map(([a, b]) => (
                   <div key={a} className="contents"><dt>{a}</dt><dd className="text-right font-mono text-[10.5px] text-fg-subtle">{b}</dd></div>
                 ))}
               </dl>
@@ -46,8 +69,8 @@ export function RightPanel() {
         )}
         {nodes.length > 1 && <MultiSection ids={selection} />}
         {nodes.length === 1 && <NodeSections node={nodes[0]!} />}
-      </div>
-    </aside>
+      </div>}
+    </>
   );
 }
 

@@ -31,7 +31,7 @@ A skill is a folder with `SKILL.md` (frontmatter `name`, `description`, then Mar
 | Source | Folder | ArchaDev may |
 |---|---|---|
 | `archadev` (library) | `~/.archadev/skills/<name>/` | create, import, enable/disable, delete |
-| `claude` | `$CLAUDE_CONFIG_DIR/skills` or `~/.claude/skills` | list; "Add to ArchaDev" copies it in |
+| `claude` | `~/.claude/skills` (host login, never an inherited `CLAUDE_CONFIG_DIR`) | list; "Add to ArchaDev" copies it in |
 | `codex` | `$CODEX_HOME/skills` | same |
 | `gemini` | `~/.gemini/skills` | same |
 | `agents` | `~/.agents/skills` | same |

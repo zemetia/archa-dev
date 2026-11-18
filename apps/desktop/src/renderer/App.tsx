@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { init, newDoc, openFile, redo, save, undo, useStore } from './lib/store';
+import { PanelRightOpen } from 'lucide-react';
+import { init, newDoc, openFile, redo, save, togglePanel, undo, useStore } from './lib/store';
 import { copy, deleteSelection, duplicate, nudge, paste, reorder, selectAll, selectChildren, selectParent, wrapInFrame } from './lib/commands';
 import { Canvas } from './canvas/Canvas';
 import { TitleBar } from './ui/TitleBar';
@@ -15,6 +16,7 @@ export function App() {
   const ready = useStore((s) => !!s.doc);
   const toasts = useStore((s) => s.toasts);
   const browserOpen = useStore((s) => s.browserOpen);
+  const rightOpen = useStore((s) => s.rightOpen);
   useBrowserSync();
 
   useEffect(() => { void init(); }, []);
@@ -26,14 +28,21 @@ export function App() {
   return (
     <div className="flex h-full flex-col">
       <TitleBar />
-      <div className="flex min-h-0 flex-1 gap-2 px-2 pb-2">
+      {/* Sidebars carry their own 8px gutter so they can collapse to zero width. */}
+      <div className="flex min-h-0 flex-1 px-2 pb-2">
         <LeftPanel />
         <main data-canvas-host className="relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-line">
           {ready ? <Canvas /> : <div className="flex h-full items-center justify-center text-fg-subtle">Connecting to core…</div>}
           <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><ToolRail /></div>
           <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2"><ZoomBar /></div>
+          {!rightOpen && (
+            <button title="Show design panel (Ctrl+Shift+\)" onClick={() => togglePanel('right', true)}
+              className="absolute right-3 top-3 flex h-9 items-center gap-1.5 rounded-xl border border-line bg-panel pl-2.5 pr-3 text-[12px] text-fg-muted shadow-xl shadow-black/30 hover:text-fg">
+              <PanelRightOpen size={15} />Design
+            </button>
+          )}
         </main>
-        {browserOpen && <BrowserPanel />}
+        {browserOpen && <div className="flex shrink-0 pl-2"><BrowserPanel /></div>}
         <RightPanel />
       </div>
       <SettingsDialog />
@@ -57,6 +66,8 @@ function onKey(e: KeyboardEvent) {
   // The settings dialog handles its own keys; canvas shortcuts stay off underneath it.
   if (useStore.getState().settingsOpen) return;
   if (mod && k === ',') return run(() => useStore.setState({ settingsOpen: true }));
+  // Physical key: Shift+\ reports '|' as e.key on most layouts.
+  if (mod && e.code === 'Backslash') return run(() => togglePanel(e.shiftKey ? 'right' : 'left'));
 
   if (mod) {
     if (k === 'z' && e.shiftKey) return run(redo);

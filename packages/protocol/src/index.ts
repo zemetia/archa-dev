@@ -12,11 +12,12 @@ export * from './settings';
  * ------------------------------------------------------------------------- */
 
 export type ClientKind = 'renderer' | 'cli' | 'mcp';
-export type ClientInfo = { kind: ClientKind; name: string; agentId?: string };
+/** runId: set by an `archa mcp` that a launched chat run started (ARCHA_RUN_ID), so its activity is not shown twice. */
+export type ClientInfo = { kind: ClientKind; name: string; agentId?: string; runId?: string };
 
 export type DocSummary = { id: string; name: string; filePath: string | null; dirty: boolean; revision: number };
 export type AppliedEvent = { docId: string; revision: number; txnId: string; author: Author; label: string; ops: Op[]; touched: string[] };
-export type ActivityEntry = { id: string; ts: number; docId: string; author: Author; tool: string; text: string; nodeIds: string[] };
+export type ActivityEntry = { id: string; ts: number; docId: string; author: Author; tool: string; text: string; nodeIds: string[]; runId?: string };
 export type AgentClient = { id: string; name: string; kind: ClientKind; connectedAt: number };
 
 export type ExecuteResult =
@@ -50,9 +51,19 @@ export interface CoreMethods {
   'app.info': { params: void; result: AppInfo };
   'export.save': { params: { docId: string; nodeId: string; format: 'svg' | 'png'; path: string; png?: string }; result: { path: string } };
   // Chat: launch a local agent CLI on this document (blueprint AGENT_BRIDGE/03)
-  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string }; result: { runId: string } };
+  /** No threadId = start a new conversation. */
+  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string }; result: { runId: string; threadId: string } };
   'chat.stop': { params: { runId: string }; result: void };
   'chat.list': { params: { docId: string }; result: ChatMessage[] };
+  'chat.deleteThread': { params: { docId: string; threadId: string }; result: void };
+  /** Models the installed agent CLI offers (agy asks the network; cached). */
+  'agents.models': { params: { agent: string; account?: string }; result: { models: ModelOption[]; source: string } };
+  // Global component libraries (blueprint DESIGN_SYSTEM/02)
+  'library.list': { params: void; result: LibraryItem[] };
+  'library.publish': { params: { docId: string; nodeId: string; library?: string; png?: string }; result: LibraryItem };
+  'library.remove': { params: { library: string; id: string }; result: void };
+  /** First use places a local main linked to the library; later uses add instances of it. */
+  'library.insert': { params: { docId: string; library: string; id: string; parentId?: string; x?: number; y?: number }; result: { nodeId: string; placed: 'main' | 'instance' } };
   // Agent login profiles (blueprint AGENT_BRIDGE/02)
   'accounts.overview': { params: void; result: AccountsOverview };
   'accounts.create': { params: { agent: AccountAgent; name: string; dir?: string; apiKey?: string }; result: AgentAccount };
@@ -106,17 +117,36 @@ export type HostLogin = { email: string; plan: string; signedIn: boolean; savedA
 export type AgentCli = { id: AccountAgent; label: string; bin: string | null; version: string | null; host: HostLogin };
 export type AccountsOverview = { clis: AgentCli[]; accounts: AgentAccount[]; profilesDir: string };
 
-export type AppInfo = { version: string; cliPath: string; mcpCommand: string[]; agents: Array<{ id: string; label: string; available: boolean; models: string[] }> };
+export type ModelOption = { id: string; label: string; description?: string };
+export type AppInfo = { version: string; cliPath: string; mcpCommand: string[]; agents: Array<{ id: string; label: string; available: boolean }> };
 
 export type ChatMessage = {
   id: string;
   docId: string;
   runId: string;
+  /** Conversation the message belongs to; the agent CLI session resumes per thread. Missing on pre-0.2.1 history. */
+  threadId?: string;
   role: 'user' | 'agent' | 'tool' | 'status' | 'error';
   agent: string;
   text: string;
   ts: number;
 };
+export type LibraryItem = { library: string; id: string; ref: string; name: string; description: string; width: number; height: number; publishedAt: number; thumb?: string };
+export type ChatThread = { id: string; title: string; agent: string; startedAt: number; updatedAt: number; messages: number };
+/** Group a document's messages into conversations, newest first (History tab). */
+export function chatThreads(messages: ChatMessage[]): ChatThread[] {
+  const by = new Map<string, ChatThread>();
+  for (const m of messages) {
+    const id = m.threadId ?? m.runId;
+    const t = by.get(id) ?? { id, title: '', agent: m.agent, startedAt: m.ts, updatedAt: m.ts, messages: 0 };
+    if (!t.title && m.role === 'user') t.title = m.text.slice(0, 120);
+    t.updatedAt = Math.max(t.updatedAt, m.ts);
+    t.messages++;
+    by.set(id, t);
+  }
+  return [...by.values()].map((t) => ({ ...t, title: t.title || 'Untitled conversation' })).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+export const threadOf = (m: ChatMessage) => m.threadId ?? m.runId;
 export type MethodName = keyof CoreMethods;
 export type Params<M extends MethodName> = CoreMethods[M]['params'];
 export type Result<M extends MethodName> = CoreMethods[M]['result'];
@@ -129,7 +159,9 @@ export interface CoreEvents {
   'selection.changed': { docId: string; ids: string[]; by: Author };
   'render.request': { requestId: string; docId: string; nodeId: string; scale: number };
   'chat.message': ChatMessage;
-  'chat.run': { runId: string; docId: string; status: 'running' | 'finished' | 'failed' | 'stopped' };
+  /** Text the agent is still writing (whole text so far); '' clears it. */
+  'chat.delta': { docId: string; runId: string; threadId: string; agent: string; text: string };
+  'chat.run': { runId: string; docId: string; threadId: string; status: 'running' | 'finished' | 'failed' | 'stopped' };
   /** Accounts or a sign-in changed; clients re-read `accounts.overview`. */
   'accounts.changed': { accountId?: string };
   /** Skills or MCP servers changed; clients re-read `skills.list` / `mcp.list`. */
