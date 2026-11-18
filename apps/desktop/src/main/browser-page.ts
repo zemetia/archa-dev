@@ -89,7 +89,8 @@ export const PAGE_LIB = String.raw`(() => {
   }
 
   function info() {
-    const d = document.documentElement;
+    // documentElement is briefly null while a navigation commits.
+    const d = document.documentElement ?? { scrollWidth: 0, scrollHeight: 0 };
     return { url: location.href, title: document.title, vw: innerWidth, vh: innerHeight, sx: Math.round(scrollX), sy: Math.round(scrollY), pw: d.scrollWidth, ph: d.scrollHeight };
   }
 

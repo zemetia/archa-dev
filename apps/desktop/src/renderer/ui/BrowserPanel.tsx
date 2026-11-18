@@ -16,7 +16,8 @@ export function useBrowserSync() {
     void b.getState().then((browser) => useStore.setState({ browser }));
     const offState = b.onState((browser) => useStore.setState({ browser }));
     const offReveal = b.onReveal(() => useStore.setState({ browserOpen: true }));
-    return () => { offState(); offReveal(); };
+    const offToggle = b.onToggle(toggleBrowser);
+    return () => { offState(); offReveal(); offToggle(); };
   }, []);
 }
 

@@ -47,6 +47,8 @@ export function App() {
 }
 
 function onKey(e: KeyboardEvent) {
+  // The browser toggle works from the address bar too.
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'b') { e.preventDefault(); toggleBrowser(); return; }
   const t = e.target as HTMLElement | null;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
   const mod = e.ctrlKey || e.metaKey;
@@ -57,7 +59,6 @@ function onKey(e: KeyboardEvent) {
   if (mod && k === ',') return run(() => useStore.setState({ settingsOpen: true }));
 
   if (mod) {
-    if (k === 'b' && e.shiftKey) return run(toggleBrowser);
     if (k === 'z' && e.shiftKey) return run(redo);
     if (k === 'z') return run(undo);
     if (k === 'y') return run(redo);

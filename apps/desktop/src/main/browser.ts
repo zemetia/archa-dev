@@ -160,6 +160,13 @@ export class BrowserManager {
       if (isMainFrame && code !== -3) this.record(tab, 'error', `[load] ${desc} (${code}) ${failedUrl}`);
     });
     wc.on('render-process-gone', (_e, d) => this.record(tab, 'error', `[crash] page process gone: ${d.reason}`));
+    // Keys typed into a page never reach the app UI, so the pane shortcut is caught here.
+    wc.on('before-input-event', (e, input) => {
+      if (input.type === 'keyDown' && (input.control || input.meta) && input.shift && input.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        this.host?.webContents.send('browser:toggle');
+      }
+    });
     this.attachDebugger(tab);
     if (url) void wc.loadURL(url).catch(() => { /* reported via did-fail-load */ });
     this.pushState();
@@ -472,9 +479,10 @@ export class BrowserManager {
           if (await this.page<boolean>(tab, `A.prepareClear(${targeted ? JSON.stringify(into) : 'null'})`)) await this.press(tab, 'Backspace');
         }
         if (cmd.text) await this.cdp(tab, 'Input.insertText', { text: cmd.text });
+        // Read the field before Enter: a submit can navigate, and then the focus is the new page's body.
+        const field = await this.page<string>(tab, 'A.focused()').catch(() => 'the focused element');
         if (cmd.submit) await this.press(tab, 'Enter');
         await this.settle(tab);
-        const field = await this.page<string>(tab, 'A.focused()').catch(() => 'the focused element');
         const value = await this.page<string | null>(tab, `A.valueOf(${targeted && !cmd.submit ? JSON.stringify(into) : 'null'})`).catch(() => null);
         out.push(`Typed ${cmd.text?.length ?? 0} chars into ${field}${cmd.clear ? ' (cleared first)' : ''}${cmd.submit ? ', then pressed Enter' : ''}.`);
         if (value !== null && !cmd.submit) out.push(`Value now: "${value}"`);

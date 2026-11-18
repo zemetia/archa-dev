@@ -30,5 +30,10 @@ contextBridge.exposeInMainWorld('archa', {
       ipcRenderer.on('browser:reveal', h);
       return () => { ipcRenderer.off('browser:reveal', h); };
     },
+    onToggle: (cb: () => void) => {
+      const h = () => cb();
+      ipcRenderer.on('browser:toggle', h);
+      return () => { ipcRenderer.off('browser:toggle', h); };
+    },
   },
 });

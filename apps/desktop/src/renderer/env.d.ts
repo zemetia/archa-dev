@@ -18,6 +18,7 @@ declare global {
         ui(action: BrowserUiAction, arg?: string): Promise<string | null>;
         onState(cb: (state: BrowserState) => void): () => void;
         onReveal(cb: () => void): () => void;
+        onToggle(cb: () => void): () => void;
       };
     };
   }
