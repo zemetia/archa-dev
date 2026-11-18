@@ -19,6 +19,10 @@ export type BuildInput = {
   mcpConfigFile: string;
   model?: string;
   sessionId?: string;
+  /** Settings → MCP servers in the run's config (allowed whole as `mcp__<name>`). */
+  extraServers?: string[];
+  /** Settings → Skills were mirrored into the run cwd (needs the Skill tool). */
+  skills?: boolean;
 };
 export type Built = { args: string[]; stdin?: string };
 
@@ -313,12 +317,12 @@ export const ADAPTERS: Adapter[] = [
     bin: 'claude',
     // Prompt on stdin (no argv limit, and stdin is closed so the CLI never waits for more).
     // setting-sources without "user": the person's own hooks and plugins stay out of design runs.
-    build: ({ prompt, mcpConfigFile, model, sessionId }) => ({
+    build: ({ prompt, mcpConfigFile, model, sessionId, extraServers = [], skills }) => ({
       args: [
         '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
         '--setting-sources', 'project,local',
         '--mcp-config', mcpConfigFile, '--strict-mcp-config',
-        '--allowedTools', MCP_TOOLS.map((t) => `mcp__archadev__${t}`).join(','),
+        '--allowedTools', [...MCP_TOOLS.map((t) => `mcp__archadev__${t}`), ...extraServers.map((n) => `mcp__${n}`), ...(skills ? ['Skill'] : [])].join(','),
         '--append-system-prompt', DESIGNER_PROMPT,
         ...(model ? ['--model', model] : []),
         ...(sessionId ? ['--resume', sessionId] : []),

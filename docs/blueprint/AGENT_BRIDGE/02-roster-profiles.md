@@ -79,13 +79,13 @@ Rules: stdin is always closed (an open pipe makes `claude -p` wait); `chat.delta
 
 ---
 
-## Settings → Agents Page
+## Settings → AI Providers Page
 
-Opened from the title bar gear, `Ctrl+,`, or "Accounts" under the chat composer. Code: `renderer/ui/SettingsDialog.tsx`.
+Opened from the title bar gear, `Ctrl+,`, or "Accounts" under the chat composer. One page stacks every agent (Claude Code, Antigravity, Codex) with its brand mark; upcoming providers (Gemini CLI, Ollama, OpenRouter) show as "Coming soon". Code: `renderer/ui/settings/ProvidersPage.tsx`; the dialog shell and nav are in `renderer/ui/SettingsDialog.tsx` (other pages: [05 — Skills and MCP servers](./05-skills-mcp.md)).
 
 | Section | Content | Built |
 |---|---|---|
-| Nav | One entry per agent: mark, label, account count, dot (green ready · amber no signed-in account · grey CLI missing) | ✓ |
+| Jump bar | One pill per agent: brand mark, label, dot (green ready · amber no signed-in account · grey CLI missing); nav badge `ready/total` | ✓ |
 | Header | Label, `Installed · <version>` / `Not installed`, re-check button | ✓ |
 | This computer | Host login (email, plan, saved?), whether runs use it; agy: "Save as account" | ✓ |
 | Accounts | Row: avatar, name, email, plan, status chip, default ★, enable switch, sign in / use on this computer, open folder, remove (inline confirm) | ✓ |

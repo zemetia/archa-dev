@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { newId } from '@archa/schema';
 import type { ChatMessage, ModelOption } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
@@ -105,7 +105,10 @@ export class ChatRunner {
     const cfgDir = join(archaHome(), 'runtime');
     mkdirSync(cfgDir, { recursive: true });
     const mcpConfigFile = join(cfgDir, `mcp-${runId}.json`);
-    writeFileSync(mcpConfigFile, JSON.stringify({ mcpServers: { archadev: { command: mcp.command, args: mcp.args, env: mcp.env } } }, null, 2));
+    // Settings → MCP servers join the run next to archadev; the file may hold their secrets.
+    const extra = this.ws.mcpServers.forRun();
+    writeFileSync(mcpConfigFile, JSON.stringify({ mcpServers: { ...extra, archadev: { command: mcp.command, args: mcp.args, env: mcp.env } } }, null, 2), { mode: 0o600 });
+    const skills = syncRunSkills(cfgDir, this.ws.skills.forRun());
 
     const sessionKey = `${threadId}:${agentId}:${login.label ? Object.values(login.env).join() : 'host'}`;
     const sessionId = this.sessionMap().get(sessionKey);
@@ -134,7 +137,7 @@ export class ChatRunner {
         this.ws.broadcast('chat.run', { runId, docId, threadId: run.threadId, status: 'stopped' });
         return;
       }
-      const built = adapter.build({ prompt: fullPrompt, mcp, mcpConfigFile, model, sessionId });
+      const built = adapter.build({ prompt: fullPrompt, mcp, mcpConfigFile, model, sessionId, extraServers: Object.keys(extra), skills });
       const child = spawn(cli.bin, [...cli.pre, ...built.args], {
         cwd: cfgDir, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, ...login.env, ARCHA_RUN_ID: runId, ARCHA_DOC_ID: docId, NO_COLOR: '1' },
@@ -211,4 +214,17 @@ export class ChatRunner {
     try { env = this.ws.accounts.runEnv(adapter.id, account).env; } catch { /* signed-out account: list the host's models */ }
     return adapter.models(resolveCli(adapter.bin)?.bin ?? null, env);
   }
+}
+
+/**
+ * The run's cwd is a project to Claude Code, so enabled library skills are mirrored into its
+ * `.claude/skills`. Returns whether any skill is present.
+ */
+function syncRunSkills(cwd: string, dirs: string[]): boolean {
+  const target = join(cwd, '.claude', 'skills');
+  rmSync(target, { recursive: true, force: true });
+  if (!dirs.length) return false;
+  mkdirSync(target, { recursive: true });
+  for (const d of dirs) cpSync(d, join(target, basename(d)), { recursive: true });
+  return true;
 }

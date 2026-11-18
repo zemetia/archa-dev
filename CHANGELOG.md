@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file, following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Settings
+- Settings is now one dialog with grouped pages: AI providers, Skills, MCP servers, Connect an agent, GitHub, Integrations and About.
+- AI providers shows Claude Code, Antigravity and Codex on one page with their real logos; Gemini CLI, Ollama and OpenRouter are listed as coming soon.
+- Skills: write a skill, import a skill folder, or copy one from Claude Code, Codex, Antigravity or `~/.agents`. Skills that are turned on reach chat runs.
+- MCP servers: add external servers (command, HTTP or SSE), test them and see their tools, import the ones Claude Code, Antigravity or Cursor already use, or start from a preset. Servers that are turned on reach chat runs. Secret values stay on this computer and are never shown again.
+- Connect an agent: copy-paste commands that register ArchaDev's MCP server with Claude Code, Codex, Antigravity or any MCP client.
+- GitHub and other integrations are shown as coming soon.
+
 ## [0.2.3] - 2026-11-19
 
 ### Chat
