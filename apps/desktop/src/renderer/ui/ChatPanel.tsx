@@ -34,7 +34,8 @@ export function ChatPanel() {
     return [...chat.map((c) => ({ ...c, nodeIds: [] as string[] })), ...listen].sort((a, b) => a.ts - b.ts);
   }, [chat, activity, docId]);
 
-  useEffect(() => end.current?.scrollIntoView({ block: 'end' }), [items.length]);
+  // Braces matter: scrollIntoView returns a Promise in Chromium 156+, and an effect must not return it.
+  useEffect(() => { void end.current?.scrollIntoView({ block: 'end' }); }, [items.length]);
 
   const send = async () => {
     if (!client || !docId || !prompt.trim() || running) return;
