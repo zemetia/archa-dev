@@ -44,10 +44,47 @@ export interface CoreMethods {
   'app.info': { params: void; result: AppInfo };
   'export.save': { params: { docId: string; nodeId: string; format: 'svg' | 'png'; path: string; png?: string }; result: { path: string } };
   // Chat: launch a local agent CLI on this document (blueprint AGENT_BRIDGE/03)
-  'chat.send': { params: { docId: string; agent: string; model?: string; prompt: string }; result: { runId: string } };
+  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string }; result: { runId: string } };
   'chat.stop': { params: { runId: string }; result: void };
   'chat.list': { params: { docId: string }; result: ChatMessage[] };
+  // Agent login profiles (blueprint AGENT_BRIDGE/02)
+  'accounts.overview': { params: void; result: AccountsOverview };
+  'accounts.create': { params: { agent: AccountAgent; name: string; dir?: string; apiKey?: string }; result: AgentAccount };
+  'accounts.update': { params: { id: string; name?: string; enabled?: boolean; isDefault?: boolean }; result: AgentAccount };
+  'accounts.delete': { params: { id: string }; result: void };
+  'accounts.captureHost': { params: { agent: 'agy' }; result: AgentAccount };
+  'accounts.useOnHost': { params: { id: string }; result: void };
+  'accounts.login.start': { params: { id: string }; result: LoginState };
+  'accounts.login.code': { params: { id: string; code: string }; result: AgentAccount };
+  'accounts.login.cancel': { params: { id: string }; result: void };
 }
+
+/* -------------------------------- accounts -------------------------------- */
+
+export type AccountAgent = 'claude' | 'agy' | 'codex';
+
+/** A running sign-in: the CLI's link, and whether it waits for a pasted code. Tokens never cross the protocol. */
+export type LoginState = { active: boolean; url: string; output: string; needsCode: boolean; error?: string };
+
+export type AgentAccount = {
+  id: string;
+  agent: AccountAgent;
+  name: string;
+  email: string;
+  plan: string;
+  signedIn: boolean;
+  enabled: boolean;
+  isDefault: boolean;
+  /** true = ArchaDev owns the folder (and deletes it with the account). */
+  managed: boolean;
+  dir: string;
+  createdAt: number;
+  login: LoginState | null;
+};
+
+export type HostLogin = { email: string; plan: string; signedIn: boolean; savedAccountId: string | null; error?: string };
+export type AgentCli = { id: AccountAgent; label: string; bin: string | null; version: string | null; host: HostLogin };
+export type AccountsOverview = { clis: AgentCli[]; accounts: AgentAccount[]; profilesDir: string };
 
 export type AppInfo = { version: string; cliPath: string; mcpCommand: string[]; agents: Array<{ id: string; label: string; available: boolean; models: string[] }> };
 
@@ -73,6 +110,8 @@ export interface CoreEvents {
   'render.request': { requestId: string; docId: string; nodeId: string; scale: number };
   'chat.message': ChatMessage;
   'chat.run': { runId: string; docId: string; status: 'running' | 'finished' | 'failed' | 'stopped' };
+  /** Accounts or a sign-in changed; clients re-read `accounts.overview`. */
+  'accounts.changed': { accountId?: string };
 }
 export type EventName = keyof CoreEvents;
 

@@ -117,6 +117,42 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
   );
 }
 
+export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
+  return (
+    <button role="switch" aria-checked={checked} aria-label={label} title={label} disabled={disabled} onClick={() => onChange(!checked)}
+      className={cn('relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors', checked ? 'bg-accent' : 'bg-panel-3', disabled && 'opacity-40')}>
+      <span className={cn('absolute top-[2px] h-[14px] w-[14px] rounded-full bg-fg shadow transition-[left]', checked ? 'left-[14px]' : 'left-[2px]')} />
+    </button>
+  );
+}
+
+export function Button({ children, onClick, variant = 'secondary', disabled, title, className, type = 'button' }: {
+  children: ReactNode; onClick?: () => void; variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; disabled?: boolean; title?: string; className?: string; type?: 'button' | 'submit';
+}) {
+  return (
+    <button type={type} title={title} disabled={disabled} onClick={onClick}
+      className={cn('inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-[12px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-40',
+        variant === 'primary' && 'bg-accent text-white hover:brightness-110',
+        variant === 'secondary' && 'bg-panel-3 text-fg hover:bg-line',
+        variant === 'ghost' && 'text-fg-muted hover:bg-panel-3 hover:text-fg',
+        variant === 'danger' && 'bg-danger/15 text-danger hover:bg-danger/25',
+        className)}>
+      {children}
+    </button>
+  );
+}
+
+export function TextInput({ value, onChange, placeholder, mono, type = 'text', autoFocus, onEnter, ariaLabel }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean; type?: 'text' | 'password'; autoFocus?: boolean; onEnter?: () => void; ariaLabel?: string;
+}) {
+  return (
+    <input value={value} type={type} autoFocus={autoFocus} placeholder={placeholder} aria-label={ariaLabel ?? placeholder} spellCheck={false}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && onEnter) onEnter(); }}
+      className={cn('h-8 w-full min-w-0 rounded-lg bg-panel-2 px-2.5 text-[12px] ring-1 ring-line placeholder:text-fg-subtle focus:ring-accent', mono && 'font-mono text-[11.5px]')} />
+  );
+}
+
 export function Select<T extends string>({ value, options, onChange, title }: { value: T; options: Array<{ value: T; label: string }>; onChange: (v: T) => void; title?: string }) {
   return (
     <select title={title} value={value} onChange={(e) => onChange(e.target.value as T)}

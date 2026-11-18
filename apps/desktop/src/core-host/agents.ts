@@ -73,11 +73,13 @@ export class ChatRunner {
     this.ws.broadcast('chat.message', m);
   }
 
-  send(docId: string, agentId: string, prompt: string, model?: string): string {
+  send(docId: string, agentId: string, prompt: string, model?: string, account?: string): string {
     const adapter = ADAPTERS.find((a) => a.id === agentId);
     if (!adapter) throw new Error(`Unknown agent "${agentId}"`);
     const bin = findBin(adapter.bin);
     if (!bin) throw new Error(`${adapter.label} CLI ("${adapter.bin}") was not found on PATH`);
+    // A saved account runs in its own config folder (blueprint AGENT_BRIDGE/02).
+    const login = this.ws.accounts.runEnv(adapter.id, account);
     const session = this.ws.session(docId);
     const runId = newId();
 
@@ -87,14 +89,15 @@ export class ChatRunner {
     const mcpConfig = join(cfgDir, `mcp-${runId}.json`);
     writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { archadev: { command: mcp.command, args: [...mcp.args, '--doc', docId, '--agent', adapter.id], env: mcp.env } } }, null, 2));
 
-    const sessionKey = `${docId}:${agentId}`;
+    const sessionKey = `${docId}:${agentId}:${login.label ? Object.values(login.env).join() : 'host'}`;
     const fullPrompt = `${prompt}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}`;
     const child = spawn(bin, adapter.args({ prompt: fullPrompt, mcpConfig, model, sessionId: this.sessions.get(sessionKey), tools: MCP_TOOLS }), {
-      cwd: cfgDir, shell: false, windowsHide: true, env: { ...process.env, ARCHA_RUN_ID: runId },
+      cwd: cfgDir, shell: false, windowsHide: true, env: { ...process.env, ...login.env, ARCHA_RUN_ID: runId },
     });
     const run: Run = { id: runId, docId, agent: agentId, child, stopped: false };
     this.runs.set(runId, run);
     this.emit(docId, runId, agentId, 'user', prompt);
+    if (login.label) this.emit(docId, runId, agentId, 'status', `Running as ${login.label}`);
     this.ws.broadcast('chat.run', { runId, docId, status: 'running' });
 
     let buf = '';

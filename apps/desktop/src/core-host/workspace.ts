@@ -7,6 +7,7 @@ import type { ActivityEntry, AgentClient, Channel, ClientInfo, CoreEvents, CoreM
 import { z } from 'zod';
 import { AgentExecutor, describeState } from './execute';
 import { ADAPTERS, ChatRunner, findBin, type McpCommand } from './agents';
+import { AccountManager } from './accounts';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -35,6 +36,7 @@ export class Workspace {
   private executors = new Map<string, AgentExecutor>();
   private sentHashes = new Map<string, string>();
   private lastDocId: string | null = null;
+  readonly accounts = new AccountManager((accountId) => this.broadcast('accounts.changed', accountId ? { accountId } : {}));
   readonly chat = new ChatRunner(this, mcpCommand);
 
   constructor() {
@@ -248,9 +250,18 @@ export class Workspace {
       await writeFile(path, data);
       return { path };
     },
-    'chat.send': ({ docId, agent, model, prompt }) => ({ runId: this.chat.send(this.session(docId).id, agent, prompt, model) }),
+    'chat.send': ({ docId, agent, model, account, prompt }) => ({ runId: this.chat.send(this.session(docId).id, agent, prompt, model, account) }),
     'chat.stop': ({ runId }) => this.chat.stop(runId),
     'chat.list': ({ docId }) => this.chat.messages.get(docId) ?? [],
+    'accounts.overview': () => this.accounts.overview(),
+    'accounts.create': (p) => this.accounts.create(p),
+    'accounts.update': (p) => this.accounts.update(p),
+    'accounts.delete': (p) => this.accounts.delete(p),
+    'accounts.captureHost': (p) => this.accounts.captureHost(p),
+    'accounts.useOnHost': (p) => this.accounts.useOnHost(p),
+    'accounts.login.start': (p) => this.accounts.startLogin(p),
+    'accounts.login.code': (p) => this.accounts.submitCode(p),
+    'accounts.login.cancel': (p) => this.accounts.cancelLogin(p),
   };
 }
 
