@@ -76,6 +76,7 @@ First release of ArchaDev, a design canvas built for AI agents first.
 - `execute` runs the agent's JavaScript in a QuickJS sandbox as one transaction. On failure everything is rolled back and the agent gets an `editId` to patch the snippet.
 - Each reply lists lint issues, and screenshots of unchanged frames are not sent again.
 - Chat panel: runs Claude Code headless on the open document and shows its progress, with agent edits outlined on the canvas.
+- Settings → Agents (Ctrl+,): several login profiles each for Claude Code, Antigravity and Codex, with a per-run account picker in Chat. Tokens stay on this computer and never cross the app protocol.
 
 ### Cache
 - Frame bitmap cache keyed by content hash, so panning and unrelated edits don't repaint frames.
