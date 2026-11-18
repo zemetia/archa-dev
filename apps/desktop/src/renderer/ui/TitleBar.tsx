@@ -1,6 +1,7 @@
-import { FileText, FolderOpen, Hexagon, Plus, Save, Settings, X } from 'lucide-react';
+import { FileText, FolderOpen, Globe, Hexagon, Plus, Save, Settings, X } from 'lucide-react';
 import { activate, closeDoc, newDoc, openFile, save, useStore } from '../lib/store';
 import { cn, IconButton } from './controls';
+import { toggleBrowser } from './BrowserPanel';
 
 export function TitleBar() {
   const docs = useStore((s) => s.docs);
@@ -8,6 +9,7 @@ export function TitleBar() {
   const agents = useStore((s) => s.agents);
   const running = useStore((s) => s.runningRun);
   const live = agents.length > 0 || !!running;
+  const browserOpen = useStore((s) => s.browserOpen);
 
   return (
     <div className="drag flex h-10 shrink-0 items-center gap-2 pl-3 pr-[150px]">
@@ -36,6 +38,7 @@ export function TitleBar() {
         <span className={cn('h-1.5 w-1.5 rounded-full', live ? 'animate-pulse bg-agent' : 'bg-fg-subtle')} />
         {running ? 'Agent working' : agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''} connected` : 'No agent'}
       </div>
+      <IconButton title="Browser (Ctrl+Shift+B)" active={browserOpen} onClick={toggleBrowser}><Globe size={16} /></IconButton>
       <IconButton title="Open (Ctrl+O)" onClick={() => void openFile()}><FolderOpen size={16} /></IconButton>
       <IconButton title="Save (Ctrl+S)" onClick={() => void save()}><Save size={16} /></IconButton>
       <IconButton title="Settings (Ctrl+,)" onClick={() => useStore.setState({ settingsOpen: true })}><Settings size={16} /></IconButton>

@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { EXECUTE_API_DOC, type ExecuteResult, type RpcClient } from '@archa/protocol';
+import { BROWSER_TOOL_DOC, browserInputShape, EXECUTE_API_DOC, type ExecuteResult, type RpcClient } from '@archa/protocol';
 import { connectCore } from './connect';
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
@@ -59,6 +59,14 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
   }, ({ text, nodeId }) => guard(async (c) => {
     await c.call('agent.say', { docId, text, nodeId });
     return [{ type: 'text', text: 'ok' }];
+  }));
+
+  server.registerTool('browser', {
+    description: BROWSER_TOOL_DOC,
+    inputSchema: browserInputShape,
+  }, (args) => guard(async (c) => {
+    const r = await c.call('agent.browser', args);
+    return r.png ? [{ type: 'image', data: r.png, mimeType: 'image/png' }, { type: 'text', text: r.text }] : [{ type: 'text', text: r.text }];
   }));
 
   await server.connect(new StdioServerTransport());

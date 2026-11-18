@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@archa/schema": "workspace:*"
+    "@archa/schema": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

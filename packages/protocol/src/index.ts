@@ -1,6 +1,8 @@
 import type { Author, DocumentData, Issue, Op } from '@archa/schema';
+import type { BrowserCommand, BrowserReply } from './browser';
 
 export * from './agent-docs';
+export * from './browser';
 
 /* ----------------------------------------------------------------------------
  * One protocol for every client: renderer (MessagePort), CLI / MCP (socket).
@@ -40,6 +42,8 @@ export interface CoreMethods {
   'agent.screenshot': { params: { docId?: string; node: string; scale?: number }; result: { png?: string; unchanged?: boolean; name: string; nodeId: string } };
   'agent.exportSvg': { params: { docId?: string; node: string }; result: { svg: string } };
   'agent.say': { params: { docId?: string; text: string; nodeId?: string }; result: void };
+  /** Drive the in-app browser (blueprint BROWSER). */
+  'agent.browser': { params: BrowserCommand; result: BrowserReply };
   // App
   'app.info': { params: void; result: AppInfo };
   'export.save': { params: { docId: string; nodeId: string; format: 'svg' | 'png'; path: string; png?: string }; result: { path: string } };

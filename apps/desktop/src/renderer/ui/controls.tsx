@@ -80,7 +80,7 @@ const fmt = (v: number) => String(Math.round(v * 100) / 100);
 export function ColorField({ color, onCommit }: { color: Color; onCommit: (c: Color) => void }) {
   const hex = colorToHex(color);
   const [text, setText] = useState(hex.slice(1).toUpperCase());
-  useEffect(() => setText(hex.slice(1).toUpperCase()), [hex]);
+  useEffect(() => { setText(hex.slice(1).toUpperCase()); }, [hex]);
   const commitHex = (h: string) => {
     try {
       const c = hexToColor(h);

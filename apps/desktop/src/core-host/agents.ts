@@ -21,7 +21,7 @@ type Adapter = {
   args: (o: { prompt: string; mcpConfig: string; model?: string; sessionId?: string; tools: string[] }) => string[];
 };
 
-const MCP_TOOLS = ['get_state', 'execute', 'screenshot', 'export_svg', 'say'];
+const MCP_TOOLS = ['get_state', 'execute', 'screenshot', 'export_svg', 'say', 'browser'];
 
 export const ADAPTERS: Adapter[] = [
   {
@@ -155,5 +155,6 @@ function toolSummary(name: string, input: unknown): string {
   if (short === 'execute' && i.editId) return `execute · patch ${String(i.editId)}`;
   if (short === 'screenshot') return `screenshot · ${String(i.node ?? '')}`;
   if (short === 'say') return String(i.text ?? '');
+  if (short === 'browser') return `browser · ${String(i.action ?? '')}${i.url ? ` ${String(i.url)}` : i.ref ? ` ${String(i.ref)}` : ''}`;
   return short;
 }

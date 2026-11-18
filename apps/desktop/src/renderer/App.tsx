@@ -9,10 +9,13 @@ import { ToolRail, TOOLS } from './ui/ToolRail';
 import { ZoomBar } from './ui/ZoomBar';
 import { cn } from './ui/controls';
 import { SettingsDialog } from './ui/SettingsDialog';
+import { BrowserPanel, toggleBrowser, useBrowserSync } from './ui/BrowserPanel';
 
 export function App() {
   const ready = useStore((s) => !!s.doc);
   const toasts = useStore((s) => s.toasts);
+  const browserOpen = useStore((s) => s.browserOpen);
+  useBrowserSync();
 
   useEffect(() => { void init(); }, []);
   useEffect(() => {
@@ -30,6 +33,7 @@ export function App() {
           <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><ToolRail /></div>
           <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2"><ZoomBar /></div>
         </main>
+        {browserOpen && <BrowserPanel />}
         <RightPanel />
       </div>
       <SettingsDialog />
@@ -53,6 +57,7 @@ function onKey(e: KeyboardEvent) {
   if (mod && k === ',') return run(() => useStore.setState({ settingsOpen: true }));
 
   if (mod) {
+    if (k === 'b' && e.shiftKey) return run(toggleBrowser);
     if (k === 'z' && e.shiftKey) return run(redo);
     if (k === 'z') return run(undo);
     if (k === 'y') return run(redo);

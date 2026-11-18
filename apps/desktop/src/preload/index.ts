@@ -15,4 +15,20 @@ contextBridge.exposeInMainWorld('archa', {
   onOpenIntent: (cb: (intent: { kind: string; path?: string }) => void) => {
     ipcRenderer.on('open-intent', (_e, intent) => cb(intent));
   },
+  // In-app browser (blueprint BROWSER): the pane reports where pages go; main pushes tab state.
+  browser: {
+    setBounds: (r: { x: number; y: number; width: number; height: number } | null) => ipcRenderer.send('browser:bounds', r),
+    getState: () => ipcRenderer.invoke('browser:state'),
+    ui: (action: string, arg?: string): Promise<string | null> => ipcRenderer.invoke('browser:ui', action, arg),
+    onState: (cb: (state: unknown) => void) => {
+      const h = (_e: unknown, s: unknown) => cb(s);
+      ipcRenderer.on('browser:state', h);
+      return () => { ipcRenderer.off('browser:state', h); };
+    },
+    onReveal: (cb: () => void) => {
+      const h = () => cb();
+      ipcRenderer.on('browser:reveal', h);
+      return () => { ipcRenderer.off('browser:reveal', h); };
+    },
+  },
 });
