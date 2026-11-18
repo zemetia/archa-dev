@@ -4,6 +4,7 @@ import { chatThreads, threadOf, type ModelOption } from '@archa/protocol';
 import { select, toast, useStore } from '../lib/store';
 import { cn } from './controls';
 import { Dropdown, type DropdownOption } from './Dropdown';
+import { Markdown } from './Markdown';
 
 /*
  * Agent-first panel: launch a local agent on this canvas (launch mode) and see what
@@ -40,7 +41,7 @@ export function ChatThread() {
     const own = chat.filter((c) => thread !== null && threadOf(c) === thread).map((c) => ({ ...c, nodeIds: [] as string[] }));
     // Listen-mode agents (connected through `archa mcp` from a terminal) are not threaded: show them with the newest conversation.
     const current = thread === null || (latest && threadOf(latest) === thread);
-    const listen = !current ? [] : activity.filter((a) => a.docId === docId && a.author.kind === 'agent' && !chat.some((c) => Math.abs(c.ts - a.ts) < 50))
+    const listen = !current ? [] : activity.filter((a) => a.docId === docId && a.author.kind === 'agent' && !a.runId && !chat.some((c) => Math.abs(c.ts - a.ts) < 50))
       .map((a) => ({ id: a.id, ts: a.ts, role: a.tool === 'say' ? 'agent' as const : 'tool' as const, agent: a.author.name ?? a.author.id, text: a.tool === 'say' ? a.text : `${a.tool} · ${a.text}`, nodeIds: a.nodeIds }));
     return [...own, ...listen].sort((a, b) => a.ts - b.ts);
   }, [chat, activity, docId, thread, latest]);
@@ -56,8 +57,8 @@ export function ChatThread() {
         <span className="min-w-0 truncate text-[12.5px] font-semibold" title={title ?? undefined}>{title ?? 'New chat'}</span>
         <div className="flex-1" />
         {agents.length > 0 && (
-          <span title={agents.map((a) => a.name).join(', ')} className="flex items-center gap-1.5 rounded-full bg-agent/15 px-2 py-0.5 text-[10.5px] font-medium text-agent">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-agent" />{agents.length} live
+          <span title={agents.map((a) => a.name).join(', ')} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-agent/15 px-2 py-0.5 text-[10.5px] font-medium text-agent">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-agent" />{agents.length}&nbsp;live
           </span>
         )}
         <button title="Chat history" onClick={() => useStore.setState({ leftTab: 'history' })}
@@ -119,11 +120,12 @@ export function ChatThread() {
 
 function AgentText({ agent, label, text, streaming }: { agent: string; label: string; text: string; streaming?: boolean }) {
   return (
-    <div className="whitespace-pre-wrap break-words px-1 text-[12.5px] leading-relaxed text-fg">
+    <div className="break-words px-1 text-[12.5px] leading-relaxed text-fg">
       <span className="mb-0.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-fg-muted">
         <span className={cn('h-1.5 w-1.5 rounded-full', AGENT_DOT[agent] ?? 'bg-agent')} />{label}
       </span>
-      {text}{streaming && <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse rounded-sm bg-agent align-middle" />}
+      <Markdown text={text} />
+      {streaming && <span className="inline-block h-3 w-1.5 animate-pulse rounded-sm bg-agent align-middle" />}
     </div>
   );
 }
@@ -257,7 +259,7 @@ export function ChatComposer() {
         <Dropdown className="max-w-[45%] shrink-0" value={agent} options={agentOptions} onChange={setAgent} header="Agent" title="Agent that runs this prompt" menuWidth={250} />
         <Dropdown className="flex-1" value={model} options={modelOptions} onChange={setModel} header={models?.source ?? 'Model'} loading={loadingModels} title="Model" menuWidth={260} />
         {running ? (
-          <button title="Stop" onClick={() => void client?.call('chat.stop', { runId: running })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-fg text-panel"><Square size={11} fill="currentColor" /></button>
+          <button title="Stop" onClick={() => void client?.call('chat.stop', { runId: running })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-agent/20 text-agent ring-1 ring-agent/40 hover:bg-agent/30"><Square size={11} fill="currentColor" strokeWidth={0} /></button>
         ) : (
           <button title="Send (Enter)" disabled={!canSend} onClick={() => void send()}
             className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-fg shadow-lg shadow-accent/30 transition-opacity', !canSend && 'opacity-30 shadow-none')}>

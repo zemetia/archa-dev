@@ -43,8 +43,12 @@ const server = createServer((socket) => {
   channel.onMessage((m) => {
     if (!authed) {
       if (m.t === 'hello' && m.token === token) {
-        authed = true;
-        conn = ws.attach(proxied, m.client);
+        try {
+          conn = ws.attach(proxied, m.client);
+          authed = true;
+        } catch {
+          socket.destroy(); // malformed client info
+        }
       } else socket.destroy();
       return;
     }

@@ -140,7 +140,8 @@ export async function init() {
     set({ chatLive: d.text ? { runId: d.runId, threadId: d.threadId, agent: d.agent, text: d.text } : null });
   });
   client.on('chat.run', (r) => {
-    if (r.status === 'running') set({ runningRun: r.runId });
+    // A run started elsewhere (another window, the CLI) opens its conversation when none is shown.
+    if (r.status === 'running') set((s) => ({ runningRun: r.runId, chatThread: s.chatThread === null && r.docId === s.activeDocId ? r.threadId : s.chatThread }));
     else if (get().runningRun === r.runId) set({ runningRun: null });
   });
   let accountsTimer: ReturnType<typeof setTimeout> | undefined;

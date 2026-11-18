@@ -95,7 +95,11 @@ export class AgentExecutor {
     if (result.error) {
       const err = ctx.dump(result.error) as { message?: string; stack?: string } | string;
       result.error.dispose();
-      const message = typeof err === 'string' ? err : err.message ?? String(err);
+      const raw = typeof err === 'string' ? err : err.message ?? String(err);
+      // const/let names persist between calls (globals carry over), so reusing one is the commonest agent slip.
+      const message = /^redeclaration of '([^']+)'/.test(raw)
+        ? `${raw} — "${/'([^']+)'/.exec(raw)![1]}" already exists from an earlier call. Reuse it (it still holds that node), or pick a new name.`
+        : raw;
       const line = typeof err === 'object' ? /snippet\.js:(\d+)/.exec(err.stack ?? '')?.[1] : undefined;
       const id = editId ?? newId(6);
       this.failed.set(id, { code, createdAt: Date.now() });

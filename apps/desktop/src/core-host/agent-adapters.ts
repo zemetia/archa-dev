@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
-import { DESIGNER_PROMPT, type ModelOption } from '@archa/protocol';
+import { DESIGNER_PROMPT, EXECUTE_API_DOC, type ModelOption } from '@archa/protocol';
 
 /*
  * Launch-mode adapters (blueprint AGENT_BRIDGE/01-02), ported from Gungnir's remediate/ package.
@@ -154,6 +154,7 @@ async function codexModels(_bin: string | null, env: Record<string, string>) {
 /** `claude -p --output-format stream-json --verbose --include-partial-messages` */
 function claudeParser(): StreamParser {
   let live = '';
+  let failed = false;
   return {
     line(line) {
       const ev = parse(line);
@@ -169,13 +170,28 @@ function claudeParser(): StreamParser {
         if (e?.type === 'message_start') live = '';
       } else if (ev.type === 'assistant') {
         const content = (ev.message as { content?: Array<Record<string, unknown>> } | undefined)?.content ?? [];
+        if (typeof ev.error === 'string') {
+          const text = content.map((c) => (typeof c.text === 'string' ? c.text : '')).join('\n').trim() || ev.error;
+          failed = true;
+          out.push({ kind: 'error', text: clip(ev.error === 'authentication_failed' ? `${text}\n${CLAUDE_SIGN_IN_HINT}` : text) });
+          return out;
+        }
         for (const c of content) {
           if (c.type === 'text' && typeof c.text === 'string' && c.text.trim()) { live = ''; out.push({ kind: 'text', text: c.text }); }
-          if (c.type === 'tool_use') out.push({ kind: 'tool', text: toolSummary(String(c.name), c.input) });
+          if (c.type === 'tool_use') out.push(toolEvent(String(c.name), c.input));
+        }
+      } else if (ev.type === 'user') {
+        const content = (ev.message as { content?: Array<Record<string, unknown>> } | undefined)?.content ?? [];
+        for (const c of content) {
+          if (c.type !== 'tool_result') continue;
+          const body = typeof c.content === 'string' ? c.content : Array.isArray(c.content) ? (c.content as Array<{ text?: string }>).map((x) => x.text ?? '').join('\n') : '';
+          const r = resultEvent(body);
+          if (r) out.push(r);
         }
       } else if (ev.type === 'result') {
-        if (ev.is_error) out.push({ kind: 'error', text: clip(String(ev.result ?? (Array.isArray(ev.errors) ? ev.errors.join('\n') : '') ?? 'Agent run failed')) });
-        else if (typeof ev.result === 'string') out.push({ kind: 'final', text: ev.result });
+        if (ev.is_error) {
+          if (!failed) out.push({ kind: 'error', text: clip(String(ev.result ?? (Array.isArray(ev.errors) ? ev.errors.join('\n') : '') ?? 'Agent run failed')) });
+        } else if (typeof ev.result === 'string') out.push({ kind: 'final', text: ev.result });
       }
       return out;
     },
@@ -205,7 +221,10 @@ function agyParser(): StreamParser {
         } else if (s.step_type === 'tool' && s.state === 'ACTIVE') {
           const p = s.tool_info?.parameters ?? {};
           // MCP calls come through agy's call_mcp_tool wrapper; show the archadev tool itself.
-          out.push({ kind: 'tool', text: s.tool_name === 'call_mcp_tool' ? toolSummary(String(p.ToolName ?? 'mcp'), p.Arguments) : s.tool_name ?? 'tool' });
+          out.push(s.tool_name === 'call_mcp_tool' ? toolEvent(String(p.ToolName ?? 'mcp'), p.Arguments) : { kind: 'tool', text: agyToolSummary(s.tool_name ?? 'tool', p) });
+        } else if (s.step_type === 'tool' && s.state === 'DONE' && s.tool_name === 'call_mcp_tool') {
+          const r = resultEvent(String((s.tool_info as { output?: unknown } | undefined)?.output ?? ''));
+          if (r) out.push(r);
         } else if (s.step_type === 'error_message' && s.error) out.push({ kind: 'error', text: clip(s.error) });
       } else if (ev.event === 'result') {
         const r = (ev.result ?? {}) as { status?: string; response?: string; error?: string };
@@ -226,7 +245,7 @@ function codexParser(): StreamParser {
       const it = (ev.item ?? {}) as Record<string, unknown>;
       if (ev.type === 'thread.started' && typeof ev.thread_id === 'string') return [{ kind: 'session', id: ev.thread_id }];
       if (ev.type === 'item.completed' && it.type === 'agent_message' && typeof it.text === 'string' && it.text.trim()) return [{ kind: 'text', text: it.text }];
-      if (ev.type === 'item.started' && it.type === 'mcp_tool_call') return [{ kind: 'tool', text: toolSummary(String(it.tool ?? 'mcp'), it.arguments) }];
+      if (ev.type === 'item.started' && it.type === 'mcp_tool_call') return [toolEvent(String(it.tool ?? 'mcp'), it.arguments)];
       if (ev.type === 'turn.failed' || ev.type === 'error') {
         const msg = (ev.error as { message?: string } | undefined)?.message ?? String(ev.message ?? 'Codex run failed');
         return [{ kind: 'error', text: clip(msg) }];
@@ -238,6 +257,28 @@ function codexParser(): StreamParser {
 
 function parse(line: string): Record<string, unknown> | null {
   try { return JSON.parse(line) as Record<string, unknown>; } catch { return null; }
+}
+
+const CLAUDE_SIGN_IN_HINT = 'Claude Code is not signed in for this run. Sign in from Settings → Agents (add a Claude account), or run `claude` in a terminal and use /login.';
+
+/** agy's own tools (shell, files): show what they touched, so the person can see why the run takes time. */
+function agyToolSummary(name: string, p: Record<string, unknown>): string {
+  const arg = [p.CommandLine, p.Command, p.Path, p.AbsolutePath, p.File, p.Query, p.Url].find((v) => typeof v === 'string' && v.trim());
+  return arg ? `${name} · ${String(arg).replace(/\s+/g, ' ').slice(0, 120)}` : name;
+}
+
+/** A failed `execute` rolls back; surface its reason so the person sees why the agent retries. */
+function resultEvent(text: string): AgentEvent | null {
+  if (!text.startsWith('FAILED')) return null;
+  const reason = /^Reason: (.*)$/m.exec(text)?.[1] ?? text.split('\n')[0]!;
+  return { kind: 'tool', text: `execute failed · ${reason.slice(0, 160)}` };
+}
+
+/** `say` is the agent talking to the person: show it as a message, not a tool line. */
+function toolEvent(name: string, input: unknown): AgentEvent {
+  const i = (input ?? {}) as Record<string, unknown>;
+  if (name.replace(/^mcp__archadev__/, '') === 'say' && typeof i.text === 'string' && i.text.trim()) return { kind: 'text', text: i.text.trim() };
+  return { kind: 'tool', text: toolSummary(name, input) };
 }
 
 export function toolSummary(name: string, input: unknown): string {
@@ -254,6 +295,15 @@ export function toolSummary(name: string, input: unknown): string {
 /* -------------------------------- adapters -------------------------------- */
 
 const toml = (v: unknown) => JSON.stringify(v); // JSON strings/arrays are valid TOML values
+
+/*
+ * agy does not put MCP tool descriptions in the model's context: it reads them from schema files,
+ * which costs minutes of shell/file probing per run. Hand it the tools and the execute API up front.
+ */
+const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, screenshot { node }, export_svg { node }, say { text }. The canvas state is at the end of this message, so start designing right away; nothing outside the canvas is needed (no shell, files or browsing).
+
+execute tool documentation:
+${EXECUTE_API_DOC}`;
 
 let agyRegistered = '';
 export const ADAPTERS: Adapter[] = [
@@ -296,7 +346,7 @@ export const ADAPTERS: Adapter[] = [
         '--dangerously-skip-permissions', '--disable-slash-commands', '--output-format', 'stream-json', '--print-timeout', '30m',
         ...(model ? ['--model', model] : []),
         ...(sessionId ? ['--conversation', sessionId] : []),
-        '-p', withState(`${sessionId ? '' : `${DESIGNER_PROMPT}\n\n---\n`}${prompt}`, MAX_ARG_PROMPT),
+        '-p', withState(`${sessionId ? AGY_TOOLS_NOTE : `${DESIGNER_PROMPT}\n\n${AGY_TOOLS_NOTE}`}\n\n---\n${prompt}`, MAX_ARG_PROMPT),
       ],
     }),
     parser: agyParser,

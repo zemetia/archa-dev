@@ -10,11 +10,12 @@ export * from './browser';
  * ------------------------------------------------------------------------- */
 
 export type ClientKind = 'renderer' | 'cli' | 'mcp';
-export type ClientInfo = { kind: ClientKind; name: string; agentId?: string };
+/** runId: set by an `archa mcp` that a launched chat run started (ARCHA_RUN_ID), so its activity is not shown twice. */
+export type ClientInfo = { kind: ClientKind; name: string; agentId?: string; runId?: string };
 
 export type DocSummary = { id: string; name: string; filePath: string | null; dirty: boolean; revision: number };
 export type AppliedEvent = { docId: string; revision: number; txnId: string; author: Author; label: string; ops: Op[]; touched: string[] };
-export type ActivityEntry = { id: string; ts: number; docId: string; author: Author; tool: string; text: string; nodeIds: string[] };
+export type ActivityEntry = { id: string; ts: number; docId: string; author: Author; tool: string; text: string; nodeIds: string[]; runId?: string };
 export type AgentClient = { id: string; name: string; kind: ClientKind; connectedAt: number };
 
 export type ExecuteResult =
@@ -144,7 +145,7 @@ export interface CoreEvents {
   'chat.message': ChatMessage;
   /** Text the agent is still writing (whole text so far); '' clears it. */
   'chat.delta': { docId: string; runId: string; threadId: string; agent: string; text: string };
-  'chat.run': { runId: string; docId: string; status: 'running' | 'finished' | 'failed' | 'stopped' };
+  'chat.run': { runId: string; docId: string; threadId: string; status: 'running' | 'finished' | 'failed' | 'stopped' };
   /** Accounts or a sign-in changed; clients re-read `accounts.overview`. */
   'accounts.changed': { accountId?: string };
 }

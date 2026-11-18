@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file, following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.3] - 2026-11-19
+
+### Chat
+- Antigravity gets the ArchaDev tool list and `execute` guide in its prompt, so it designs right away instead of searching files first. In testing, a small card went from about 6 minutes (or repeated failed attempts) to about 1.5 minutes with one `execute`.
+- A rolled-back `execute` now shows in the chat as "execute failed · <reason>", so you can see why the agent retries.
+- Agent progress notes (`say`) and screenshots show once, not twice. Agent replies render Markdown (bold, code, lists, headings).
+- Claude Code sign-in failures show once, with how to sign in. Validation errors are readable sentences instead of raw JSON.
+- If you stop a run before the agent answers, your request is passed on with your next message in that chat, so "continue" keeps working on what you asked.
+- A run started from another window or from the CLI opens its conversation in the chat panel. The "1 live" badge stays on one line, and the Stop button is visible.
+- `execute`: reusing a `const` name from an earlier call now explains how to fix it.
+
 ## [0.2.2] - 2026-11-19
 
 ### Left menu

@@ -7,7 +7,7 @@ import { browserCommandSchema, type ActivityEntry, type AgentClient, type Channe
 import { z } from 'zod';
 import { AgentExecutor, describeState } from './execute';
 import { ADAPTERS, ChatRunner, findBin, type McpCommand } from './agents';
-import { AccountManager, resolveCli } from './accounts';
+import { AccountManager, parse, resolveCli } from './accounts';
 import { LibraryStore, libraryInsertSchema, libraryItemSchema, libraryPublishSchema } from './library';
 import { callBrowser } from './main-bridge';
 
@@ -16,6 +16,10 @@ const chatSendSchema = z.object({
   model: z.string().max(100).optional(), account: z.string().max(100).optional(), threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
 });
 const agentModelsSchema = z.object({ agent: z.enum(['claude', 'agy', 'codex']), account: z.string().max(100).optional() });
+const clientInfoSchema = z.object({
+  kind: z.enum(['renderer', 'cli', 'mcp']), name: z.string().min(1).max(200), agentId: z.string().max(200).optional(),
+  runId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+});
 const chatThreadSchema = z.object({ docId: z.string().min(1), threadId: z.string().min(1).max(64) });
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -55,8 +59,9 @@ export class Workspace {
 
   /* ------------------------------ connections ------------------------------ */
 
-  attach(channel: Channel, client: ClientInfo): Connection {
+  attach(channel: Channel, raw: ClientInfo): Connection {
     const id = newId();
+    const client = clientInfoSchema.parse(raw);
     const author: Author = client.kind === 'renderer'
       ? { kind: 'user', id: `window-${id}`, name: 'You' }
       : { kind: 'agent', id: client.agentId ?? client.name, name: client.name };
@@ -119,8 +124,8 @@ export class Workspace {
     return s;
   }
 
-  log(docId: string, author: Author, tool: string, text: string, nodeIds: string[] = []) {
-    const entry: ActivityEntry = { id: newId(), ts: Date.now(), docId, author, tool, text, nodeIds };
+  log(docId: string, author: Author, tool: string, text: string, nodeIds: string[] = [], runId?: string) {
+    const entry: ActivityEntry = { id: newId(), ts: Date.now(), docId, author, tool, text, nodeIds, ...(runId ? { runId } : {}) };
     this.activity.push(entry);
     if (this.activity.length > 2000) this.activity.shift();
     this.broadcast('activity', entry);
@@ -234,7 +239,7 @@ export class Workspace {
       const id = resolveRef(s, node);
       const r = await this.screenshot(conn, s.id, id, scale ?? 1);
       if (r.error) throw new DocumentError('CONFLICT', r.error);
-      this.log(s.id, conn.author, 'screenshot', `Screenshot "${r.name}"`, [id]);
+      this.log(s.id, conn.author, 'screenshot', `Screenshot "${r.name}"`, [id], conn.client.runId);
       return r;
     },
     'agent.exportSvg': ({ docId, node }) => {
@@ -243,7 +248,7 @@ export class Workspace {
     },
     'agent.say': ({ docId, text, nodeId }, conn) => {
       const s = this.session(docId);
-      this.log(s.id, conn.author, 'say', text, nodeId ? [resolveRef(s, nodeId)] : []);
+      this.log(s.id, conn.author, 'say', text, nodeId ? [resolveRef(s, nodeId)] : [], conn.client.runId);
     },
     'agent.browser': async (params, conn) => {
       const parsed = browserCommandSchema.safeParse(params);
@@ -251,13 +256,13 @@ export class Workspace {
       const cmd = parsed.data;
       const reply = await callBrowser(cmd, conn.author.name ?? conn.author.id);
       const detail = cmd.url ?? cmd.ref ?? cmd.selector ?? cmd.key ?? (cmd.text !== undefined ? `"${cmd.text.slice(0, 40)}"` : '');
-      this.log(this.session().id, conn.author, 'browser', `Browser · ${cmd.action}${detail ? ` ${detail}` : ''}`);
+      this.log(this.session().id, conn.author, 'browser', `Browser · ${cmd.action}${detail ? ` ${detail}` : ''}`, [], conn.client.runId);
       return reply;
     },
     'app.info': () => {
       const m = mcpCommand();
       return {
-        version: '0.2.2',
+        version: '0.2.3',
         cliPath: cliPath(),
         mcpCommand: [m.command, ...m.args],
         agents: ADAPTERS.map((a) => ({ id: a.id, label: a.label, available: !!resolveCli(a.bin) && existsSync(cliPath()) })),
@@ -270,22 +275,22 @@ export class Workspace {
       return { path };
     },
     'chat.send': (params) => {
-      const p = chatSendSchema.parse(params);
+      const p = parse(chatSendSchema, params);
       return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId);
     },
     'chat.stop': ({ runId }) => this.chat.stop(runId),
     'chat.list': ({ docId }) => this.chat.list(this.session(docId).id),
     'library.list': () => this.library.list(),
     'library.publish': (params) => {
-      const p = libraryPublishSchema.parse(params);
+      const p = parse(libraryPublishSchema, params);
       return this.library.publish(this.session(p.docId).doc, p.nodeId, p.library, p.png);
     },
     'library.remove': (params) => {
-      const p = libraryItemSchema.parse(params);
+      const p = parse(libraryItemSchema, params);
       this.library.remove(p.library, p.id);
     },
     'library.insert': (params, conn) => {
-      const p = libraryInsertSchema.parse(params);
+      const p = parse(libraryInsertSchema, params);
       const s = this.session(p.docId);
       const item = this.library.read(p.library, p.id);
       if (!item) throw new DocumentError('NOT_FOUND', `Library component ${p.library}:${p.id} not found`);
@@ -298,11 +303,11 @@ export class Workspace {
       return { nodeId: r.rootId, placed: r.placed };
     },
     'agents.models': (params) => {
-      const p = agentModelsSchema.parse(params);
+      const p = parse(agentModelsSchema, params);
       return this.chat.models(p.agent, p.account);
     },
     'chat.deleteThread': (params) => {
-      const p = chatThreadSchema.parse(params);
+      const p = parse(chatThreadSchema, params);
       this.chat.deleteThread(this.session(p.docId).id, p.threadId);
     },
     'accounts.overview': () => this.accounts.overview(),

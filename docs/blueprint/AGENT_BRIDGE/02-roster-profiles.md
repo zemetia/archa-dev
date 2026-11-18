@@ -67,6 +67,8 @@ Code: `apps/desktop/src/core-host/agent-adapters.ts` (argv, parsers, models) + `
 | agy | `--dangerously-skip-permissions --disable-slash-commands --output-format stream-json --print-timeout 30m -p <prompt>` (argv; canvas state dropped past 28 000 chars) | no per-run flag: `agy mcp add archadev …` once per app start; doc from `ARCHA_DOC_ID` | `agy models`, cached 10 min |
 | Codex | `exec --json --full-auto --skip-git-repo-check -c mcp_servers.archadev.*=… -`; prompt on stdin | `-c` overrides | `CODEX_HOME/models_cache.json` |
 
+agy reads MCP tool descriptions from schema files instead of its context, so its prompt carries the tool list + `EXECUTE_API_DOC` (`AGY_TOOLS_NOTE`). Launched runs tag their `archa mcp` connection with `ARCHA_RUN_ID` (`ClientInfo.runId`), and the chat hides that activity so it is not shown twice.
+
 Rules: stdin is always closed (an open pipe makes `claude -p` wait); `chat.delta` streams in-progress text; one run per document; `agents.models` feeds the composer picker.
 
 ---

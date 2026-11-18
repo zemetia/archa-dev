@@ -17,7 +17,7 @@ import { resolveCli } from './accounts';
 
 export { ADAPTERS, findBin, type McpCommand } from './agent-adapters';
 
-type Run = { id: string; docId: string; threadId: string; agent: string; child: ChildProcess | null; stopped: boolean; replied: boolean; failed: boolean };
+type Run = { id: string; docId: string; threadId: string; agent: string; prompt: string; child: ChildProcess | null; stopped: boolean; replied: boolean; failed: boolean };
 
 /*
  * Chat history lives in ARCHA_HOME/chats/<docId>.jsonl (one message per line) and the agent CLI
@@ -29,6 +29,7 @@ const safeName = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80)
 
 export class ChatRunner {
   private runs = new Map<string, Run>();
+  private interrupted = new Map<string, string>(); // threadId -> prompt stopped before any reply
   private sessions: Map<string, string> | null = null; // threadId:agent:login -> CLI session id
   private messages = new Map<string, ChatMessage[]>();
 
@@ -108,24 +109,29 @@ export class ChatRunner {
 
     const sessionKey = `${threadId}:${agentId}:${login.label ? Object.values(login.env).join() : 'host'}`;
     const sessionId = this.sessionMap().get(sessionKey);
-    const fullPrompt = `${prompt}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}`;
-    const run: Run = { id: runId, docId, threadId, agent: agentId, child: null, stopped: false, replied: false, failed: false };
+    // A request stopped before the agent answered never reached its session; carry it into this turn.
+    const interrupted = this.interrupted.get(threadId);
+    this.interrupted.delete(threadId);
+    const request = interrupted ? `Earlier request (stopped before you answered it):\n${interrupted}\n\nNow:\n${prompt}` : prompt;
+    const fullPrompt = `${request}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}`;
+    const run: Run = { id: runId, docId, threadId, agent: agentId, prompt: request, child: null, stopped: false, replied: false, failed: false };
     this.runs.set(runId, run);
     this.emit(run, 'user', prompt);
     if (login.label) this.emit(run, 'status', `Running as ${login.label}`);
-    this.ws.broadcast('chat.run', { runId, docId, status: 'running' });
+    this.ws.broadcast('chat.run', { runId, docId, threadId: run.threadId, status: 'running' });
 
     const fail = (text: string) => {
       this.runs.delete(runId);
       rmSync(mcpConfigFile, { force: true });
       this.emit(run, 'error', text);
-      this.ws.broadcast('chat.run', { runId, docId, status: 'failed' });
+      this.ws.broadcast('chat.run', { runId, docId, threadId: run.threadId, status: 'failed' });
     };
     const start = () => {
       if (run.stopped) {
         this.runs.delete(runId);
+        this.interrupted.set(threadId, request);
         rmSync(mcpConfigFile, { force: true });
-        this.ws.broadcast('chat.run', { runId, docId, status: 'stopped' });
+        this.ws.broadcast('chat.run', { runId, docId, threadId: run.threadId, status: 'stopped' });
         return;
       }
       const built = adapter.build({ prompt: fullPrompt, mcp, mcpConfigFile, model, sessionId });
@@ -169,8 +175,11 @@ export class ChatRunner {
       const status = run.stopped ? 'stopped' : code === 0 && !run.failed ? 'finished' : 'failed';
       if (status === 'failed' && !run.failed) this.emit(run, 'error', stderr.trim() || `Agent exited with code ${code}`);
       if (status === 'finished' && !run.replied) this.emit(run, 'status', 'Finished without a reply');
-      if (status === 'stopped') this.emit(run, 'status', 'Stopped');
-      this.ws.broadcast('chat.run', { runId, docId, status });
+      if (status === 'stopped') {
+        this.emit(run, 'status', 'Stopped');
+        if (!run.replied) this.interrupted.set(run.threadId, run.prompt);
+      }
+      this.ws.broadcast('chat.run', { runId, docId, threadId: run.threadId, status });
     });
   }
 

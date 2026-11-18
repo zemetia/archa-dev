@@ -80,6 +80,30 @@ describe('agent adapters: stream parsers', () => {
     expect(ev).toEqual([{ kind: 'session', id: 't1' }, { kind: 'text', text: 'Built it' }, { kind: 'error', text: 'usage limit' }]);
   });
 
+  it('claude reports a CLI error once, with a sign-in hint for auth failures', () => {
+    const ev = feed('claude', [
+      { type: 'assistant', error: 'authentication_failed', message: { model: '<synthetic>', content: [{ type: 'text', text: 'Failed to authenticate' }] } },
+      { type: 'result', is_error: true, result: 'Failed to authenticate' },
+    ]);
+    expect(ev.filter((e) => e.kind !== 'session')).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ kind: 'error' });
+    expect((ev[0] as { text: string }).text).toContain('Settings → Agents');
+  });
+
+  it('shows say as a message, not a tool line', () => {
+    expect(feed('claude', [{ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'mcp__archadev__say', input: { text: 'Building the header' } }] } }]))
+      .toEqual([{ kind: 'text', text: 'Building the header' }]);
+  });
+
+  it('surfaces a rolled-back execute with its reason', () => {
+    const failed = 'FAILED — rolled back, nothing changed (revision still 3).\nReason: insert: parent "x" not found\neditId: e1 — fix with execute(...)';
+    expect(feed('claude', [{ type: 'user', message: { content: [{ type: 'tool_result', content: [{ type: 'text', text: failed }] }] } }]))
+      .toEqual([{ kind: 'tool', text: 'execute failed · insert: parent "x" not found' }]);
+    expect(feed('agy', [{ event: 'step_update', step_update: { step_index: 4, state: 'DONE', step_type: 'tool', tool_name: 'call_mcp_tool', tool_info: { output: failed } } }]))
+      .toEqual([{ kind: 'tool', text: 'execute failed · insert: parent "x" not found' }]);
+    expect(feed('claude', [{ type: 'user', message: { content: [{ type: 'tool_result', content: 'OK (revision 4).' }] } }])).toEqual([]);
+  });
+
   it('ignores non-JSON lines', () => {
     expect(adapter('claude').parser().line('Warning: something')).toEqual([]);
   });

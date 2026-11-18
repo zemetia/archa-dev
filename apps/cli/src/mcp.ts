@@ -13,11 +13,11 @@ type Content = { type: 'text'; text: string } | { type: 'image'; data: string; m
 export async function runMcp(opts: { doc?: string; agent?: string }) {
   const agentName = opts.agent ?? 'mcp-agent';
   let core: RpcClient | null = null;
-  const getCore = async () => (core ??= await connectCore({ kind: 'mcp', name: agentName, agentId: agentName }));
+  const getCore = async () => (core ??= await connectCore({ kind: 'mcp', name: agentName, agentId: agentName, runId: process.env.ARCHA_RUN_ID || undefined }));
   // Launched runs pass --doc; agy's globally registered server falls back to the run's env.
   const docId = opts.doc ?? process.env.ARCHA_DOC_ID;
 
-  const server = new McpServer({ name: 'archadev', version: '0.2.2' });
+  const server = new McpServer({ name: 'archadev', version: '0.2.3' });
   const guard = async (fn: (c: RpcClient) => Promise<Content[]>) => {
     try {
       return { content: await fn(await getCore()) };
