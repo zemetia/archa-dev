@@ -21,6 +21,7 @@ A local-first design tool in the spirit of pen.dev, built as **three surfaces ov
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Processes, document model, cache, rendering & layers, stack | Building any core part |
 | [FILES_AND_PROJECTS.md](./FILES_AND_PROJECTS.md) | `.archa`, `.archadev/`, entry points, `.pen` import | Anything touching disk |
 | [AGENTS_AND_MCP.md](./AGENTS_AND_MCP.md) | MCP server, agent bridge, local skill, review loop | Anything an agent touches |
+| [CHAT_AGENT.md](./CHAT_AGENT.md) | Built-in chat agent: composer, warm sessions, starter kit, review | Chat / agent UX work |
 | [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) | Tokens, themes, components, style profiles, libraries | Design-system features |
 | [PLUGINS.md](./PLUGINS.md) | Plugin manifest, capabilities, sandbox, distribution | Extensibility |
 | [CLI.md](./CLI.md) | `archa` command surface | CLI work |

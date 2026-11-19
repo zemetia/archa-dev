@@ -33,18 +33,24 @@ export function drawPage(
   ctx.restore();
 }
 
-/** Renders one node to a PNG data URL (agent screenshots, export). */
-export async function renderNodePng(doc: ArchaDocument, nodeId: string, scale: number): Promise<string> {
+/** Renders one node to base64 PNG (agent screenshots, export). */
+export function renderNodePng(doc: ArchaDocument, nodeId: string, scale: number): Promise<string> {
+  return renderNodeImage(doc, nodeId, scale, 'png');
+}
+
+/** Renders one node to base64 PNG or JPEG. JPEG has no alpha, so it is drawn on white. */
+export async function renderNodeImage(doc: ArchaDocument, nodeId: string, scale: number, format: 'png' | 'jpeg', quality = 0.92): Promise<string> {
   const node = doc.require(nodeId);
   await preloadImages([...doc.walk(nodeId)].flatMap((n) => (n.type === 'image' ? [n.src] : [])));
   const w = Math.max(1, Math.round(node.width * scale));
   const h = Math.max(1, Math.round(node.height * scale));
   const canvas = new OffscreenCanvas(w, h);
   const ctx = canvas.getContext('2d')!;
+  if (format === 'jpeg') { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); }
   ctx.scale(scale, scale);
   ctx.translate(-node.x, -node.y);
   drawNode(ctx, doc, node);
-  const blob = await canvas.convertToBlob({ type: 'image/png' });
+  const blob = await canvas.convertToBlob(format === 'png' ? { type: 'image/png' } : { type: 'image/jpeg', quality });
   const buf = new Uint8Array(await blob.arrayBuffer());
   let bin = '';
   for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));

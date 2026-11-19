@@ -1,9 +1,9 @@
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { userInfo } from 'node:os';
-import { basename } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join } from 'node:path';
 import { ArchaDocument, DocumentError, DocumentSession, findEmptySpace, libraryInsertOps, subtreeHash } from '@archa/core';
-import { decodeArcha, encodeArcha, exportSvg } from '@archa/formats';
+import { decodeArcha, encodeArcha, exportHtml, exportHtmlStandalone, exportSvg } from '@archa/formats';
 import { newId, opSchema, type Author, type Op } from '@archa/schema';
 import { browserCommandSchema, type ActivityEntry, type TrailStep, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
 import { z } from 'zod';
@@ -19,12 +19,23 @@ import { randomPersona } from './personas';
 const chatSendSchema = z.object({
   docId: z.string().min(1), agent: z.string().min(1), prompt: z.string().min(1).max(100_000),
   model: z.string().max(100).optional(), account: z.string().max(100).optional(), threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+  now: z.boolean().optional(), focus: z.array(z.string().min(1).max(100)).max(50).optional(),
+});
+const chatWarmSchema = z.object({
+  docId: z.string().min(1), agent: z.string().min(1), model: z.string().max(100).optional(), account: z.string().max(100).optional(),
+  threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
 });
 const agentModelsSchema = z.object({ agent: z.enum(['claude', 'agy', 'codex']), account: z.string().max(100).optional() });
 const clientInfoSchema = z.object({
   kind: z.enum(['renderer', 'cli', 'mcp']), name: z.string().min(1).max(200), agentId: z.string().max(200).optional(),
   runId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
 });
+const exportSaveSchema = z.object({
+  docId: z.string().min(1), nodeId: z.string().min(1), format: z.enum(['png', 'jpg', 'svg', 'html', 'tailwind']),
+  path: z.string().min(1).max(4096).refine((p) => isAbsolute(p), 'Export path must be absolute'),
+  image: z.string().max(200_000_000).optional(),
+});
+const exportPageSchema = z.object({ docId: z.string().min(1), nodeId: z.string().min(1) });
 const chatThreadSchema = z.object({ docId: z.string().min(1), threadId: z.string().min(1).max(64) });
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -294,15 +305,43 @@ export class Workspace {
         agents: ADAPTERS.map((a) => ({ id: a.id, label: a.label, available: !!resolveCli(a.bin) && existsSync(cliPath()) })),
       };
     },
-    'export.save': async ({ docId, nodeId, format, path, png }) => {
+    'export.save': async (params) => {
+      const { docId, nodeId, format, path, image } = parse(exportSaveSchema, params);
       const s = this.session(docId);
-      const data = format === 'svg' ? exportSvg(s.doc, nodeId) : Buffer.from(png ?? '', 'base64');
-      await writeFile(path, data);
-      return { path };
+      if (format === 'png' || format === 'jpg') {
+        if (!image) throw new DocumentError('VALIDATION', `${format.toUpperCase()} export needs the rendered image`);
+        await writeFile(path, Buffer.from(image, 'base64'));
+        return { files: [path] };
+      }
+      if (format === 'svg') {
+        await writeFile(path, exportSvg(s.doc, nodeId));
+        return { files: [path] };
+      }
+      // HTML: the page goes where the person chose; its CSS and image assets go next to it.
+      const dir = dirname(path);
+      const files = exportHtml(s.doc, nodeId, { style: format === 'tailwind' ? 'tailwind' : 'css', name: basename(path, extname(path)) });
+      const written: string[] = [];
+      for (const f of files) {
+        const target = join(dir, f.path);
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, f.data);
+        written.push(target);
+      }
+      return { files: written };
+    },
+    'export.page': (params) => {
+      const { docId, nodeId } = parse(exportPageSchema, params);
+      const s = this.session(docId);
+      const n = s.doc.require(nodeId);
+      return { html: exportHtmlStandalone(s.doc, nodeId), width: n.width, height: n.height };
     },
     'chat.send': (params) => {
       const p = parse(chatSendSchema, params);
-      return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId);
+      return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId, { now: p.now, focus: p.focus });
+    },
+    'chat.warm': (params) => {
+      const p = parse(chatWarmSchema, params);
+      return this.chat.warmUp(this.session(p.docId).id, p.agent, p.model, p.account, p.threadId);
     },
     'chat.stop': ({ runId }) => this.chat.stop(runId),
     'chat.runs': () => this.chat.active(),

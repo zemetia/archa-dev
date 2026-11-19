@@ -12,7 +12,7 @@
 |---|---|---|
 | PNG / JPEG / WebP | CanvasKit raster | `scale` (0.25–4), `background`, `quality` |
 | SVG | Scene walk → SVG elements (vector, no raster) | `outlineText`, `embedImages` |
-| PDF | Skia PDF backend | Multi-frame → multi-page |
+| PDF | Skia PDF backend (target). **Now:** the node's self-contained HTML page printed by Chromium in a hidden window (`apps/desktop/src/main/pdf.ts`), one page sized to the node | Multi-frame → multi-page |
 | HTML/CSS, React+Tailwind, tokens | Code generators (not renderers) → [DESIGN_SYSTEM/04](../DESIGN_SYSTEM/04-code-export.md) | |
 
 ---
@@ -26,6 +26,8 @@ exportPdf(doc, { nodeIds }): Promise<Uint8Array>
 ```
 
 Same API from the app (via RPC `export.*`), CLI (`archa export`) and MCP (`export`, `screenshot`).
+
+**App flow now:** PNG/JPEG render in the renderer (`renderNodeImage`, JPEG drawn on white) and go to `export.save` as base64; SVG and HTML/Tailwind are written by the core from `export.save`; PDF takes `export.page` (HTML) from the core and is printed by main over `export:pdf`. Formats: `ExportFormat` in `@archa/protocol`.
 
 ---
 

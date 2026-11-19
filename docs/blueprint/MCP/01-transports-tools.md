@@ -37,7 +37,7 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 | `screenshot` | `{ nodeId, scale? }` | Image or `unchanged` → [RENDERING/03](../RENDERING/03-export.md) |
 | `export` | `{ nodeId?, format, options? }` | png/jpeg/webp/svg/pdf/html/react/tokens; returns path or content |
 | `get_style` | `{ name?, params? }` | Style profiles, two-step load → [DESIGN_SYSTEM/03](../DESIGN_SYSTEM/03-style-profiles.md) |
-| `read_guide` | `{ topic }` | Serves `skills/archadev/references/**` for agents without skill support |
+| `read_guide` | `{ topic }` | **Built:** compiled-in guides (`@archa/protocol` `design-guides.ts`: process, layout, taste, type-color, components, icons, landing, web-app, mobile). Chat runs also get the matching guides on their first turn. Target: `skills/archadev/references/**` |
 | `comments` | `{ action: list\|reply\|resolve, … }` | Comment threads |
 | `review_wait` | `{ timeoutSec? }` | Block until a round is sent → [AGENT_BRIDGE/04](../AGENT_BRIDGE/04-review-loop.md) |
 | `review_done` | `{ roundId, summary }` | Close a round |

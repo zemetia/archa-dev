@@ -1,11 +1,11 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
   ArrowDown, ArrowRight, Eye, EyeOff, LayoutGrid, Minus, PanelRightClose, Plus, TextAlignCenter, TextAlignEnd, TextAlignStart,
 } from 'lucide-react';
 import { hexToColor, type Node, type Paint, type Shadow, type Stroke } from '@archa/schema';
 import type { Op } from '@archa/schema';
-import { commit, exportNode, togglePanel, useStore } from '../lib/store';
+import { commit, EXPORT_KINDS, exportNode, togglePanel, useStore, type ExportKind } from '../lib/store';
 import { originOf, selectionBounds } from '../lib/geometry';
 import { cn, ColorField, IconButton, NumberField, Section, Segmented, Select } from './controls';
 import { CommentsPanel } from './CommentsPanel';
@@ -231,13 +231,36 @@ function NodeSections({ node: n }: { node: Node }) {
       {'strokes' in n && <StrokeList items={n.strokes} onChange={(strokes) => set({ strokes }, 'Stroke')} />}
       {'effects' in n && <ShadowList items={n.effects} onChange={(effects) => set({ effects }, 'Effects')} />}
 
-      <Section title="Export">
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => void exportNode(n.id, 'png')} className="h-8 rounded-lg bg-panel-2 text-[12px] hover:bg-panel-3">PNG @2x</button>
-          <button onClick={() => void exportNode(n.id, 'svg')} className="h-8 rounded-lg bg-panel-2 text-[12px] hover:bg-panel-3">SVG</button>
-        </div>
-      </Section>
+      <ExportSection nodeId={n.id} />
     </>
+  );
+}
+
+/** Kept across selections, like the last export settings in other design tools. */
+let lastExport: { kind: ExportKind; scale: string } = { kind: 'png', scale: '2' };
+
+function ExportSection({ nodeId }: { nodeId: string }) {
+  const [opts, setOpts] = useState(lastExport);
+  const update = (o: typeof opts) => { lastExport = o; setOpts(o); };
+  const raster = opts.kind === 'png' || opts.kind === 'jpg';
+  const hint = opts.kind === 'html' ? 'Writes the page, a CSS file and an assets folder.'
+    : opts.kind === 'tailwind' ? 'One page styled with Tailwind classes.'
+    : opts.kind === 'pdf' ? 'One vector page, text stays selectable.' : null;
+  return (
+    <Section title="Export">
+      <div className="flex gap-2">
+        <Select title="Format" value={opts.kind} onChange={(kind) => update({ ...opts, kind })} options={EXPORT_KINDS.map(({ value, label }) => ({ value, label }))} />
+        {raster && (
+          <div className="w-16 shrink-0">
+            <Select title="Scale" value={opts.scale} onChange={(scale) => update({ ...opts, scale })} options={['1', '2', '3', '4'].map((v) => ({ value: v, label: `${v}x` }))} />
+          </div>
+        )}
+      </div>
+      {hint && <p className="mt-1.5 text-[11px] text-fg-subtle">{hint}</p>}
+      <button onClick={() => void exportNode(nodeId, opts.kind, Number(opts.scale))} className="mt-2 h-8 w-full rounded-lg bg-panel-2 text-[12px] hover:bg-panel-3">
+        Export {EXPORT_KINDS.find((k) => k.value === opts.kind)?.label}
+      </button>
+    </Section>
   );
 }
 

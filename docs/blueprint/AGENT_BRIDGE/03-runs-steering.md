@@ -89,6 +89,18 @@ Per agent, up to `maxParallel` (default 3) concurrent runs. Paused runs free the
 
 No session id seen yet → new session with the original task + previous output. On Windows, stopping kills the whole process tree (`taskkill /T /F` via argv).
 
+**Built (0.3.x) — warm sessions** (`core-host/agents.ts`, plan [CHAT_AGENT](../../plan/CHAT_AGENT.md), D-11 A):
+
+| Rule | Detail |
+|---|---|
+| Process | An adapter with `warm` (Claude, agy) keeps **one CLI process per thread**, fed one NDJSON message per turn (`--input-format stream-json`). Codex stays one process per turn (`exec resume`) |
+| Turn end | Parser emits `{ kind: 'turn', ok, costUsd? }` (Claude `result`, agy `event: result`) → status `Done in N s · $x` |
+| Pre-warm | `chat.warm` on composer focus spawns the process (no thread yet → a thread id is reserved and returned) |
+| Identity | `ARCHA_RUN_ID` = the process id, so its `archa mcp` keeps the thread's session name across turns |
+| Queue | A message to a working thread is queued (`queued: true`); `now: true` stops the turn first. The queue drains in order when a turn ends |
+| Stop | Claude: `control_request` interrupt keeps the process; no answer in 5 s (or agy) → kill tree |
+| Lifetime | Idle 10 min → closed; max 6 processes (least recently used idle first); settings change (model, account, MCP servers, skills) → new process resuming the session; app exit kills all |
+
 ---
 
 ## Accept / Reject

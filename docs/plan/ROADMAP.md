@@ -35,6 +35,7 @@ MVP built on branch `zemetia/mvp-app`. Covers phase 0 except lint/CI, phase 1, m
 | No ESLint / Turbo / CI yet | Time | Phase 0 completion |
 | Images stored inline in the document (data URLs) | Ship image import before the asset store | Phase 3: `assets/<sha256>` + migration |
 | Variables: one theme, not yet bindable to properties | Owner asked for the table first | Phase 7: theme axes, aliases, bindings |
+| PDF export prints the HTML export with Chromium | No Skia PDF backend yet; Chromium keeps text selectable and shapes vector | Phase 3: CanvasKit PDF |
 | Embed pages are drawn above the canvas | A live `<webview>` cannot be composited into Canvas2D | Snapshot-under-overlay or CanvasKit layer |
 
 ## Suggested first milestone (MVP)

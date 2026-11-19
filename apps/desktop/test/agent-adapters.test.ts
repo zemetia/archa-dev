@@ -68,7 +68,7 @@ describe('agent adapters: stream parsers', () => {
 
   it('agy reports a failed result as an error', () => {
     const ev = feed('agy', [{ event: 'result', result: { status: 'ERROR', error: 'No capacity' } }]);
-    expect(ev).toEqual([{ kind: 'error', text: 'No capacity' }]);
+    expect(ev).toEqual([{ kind: 'error', text: 'No capacity' }, { kind: 'turn', ok: false }]);
   });
 
   it('codex maps thread, agent messages and failures', () => {
@@ -85,7 +85,8 @@ describe('agent adapters: stream parsers', () => {
       { type: 'assistant', error: 'authentication_failed', message: { model: '<synthetic>', content: [{ type: 'text', text: 'Failed to authenticate' }] } },
       { type: 'result', is_error: true, result: 'Failed to authenticate' },
     ]);
-    expect(ev.filter((e) => e.kind !== 'session')).toHaveLength(1);
+    expect(ev.filter((e) => e.kind !== 'session' && e.kind !== 'turn')).toHaveLength(1);
+    expect(ev.at(-1)).toEqual({ kind: 'turn', ok: false });
     expect(ev[0]).toMatchObject({ kind: 'error' });
     expect((ev[0] as { text: string }).text).toContain('Settings → Agents');
   });

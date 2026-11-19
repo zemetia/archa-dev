@@ -8,6 +8,12 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-19] - A dev app started with its own ARCHA_HOME still listened on `\\.\pipe\archadev-core-<USERNAME>`, the installed app's pipe; dev and installed cores could collide - `socketPath()` adds a hash of a custom ARCHA_HOME to the pipe name - Anything "isolated by ARCHA_HOME" must derive every path, pipe and lock from it; check names that come from the user or machine.
+
+[2026-11-19] - The dev window sat on "Connecting to core…" after a Vite HMR update, so agent screenshots failed during a live benchmark - Reloaded the window (the core port is only sent on page load) - After HMR in a dev run, reload the window before trusting agent screenshots; check `document.body.innerText` for "Connecting to core".
+
+[2026-11-19] - First live warm-session run: 98 s to the first canvas change. The agent read all 5 guides and three calls failed on spellings (`sizing: "auto"`, `align: "stretch"`, `content` instead of `text`) and on re-declared `const` names - Core guides moved into the cached system prompt; `normaliseInput` maps common CSS/Figma spellings; top-level `const`/`let` run as `var` - Measure agent runs end to end and read the failed calls: most agent slowness is avoidable round-trips, not model speed.
+
 [2026-11-19] - Launched the dev app from the sandboxed Bash tool to test agent cursors; the UI worked but the core never wrote `runtime/core.json`, so no MCP/CLI client could connect - The sandbox blocks creating Windows named pipes (`listen EACCES`); relaunched the dev app outside the sandbox - When the core socket is missing in a dev run, check the launcher's sandbox before suspecting the code.
 
 [2026-11-19] - Told agy "don't read files or run commands" to make it faster; it then failed every `execute` (return outside a function, guessing globals), because agy learns MCP tool descriptions by reading its schema files, not from context - Put the tool list + EXECUTE_API_DOC directly in the agy prompt: one `execute`, ~100 s instead of 356 s - Before restricting an agent's behaviour, find out what that behaviour gives it. Verify every prompt change with a live run.

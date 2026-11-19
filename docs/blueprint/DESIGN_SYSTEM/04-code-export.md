@@ -28,11 +28,22 @@ Names: `color/surface` → `--color-surface`, `space/4` → `--spacing-4`, `radi
 | Frame with layout | `display:flex`, direction, gap, padding, align/justify |
 | `hug` / `fill` / `fixed` | `width:auto` / `flex:1 1 0` + `align-self:stretch` / px |
 | Text sizing | `white-space:nowrap` (auto-width) / normal |
-| Variables | `var(--…)` |
-| Images | Copied to `assets/` |
+| Variables | `var(--…)` (once properties bind to variables — Phase 7) |
+| Images | Copied to `<stem>-assets/` (inlined as data URLs for the PDF page) |
+| Polygon / path | Inline `<svg>` from the SVG exporter |
+| Strokes, shadows | `box-shadow` (inset for inside strokes) — no layout shift |
+| Other parents | `position: absolute` + `left` / `top` |
+| Web page node | `<iframe>` |
 | Code frame | Not exported (already code) |
 
-One static page per top-level frame; CSS in one file; output passes the HTML importer round-trip test.
+Code: `packages/formats/src/export/html.ts` builds one element tree and prints it two ways:
+
+| Style | Output |
+|---|---|
+| `css` | `<stem>.html` + `<stem>.css` (one class per layer, slugged from its name) + assets |
+| `tailwind` | One `<stem>.html` with Tailwind v4 classes (`tailwind.ts` maps each declaration; arbitrary values otherwise) and the Tailwind browser script |
+
+Non-system fonts load from Google Fonts. Output passes the HTML importer round-trip test once that importer exists (Phase 9).
 
 ---
 

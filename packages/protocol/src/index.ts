@@ -3,6 +3,7 @@ import type { BrowserCommand, BrowserReply } from './browser';
 import type { McpImportCandidate, McpImportSource, McpServer, McpServerInput, McpTestResult, SkillsOverview, Skill } from './settings';
 
 export * from './agent-docs';
+export * from './design-guides';
 export * from './browser';
 export * from './settings';
 
@@ -10,6 +11,9 @@ export * from './settings';
  * One protocol for every client: renderer (MessagePort), CLI / MCP (socket).
  * Blueprint ARCHITECTURE/02.
  * ------------------------------------------------------------------------- */
+
+/** svg / html / tailwind are written by the core; png / jpg are rendered by the renderer; pdf is printed by main. */
+export type ExportFormat = 'png' | 'jpg' | 'svg' | 'html' | 'tailwind';
 
 export type ClientKind = 'renderer' | 'cli' | 'mcp';
 /** runId: set by an `archa mcp` that a launched chat run started (ARCHA_RUN_ID), so its activity is not shown twice. */
@@ -58,10 +62,19 @@ export interface CoreMethods {
   'agent.browser': { params: BrowserCommand; result: BrowserReply };
   // App
   'app.info': { params: void; result: AppInfo };
-  'export.save': { params: { docId: string; nodeId: string; format: 'svg' | 'png'; path: string; png?: string }; result: { path: string } };
+  /** html / tailwind also write a CSS file and image assets next to `path`; png / jpg arrive rendered by the renderer as base64. */
+  'export.save': { params: { docId: string; nodeId: string; format: ExportFormat; path: string; image?: string }; result: { files: string[] } };
+  /** Self-contained HTML page of a node (CSS inlined, images embedded) — main prints it to PDF. */
+  'export.page': { params: { docId: string; nodeId: string }; result: { html: string; width: number; height: number } };
   // Chat: launch a local agent CLI on this document (blueprint AGENT_BRIDGE/03)
   /** No threadId = start a new conversation. */
-  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string }; result: { runId: string; threadId: string; persona: string } };
+  /**
+   * `now` stops the thread's running turn and runs this message next; otherwise a busy thread queues it.
+   * `focus` = node ids the request is about (the composer's selection chip).
+   */
+  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string; now?: boolean; focus?: string[] }; result: { runId: string; threadId: string; persona: string; queued?: boolean } };
+  /** Start (or keep) the agent process for a thread before the person sends, so the first turn starts at once. No threadId = a fresh thread id is reserved and returned. */
+  'chat.warm': { params: { docId: string; agent: string; model?: string; account?: string; threadId?: string }; result: { threadId: string; warm: boolean } };
   'chat.stop': { params: { runId: string }; result: void };
   /** Runs still working, so a reloaded window shows every parallel session. */
   'chat.runs': { params: void; result: ChatRunEvent[] };

@@ -3,6 +3,7 @@ import {
   applyOps, DocumentError, findEmptySpace, insertOpsFor, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, subtreeInput, syncInstanceOps,
   type ArchaDocument, type DocumentSession,
 } from '@archa/core';
+import { iconKey, iconPath, searchIcons } from '@archa/core/icons';
 import { colorToHex, hexToColor, isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
 import type { ExecuteResult, TrailAction, TrailStep } from '@archa/protocol';
 import type { Connection, Workspace } from './workspace';
@@ -35,6 +36,8 @@ var fromLibrary = (ref, parent, opts) => __call('fromLibrary', [ref, parent, opt
 var variables = () => __call('variables', []);
 var setVariable = (name, value) => __call('setVariable', [name, value]);
 var resolveComment = (id) => __call('resolveComment', [id]);
+var icon = (name, parent, opts) => __call('icon', [name, parent, opts || {}]);
+var icons = (query) => __call('icons', [query]);
 var print = (...v) => __call('print', [v.map((x) => typeof x === 'string' ? x : JSON.stringify(x))]);
 var find = (visitor, opts) => {
   if (!opts || !opts.under) throw new Error('find() needs { under: <frame id or name> } — use get_state for the page overview');
@@ -94,7 +97,8 @@ export class AgentExecutor {
     const page = session.doc.pages[0]!;
     this.state = { working: session.doc.clone(), ops: [], created: [], changed: new Map(), output: [], shots: [], pageRoot: page.rootId, selection: this.ws.selection.get(session.id) ?? [], steps: [] };
     ctx.runtime.setInterruptHandler(shouldInterruptAfterDeadline(Date.now() + 5000));
-    const result = ctx.evalCode(code, 'snippet.js');
+    // Agents re-declare the same names every call; as `var` they persist and never collide.
+    const result = ctx.evalCode(code.replace(/(^|[;{}\n]\s*|\(\s*)(?:const|let)\s+(?=[A-Za-z_$[{])/g, '$1var '), 'snippet.js');
 
     if (result.error) {
       const err = ctx.dump(result.error) as { message?: string; stack?: string } | string;
@@ -113,6 +117,9 @@ export class AgentExecutor {
     result.value.dispose();
     if (editId) this.failed.delete(editId);
 
+    const fixed = autoFix(this.state.working!, this.state.created);
+    if (fixed.ops.length) { this.state.ops.push(...fixed.ops); this.state.output.push(...fixed.notes); }
+
     let revision = session.revision;
     const touched = new Set<string>([...this.state.created.map((c) => c.id), ...this.state.changed.keys()]);
     if (this.state.ops.length) {
@@ -128,6 +135,11 @@ export class AgentExecutor {
     this.ws.trail(this.conn, session.id, finishTrail(session.doc, this.state.steps));
 
     const screenshots: Extract<ExecuteResult, { ok: true }>['screenshots'] = [];
+    // Every building call shows its result, so the agent checks it without another round-trip.
+    if (!this.state.shots.length) {
+      const auto = autoShotTarget(session.doc, this.state.created.map((c) => c.id), [...this.state.changed.keys()]);
+      if (auto) this.state.shots.push({ id: auto, scale: 1 });
+    }
     for (const s of this.state.shots) {
       if (!session.doc.get(s.id)) continue;
       screenshots.push(await this.ws.screenshot(this.conn, session.id, s.id, s.scale));
@@ -176,7 +188,12 @@ export class AgentExecutor {
       case 'update': {
         const [r, patch] = args as [string, Record<string, unknown>];
         const id = ref(r);
-        const norm = normaliseInput({ ...patch, type: doc.require(id).type });
+        // Partial sizing / padding patches keep the node's other values.
+        const cur = doc.require(id) as Node & { padding?: Record<string, number> };
+        const merged: Record<string, unknown> = { ...patch };
+        if (patch.sizing && typeof patch.sizing === 'object') merged.sizing = { ...cur.sizing, ...(patch.sizing as object) };
+        if (patch.padding && typeof patch.padding === 'object' && !Array.isArray(patch.padding) && cur.padding) merged.padding = { ...cur.padding, ...(patch.padding as object) };
+        const norm = normaliseInput({ ...merged, type: cur.type });
         delete norm.type;
         if (!('name' in patch)) delete norm.name;
         commit([{ op: 'update', id, patch: norm }]);
@@ -307,6 +324,28 @@ export class AgentExecutor {
         st.changed.set(`comment:${c.id}`, 'comment');
         return null;
       }
+      case 'icon': {
+        const [nameArg, parent, opts = {}] = args as [string, string | null | undefined, { size?: number; color?: string; strokeWidth?: number; index?: number; x?: number; y?: number; name?: string }];
+        const d = iconPath(String(nameArg ?? ''));
+        if (!d) {
+          const near = searchIcons(String(nameArg ?? ''), 8);
+          throw new Error(`No icon "${String(nameArg)}"${near.length ? ` — did you mean ${near.join(', ')}?` : ' — lucide has no brand logos; use a neutral icon (globe, mail, link, at-sign, message-circle) or a short text label. icons("query") lists names'}`);
+        }
+        const parentId = parent ? ref(parent) : st.pageRoot;
+        const size = Number(opts.size) > 0 ? Number(opts.size) : 20;
+        const input = {
+          type: 'path', name: opts.name ?? `Icon ${iconKey(String(nameArg))}`, d, viewBox: { x: 0, y: 0, width: 24, height: 24 }, width: size, height: size,
+          fills: [], strokes: [{ color: opts.color ?? inkFor(doc, parentId), width: ((Number(opts.strokeWidth) || 2) * size) / 24, align: 'center' }],
+          lineCap: 'round', lineJoin: 'round', ...(opts.x !== undefined ? { x: opts.x } : {}), ...(opts.y !== undefined ? { y: opts.y } : {}),
+        } as NodeInput;
+        const { ops, rootId, created } = insertOpsFor(input, parentId, opts.index ?? undefined);
+        commit(ops);
+        st.created.push(...created);
+        step('create', rootId);
+        return rootId;
+      }
+      case 'icons':
+        return searchIcons(String(args[0] ?? ''), 30);
       case 'print':
         st.output.push((args[0] as string[]).join(' '));
         return null;
@@ -327,6 +366,47 @@ function finishTrail(doc: ArchaDocument, steps: TrailStep[]): TrailStep[] {
   const keep = out.filter((s) => s.action !== 'read');
   const list = keep.length ? keep : out;
   return list.length <= MAX ? list : Array.from({ length: MAX }, (_, i) => list[Math.round((i * (list.length - 1)) / (MAX - 1))]!);
+}
+
+/** Readable ink for content placed in `parentId`: light on dark fills (or the dark page), dark on light. */
+function inkFor(doc: ArchaDocument, parentId: string): string {
+  for (let n = doc.get(parentId); n; n = n.parentId ? doc.get(n.parentId) : undefined) {
+    const fill = 'fills' in n ? n.fills.filter((f) => f.visible && f.color.a > 0.3).at(-1) : undefined;
+    if (fill) return fill.color.l < 0.6 ? '#f4f4f5' : '#18181b';
+  }
+  return '#d4d4d8';
+}
+
+/** Mechanical fixes applied before the transaction instead of bouncing them back as lint issues. */
+function autoFix(doc: ArchaDocument, created: Array<{ id: string; name: string }>): { ops: Op[]; notes: string[] } {
+  const ops: Op[] = [];
+  const names: string[] = [];
+  for (const c of created) {
+    const n = doc.get(c.id);
+    if (n?.type !== 'text' || n.fills.some((f) => f.visible) || !n.parentId) continue;
+    const op: Op = { op: 'update', id: n.id, patch: { fills: [{ type: 'solid', color: hexToColor(inkFor(doc, n.parentId)), visible: true }] } };
+    applyOps(doc, [op]);
+    ops.push(op);
+    names.push(n.name);
+  }
+  return { ops, notes: names.length ? [`Auto-fixed: ${names.length} text node${names.length === 1 ? '' : 's'} had no fill and got a readable ink (${names.slice(0, 4).join(', ')}${names.length > 4 ? '…' : ''}). Set fills yourself next time.`] : [] };
+}
+
+/** What to show after a call that asked for no screenshot: the first new subtree (or the frame around a small one), else the screen that changed. */
+function autoShotTarget(doc: ArchaDocument, created: string[], changed: string[]): string | null {
+  const made = new Set(created);
+  const root = created.find((id) => { const n = doc.get(id); return n && !(n.parentId && made.has(n.parentId)); });
+  const start = root ?? changed.find((id) => doc.get(id));
+  if (!start) return null;
+  let target = doc.get(start)!;
+  // A small piece (a button, an icon) is judged in context: climb to its frame, up to the top-level screen.
+  while ((root === undefined || Math.max(target.width, target.height) < 240) && target.parentId) {
+    const p = doc.get(target.parentId);
+    if (!p || p.type === 'page') break;
+    target = p;
+    if (root !== undefined && Math.max(target.width, target.height) >= 240) break;
+  }
+  return target.type === 'page' ? null : target.id;
 }
 
 function resolveIn(doc: ArchaDocument, r: string): string {

@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BROWSER_TOOL_DOC, browserInputShape, EXECUTE_API_DOC, type ExecuteResult, type RpcClient } from '@archa/protocol';
+import { BROWSER_TOOL_DOC, browserInputShape, EXECUTE_API_DOC, GUIDE_INDEX, guideText, type ExecuteResult, type RpcClient } from '@archa/protocol';
 import { connectCore } from './connect';
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
@@ -39,6 +39,13 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
       edits: z.array(z.object({ find: z.string(), replace: z.string() })).optional(),
     },
   }, (args) => guard(async (c) => formatExecute(await c.call('agent.execute', { docId, ...args }))));
+
+  // ArchaDev's internal skill: short design guides, answered locally (no app round-trip).
+  server.registerTool('read_guide', {
+    description: `Built-in ArchaDev design guide for a topic. Read the one that fits the task before designing. Topics:
+${GUIDE_INDEX}`,
+    inputSchema: { topic: z.string().describe('Topic name from the list') },
+  }, async ({ topic }) => ({ content: [{ type: 'text' as const, text: guideText(topic) }] }));
 
   server.registerTool('screenshot', {
     description: 'PNG of a node (id or unique name). Says "unchanged" if it did not change since your last screenshot of it.',

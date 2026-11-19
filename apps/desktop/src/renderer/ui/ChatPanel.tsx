@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowUp, Copy, FileText, Hexagon, History, Loader2, Settings, Sparkles, Square, SquarePen, UserRound, Wrench } from 'lucide-react';
+import { ArrowUp, Copy, Crosshair, FileText, Hexagon, History, Loader2, Settings, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
 import { chatThreads, threadOf, type ModelOption } from '@archa/protocol';
 import { runOfThread, select, toast, useStore } from '../lib/store';
 import { personaBg } from './persona';
@@ -191,6 +191,14 @@ export function ChatComposer() {
   const [sending, setSending] = useState(false);
   const accounts = useStore((s) => s.accounts?.accounts);
   const input = useRef<HTMLTextAreaElement>(null);
+  // Selection chip: what is selected when sending is what the request is about (unless dismissed).
+  const selection = useStore((s) => s.selection);
+  const doc = useStore((s) => s.doc);
+  const [focusOff, setFocusOff] = useState<string>('');
+  const selKey = selection.join(',');
+  const focusNodes = selKey && focusOff !== selKey ? selection.map((id) => doc?.get(id)).filter((n) => !!n).slice(0, 12) : [];
+  // A thread id reserved by pre-warming a new chat, used by its first Send.
+  const reserved = useRef<string | null>(null);
 
   const setAgent = (a: string) => {
     setAgentState(a);
@@ -249,11 +257,23 @@ export function ChatComposer() {
     ...agentAccounts.map((a) => ({ value: a.id, label: a.email || a.name, note: a.signedIn ? undefined : 'Signed out', description: a.plan || undefined })),
   ];
 
-  const send = async () => {
-    if (!client || !docId || !prompt.trim() || running || sending || !available?.available) return;
+  // Start the agent process while the person types, so Send begins at once (warm sessions, plan CHAT_AGENT).
+  const warm = () => {
+    if (!client || !docId || !available?.available) return;
+    const threadId = thread ?? reserved.current ?? undefined;
+    client.call('chat.warm', { docId, agent, model: model || undefined, account: account || undefined, threadId })
+      .then((r) => { if (!thread) reserved.current = r.threadId; })
+      .catch(() => { /* warming is best-effort; Send still starts the agent */ });
+  };
+  useEffect(() => { reserved.current = null; }, [docId, agent, model, account]);
+
+  const send = async (now = false) => {
+    if (!client || !docId || !prompt.trim() || sending || !available?.available) return;
     setSending(true);
     try {
-      const r = await client.call('chat.send', { docId, agent, model: model || undefined, account: account || undefined, prompt: prompt.trim(), threadId: thread ?? undefined });
+      const threadId = thread ?? reserved.current ?? undefined;
+      const r = await client.call('chat.send', { docId, agent, model: model || undefined, account: account || undefined, prompt: prompt.trim(), threadId, now: running ? now : undefined, focus: focusNodes.map((n) => n.id) });
+      reserved.current = null;
       useStore.setState({ chatDraft: '', chatThread: r.threadId });
     } catch (e) {
       toast((e as Error).message, 'error');
@@ -266,17 +286,28 @@ export function ChatComposer() {
   return (
     <div className="shrink-0 rounded-2xl border border-line bg-panel p-2 transition-colors focus-within:border-accent/60">
       <div className="flex items-center gap-1.5 px-1 pb-1">
-        <span title="The agent works on this document" className="flex h-6 max-w-[200px] items-center gap-1 rounded-md border border-line px-1.5 text-[11px] text-fg-muted">
+        <span title="The agent works on this document" className="flex h-6 max-w-[140px] shrink-0 items-center gap-1 rounded-md border border-line px-1.5 text-[11px] text-fg-muted">
           <FileText size={11} className="shrink-0" /><span className="truncate">{docName ?? 'Canvas'}</span>
         </span>
+        {focusNodes.length > 0 && (
+          <span title={`The request is about: ${focusNodes.map((n) => n.name).join(', ')}`} className="flex h-6 min-w-0 items-center gap-1 rounded-md border border-accent/40 bg-accent-soft pl-1.5 text-[11px] text-accent-fg">
+            <Crosshair size={11} className="shrink-0" />
+            <span className="truncate">{focusNodes.length === 1 ? focusNodes[0]!.name : `${focusNodes[0]!.name} +${focusNodes.length - 1}`}</span>
+            <button title="Don't send the selection" onClick={() => setFocusOff(selKey)} className="flex h-6 w-5 shrink-0 items-center justify-center hover:text-fg"><X size={11} /></button>
+          </span>
+        )}
       </div>
-      <textarea ref={input} value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} placeholder={running ? `${running.persona} is working — stop it, or start a New chat to run another session in parallel` : 'Describe what to design…'}
-        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
+      <textarea ref={input} value={prompt} onChange={(e) => setPrompt(e.target.value)} onFocus={warm} rows={3}
+        placeholder={running ? `${running.persona} is working — Enter queues a follow-up, Ctrl+Enter sends it now` : 'Describe what to design…'}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(e.ctrlKey || e.metaKey); } }}
         className="block w-full resize-none bg-transparent px-1.5 py-1 text-[12.5px] leading-relaxed placeholder:text-fg-subtle" />
       <div className="flex items-center gap-0.5">
         <Dropdown className="max-w-[45%] shrink-0" value={agent} options={agentOptions} onChange={setAgent} header="Agent" title="Agent that runs this prompt" menuWidth={250} />
         <Dropdown className="flex-1" value={model} options={modelOptions} onChange={setModel} header={models?.source ?? 'Model'} loading={loadingModels} title="Model" menuWidth={260} />
-        {running ? (
+        {running && prompt.trim() ? (
+          <button title={`Send now — stops ${running.persona}'s current turn (Ctrl+Enter). Enter queues instead.`} disabled={!canSend} onClick={() => void send(true)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-agent text-fg shadow-lg shadow-agent/30"><Zap size={14} /></button>
+        ) : running ? (
           <button title={`Stop ${running.persona}`} onClick={() => void client?.call('chat.stop', { runId: running.runId })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-agent/20 text-agent ring-1 ring-agent/40 hover:bg-agent/30"><Square size={11} fill="currentColor" strokeWidth={0} /></button>
         ) : (
           <button title="Send (Enter)" disabled={!canSend} onClick={() => void send()}

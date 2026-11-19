@@ -31,9 +31,42 @@ export function normaliseInput(input: Record<string, unknown>): Record<string, u
   }
   if (typeof out.fill === 'string') { out.fills = [normalisePaint(out.fill, 'fills')]; delete out.fill; }
   if (typeof out.padding === 'number') { const p = out.padding; out.padding = { top: p, right: p, bottom: p, left: p }; }
+  if (Array.isArray(out.padding) && out.padding.every((v) => typeof v === 'number')) {
+    const [t = 0, r = t, b = t, l = r] = out.padding as number[];
+    out.padding = { top: t, right: r, bottom: b, left: l };
+  }
   if (typeof out.sizing === 'string') out.sizing = { horizontal: out.sizing, vertical: out.sizing };
+  if (out.sizing && typeof out.sizing === 'object') {
+    const s = out.sizing as Record<string, unknown>;
+    // A missing axis stays fixed (updates merge with the node's own sizing first, in execute).
+    out.sizing = { horizontal: alias(SIZING, s.horizontal ?? 'fixed'), vertical: alias(SIZING, s.vertical ?? 'fixed') };
+  }
+  if (out.padding && typeof out.padding === 'object' && !Array.isArray(out.padding)) {
+    const p = out.padding as Record<string, number | undefined>;
+    out.padding = { top: p.top ?? p.y ?? 0, right: p.right ?? p.x ?? 0, bottom: p.bottom ?? p.y ?? 0, left: p.left ?? p.x ?? 0 };
+  }
+  if (out.align !== undefined) out.align = alias(ALIGN, out.align);
+  if (out.justify !== undefined) out.justify = alias(JUSTIFY, out.justify);
+  if (out.layout !== undefined) out.layout = alias(LAYOUT, out.layout);
+  if (out.textAlign !== undefined) out.textAlign = alias(TEXT_ALIGN, out.textAlign);
+  if (out.textSizing !== undefined) out.textSizing = alias(TEXT_SIZING, out.textSizing);
+  if (typeof out.fontWeight === 'string') out.fontWeight = WEIGHT[out.fontWeight.toLowerCase()] ?? (Number(out.fontWeight) || out.fontWeight);
+  // Text content under the names other tools use.
+  if ((out.type === 'text' || out.type === 'sticky') && out.text === undefined) {
+    for (const k of ['content', 'characters', 'value', 'label']) if (typeof out[k] === 'string') { out.text = out[k]; delete out[k]; break; }
+  }
   return out;
 }
+
+/* Spellings agents carry over from CSS, Figma or other tools → the schema's words. */
+const SIZING: Record<string, string> = { 'auto-height': 'hug', 'auto-width': 'hug', auto: 'hug', content: 'hug', fit: 'hug', 'fit-content': 'hug', 'hug-contents': 'hug', wrap: 'hug', stretch: 'fill', full: 'fill', 'fill-container': 'fill', '100%': 'fill', expand: 'fill', fixed: 'fixed' };
+const ALIGN: Record<string, string> = { 'flex-start': 'start', left: 'start', top: 'start', middle: 'center', 'flex-end': 'end', right: 'end', bottom: 'end', stretch: 'start', baseline: 'center' };
+const JUSTIFY: Record<string, string> = { 'flex-start': 'start', left: 'start', top: 'start', middle: 'center', 'flex-end': 'end', right: 'end', bottom: 'end', between: 'space-between', 'space-around': 'space-between', 'space-evenly': 'space-between' };
+const LAYOUT: Record<string, string> = { horizontal: 'row', vertical: 'column', col: 'column', flex: 'row', stack: 'column', vstack: 'column', hstack: 'row', absolute: 'none' };
+const TEXT_ALIGN: Record<string, string> = { start: 'left', end: 'right', middle: 'center' };
+const TEXT_SIZING: Record<string, string> = { auto: 'auto-width', hug: 'auto-width', 'width-auto': 'auto-width', autowidth: 'auto-width', wrap: 'auto-height', fill: 'auto-height', 'height-auto': 'auto-height', autoheight: 'auto-height', 'fixed-width': 'auto-height', none: 'fixed' };
+const WEIGHT: Record<string, number> = { thin: 100, extralight: 200, light: 300, normal: 400, regular: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900 };
+const alias = (map: Record<string, string>, v: unknown) => (typeof v === 'string' ? map[v.toLowerCase()] ?? v : v);
 
 function normalisePaint(p: unknown, key: 'fills' | 'strokes' | 'effects'): unknown {
   if (typeof p === 'string') {

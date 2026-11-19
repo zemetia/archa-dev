@@ -60,6 +60,7 @@ describe('execute trail', () => {
     const ui = fakeChannel();
     ws.attach(ui.channel, { kind: 'renderer', name: 'window' });
     const agent = ws.attach(fakeChannel().channel, { kind: 'mcp', name: 'claude', agentId: 'claude' });
+    ws.requestRender = async () => ({ png: 'AAAA' });
     const docId = ws.summaries()[0]!.id;
     const code = `
       card = insert(null, { type: 'frame', name: 'Card', x: 0, y: 0, width: 200, height: 100, children: [{ type: 'text', name: 'Title', text: 'Hi' }] });
@@ -100,7 +101,9 @@ describe('parallel chat sessions', () => {
     const two = ws.chat.send(docId, 'fake', 'second');
     expect(one.threadId).not.toBe(two.threadId);
     expect(one.persona).not.toBe(two.persona);
-    expect(() => ws.chat.send(docId, 'fake', 'again', undefined, undefined, one.threadId)).toThrow(/still working/);
+    // A second message to a working thread waits for its turn instead of being refused.
+    const queued = ws.chat.send(docId, 'fake', 'again', undefined, undefined, one.threadId);
+    expect(queued).toMatchObject({ queued: true, threadId: one.threadId, persona: one.persona });
     expect(ws.chat.active().map((r) => r.persona).sort()).toEqual([one.persona, two.persona].sort());
 
     // The `archa mcp` a run starts works under that run's name.
@@ -108,7 +111,7 @@ describe('parallel chat sessions', () => {
     expect(conn.author).toMatchObject({ kind: 'agent', name: one.persona });
     expect(conn.threadId).toBe(one.threadId);
     const messages = ws.chat.list(docId).filter((m) => m.role === 'user');
-    expect(messages.map((m) => m.persona)).toEqual([one.persona, two.persona]);
+    expect(messages.map((m) => m.persona)).toEqual([one.persona, two.persona, one.persona]);
 
     const stopped = (runId: string) => new Promise<void>((resolve) => {
       const check = setInterval(() => {
@@ -118,6 +121,11 @@ describe('parallel chat sessions', () => {
     ws.chat.stop(one.runId);
     ws.chat.stop(two.runId);
     await Promise.all([stopped(one.runId), stopped(two.runId)]);
+    // The queued message started as soon as its thread was free.
+    const next = ws.chat.active().find((r) => r.threadId === one.threadId)!;
+    expect(next.persona).toBe(one.persona);
+    ws.chat.stop(next.runId);
+    await stopped(next.runId);
     expect(ws.chat.active()).toEqual([]);
 
     // A later turn in the same thread keeps the name.

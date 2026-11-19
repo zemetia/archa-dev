@@ -37,7 +37,10 @@ function parseNode(raw: unknown): Node {
   const issue = r.error.issues[0];
   const path = issue?.path.join('.') || '(root)';
   const name = (raw as { name?: string })?.name ?? '?';
-  throw new DocumentError('VALIDATION', `"${name}".${path} — ${issue?.message ?? 'invalid'}`, { path, issues: r.error.issues });
+  // Say what was sent: the agent fixes the value in one patch instead of guessing.
+  const got = issue?.path.reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Record<PropertyKey, unknown>)[k as PropertyKey] : undefined), raw);
+  const sent = got === undefined ? '' : ` (got ${JSON.stringify(got)?.slice(0, 60)})`;
+  throw new DocumentError('VALIDATION', `"${name}".${path} — ${issue?.message ?? 'invalid'}${sent}`, { path, issues: r.error.issues });
 }
 
 function applyOne(doc: ArchaDocument, op: Op, touched: Set<string>): Op[] {

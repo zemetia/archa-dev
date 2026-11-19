@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('archa', {
   showOpenDialog: (): Promise<string | null> => ipcRenderer.invoke('dialog:open'),
   showSaveDialog: (suggested: string): Promise<string | null> => ipcRenderer.invoke('dialog:save', suggested),
   showExportDialog: (suggested: string, ext: string): Promise<string | null> => ipcRenderer.invoke('dialog:export', suggested, ext),
+  /** Prints a self-contained HTML page to a one-page PDF; resolves to an error message or null. */
+  exportPdf: (args: { html: string; width: number; height: number; path: string }): Promise<string | null> => ipcRenderer.invoke('export:pdf', args),
   pickFolder: (title: string): Promise<string | null> => ipcRenderer.invoke('dialog:folder', title),
   openFolder: (path: string): Promise<string> => ipcRenderer.invoke('shell:open-path', path),
   onOpenIntent: (cb: (intent: { kind: string; path?: string }) => void) => {

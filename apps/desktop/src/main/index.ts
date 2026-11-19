@@ -1,9 +1,10 @@
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 import { app, BrowserWindow, dialog, ipcMain, MessageChannelMain, shell, utilityProcess, type UtilityProcess } from 'electron';
 import { z } from 'zod';
 import { browserCommandSchema, type MainBridgeResponse } from '@archa/protocol';
 import { BrowserManager } from './browser';
+import { printHtmlToPdf } from './pdf';
 
 /* Main process: windows, argv, dialogs, core host lifecycle. Holds no document state (blueprint ARCHITECTURE/01). */
 
@@ -191,6 +192,12 @@ if (!app.requestSingleInstanceLock()) {
       const win = BrowserWindow.fromWebContents(e.sender)!;
       const r = await dialog.showSaveDialog(win, { defaultPath: suggested, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
       return r.canceled ? null : r.filePath;
+    });
+    const pdfArgs = z.object({ html: z.string().max(200_000_000), width: z.number().positive().max(20_000), height: z.number().positive().max(20_000), path: z.string().min(1).max(4096) });
+    ipcMain.handle('export:pdf', async (_e, args: unknown) => {
+      const a = pdfArgs.safeParse(args);
+      if (!a.success || !isAbsolute(a.data.path)) return 'Invalid PDF export request';
+      try { await printHtmlToPdf(a.data.html, a.data.width, a.data.height, a.data.path); return null; } catch (err) { return (err as Error).message; }
     });
     ipcMain.handle('dialog:folder', async (e, title: string) => {
       const win = BrowserWindow.fromWebContents(e.sender)!;

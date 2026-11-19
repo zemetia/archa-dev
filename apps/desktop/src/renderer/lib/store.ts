@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, threadOf, type AccountsOverview, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, threadOf, type AccountsOverview, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
-import { renderNodePng } from '@archa/render';
+import { renderNodeImage, renderNodePng } from '@archa/render';
 import { onChatRun } from './comments';
 import { pushTrail, type AgentCursor } from '../canvas/cursors';
 
@@ -354,14 +354,38 @@ export async function closeDoc(docId: string) {
   await client?.call('doc.close', { docId });
 }
 
-export async function exportNode(nodeId: string, format: 'png' | 'svg') {
+export type ExportKind = ExportFormat | 'pdf';
+export const EXPORT_KINDS: Array<{ value: ExportKind; label: string; ext: string }> = [
+  { value: 'png', label: 'PNG', ext: 'png' },
+  { value: 'jpg', label: 'JPG', ext: 'jpg' },
+  { value: 'svg', label: 'SVG', ext: 'svg' },
+  { value: 'pdf', label: 'PDF', ext: 'pdf' },
+  { value: 'html', label: 'HTML + CSS', ext: 'html' },
+  { value: 'tailwind', label: 'HTML + Tailwind', ext: 'html' },
+];
+
+/** Export a node (blueprint RENDERING/03): rasters render here, PDF prints in main, the rest is written by the core. */
+export async function exportNode(nodeId: string, kind: ExportKind, scale = 2) {
   const { client, doc, activeDocId } = get();
   if (!client || !doc || !activeDocId) return;
   const node = doc.get(nodeId);
-  if (!node) return;
-  const path = await window.archa.showExportDialog(`${node.name}.${format}`, format);
+  const spec = EXPORT_KINDS.find((k) => k.value === kind);
+  if (!node || !spec) return;
+  const suffix = (kind === 'png' || kind === 'jpg') && scale !== 1 ? `@${scale}x` : '';
+  const path = await window.archa.showExportDialog(`${node.name}${suffix}.${spec.ext}`, spec.ext);
   if (!path) return;
-  const png = format === 'png' ? await renderNodePng(doc, nodeId, 2) : undefined;
-  await client.call('export.save', { docId: activeDocId, nodeId, format, path, png });
-  toast(`Exported ${format.toUpperCase()}`);
+  try {
+    if (kind === 'pdf') {
+      const page = await client.call('export.page', { docId: activeDocId, nodeId });
+      const err = await window.archa.exportPdf({ ...page, path });
+      if (err) throw new Error(err);
+      toast('Exported PDF');
+      return;
+    }
+    const image = kind === 'png' || kind === 'jpg' ? await renderNodeImage(doc, nodeId, scale, kind === 'png' ? 'png' : 'jpeg') : undefined;
+    const { files } = await client.call('export.save', { docId: activeDocId, nodeId, format: kind, path, image });
+    toast(files.length > 1 ? `Exported ${spec.label} (${files.length} files)` : `Exported ${spec.label}`);
+  } catch (e) {
+    toast(`Export failed: ${(e as Error).message}`, 'error');
+  }
 }

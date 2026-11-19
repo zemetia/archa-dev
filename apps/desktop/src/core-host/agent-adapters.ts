@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
-import { DESIGNER_PROMPT, EXECUTE_API_DOC, type ModelOption } from '@archa/protocol';
+import { CORE_GUIDES, DESIGNER_PROMPT, EXECUTE_API_DOC, GUIDE_INDEX, type ModelOption } from '@archa/protocol';
 
 /*
  * Launch-mode adapters (blueprint AGENT_BRIDGE/01-02), ported from Gungnir's remediate/ package.
@@ -26,6 +26,18 @@ export type BuildInput = {
 };
 export type Built = { args: string[]; stdin?: string };
 
+/**
+ * A persistent process per chat thread that reads one NDJSON message per turn (stream-json input),
+ * so follow-ups skip the CLI and MCP start-up (plan CHAT_AGENT, D-11 A).
+ */
+export type WarmMode = {
+  args: (o: Omit<BuildInput, 'prompt'>) => string[];
+  /** `first` = first message this process gets; `resumed` = it continues an earlier CLI session. */
+  message: (text: string, ctx: { first: boolean; resumed: boolean }) => string;
+  /** Stops the running turn but keeps the process (and its session) alive. */
+  interrupt?: () => string;
+};
+
 /** What a stream line means for the chat. `delta` is in-progress text; `text` is a finished message. */
 export type AgentEvent =
   | { kind: 'session'; id: string }
@@ -33,7 +45,9 @@ export type AgentEvent =
   | { kind: 'text'; text: string }
   | { kind: 'tool'; text: string }
   | { kind: 'error'; text: string }
-  | { kind: 'final'; text: string };
+  | { kind: 'final'; text: string }
+  /** End of one turn in a warm process; `costUsd` is the session total so far when the CLI reports it. */
+  | { kind: 'turn'; ok: boolean; costUsd?: number };
 
 export interface StreamParser { line(line: string): AgentEvent[] }
 
@@ -47,11 +61,12 @@ export type Adapter = {
    */
   prepare?: (bin: string, mcp: McpCommand) => Promise<void>;
   build: (o: BuildInput) => Built;
+  warm?: WarmMode;
   parser: () => StreamParser;
   models: (bin: string | null, env: Record<string, string>) => Promise<{ models: ModelOption[]; source: string }>;
 };
 
-export const MCP_TOOLS = ['get_state', 'execute', 'screenshot', 'export_svg', 'say', 'browser'];
+export const MCP_TOOLS = ['get_state', 'execute', 'screenshot', 'export_svg', 'say', 'browser', 'read_guide'];
 /** Windows caps a command line near 32 KiB. */
 const MAX_ARG_PROMPT = 28_000;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/[\]@+-]{0,127}$/;
@@ -196,6 +211,9 @@ function claudeParser(): StreamParser {
         if (ev.is_error) {
           if (!failed) out.push({ kind: 'error', text: clip(String(ev.result ?? (Array.isArray(ev.errors) ? ev.errors.join('\n') : '') ?? 'Agent run failed')) });
         } else if (typeof ev.result === 'string') out.push({ kind: 'final', text: ev.result });
+        out.push({ kind: 'turn', ok: !ev.is_error && !failed, ...(typeof ev.total_cost_usd === 'number' ? { costUsd: ev.total_cost_usd } : {}) });
+        failed = false;
+        live = '';
       }
       return out;
     },
@@ -234,6 +252,8 @@ function agyParser(): StreamParser {
         const r = (ev.result ?? {}) as { status?: string; response?: string; error?: string };
         if (r.status && r.status !== 'SUCCESS') out.push({ kind: 'error', text: clip(r.error || `Antigravity run ended: ${r.status}`) });
         else if (r.response) out.push({ kind: 'final', text: r.response });
+        out.push({ kind: 'turn', ok: !r.status || r.status === 'SUCCESS' });
+        text.clear();
       }
       return out;
     },
@@ -304,10 +324,33 @@ const toml = (v: unknown) => JSON.stringify(v); // JSON strings/arrays are valid
  * agy does not put MCP tool descriptions in the model's context: it reads them from schema files,
  * which costs minutes of shell/file probing per run. Hand it the tools and the execute API up front.
  */
-const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, screenshot { node }, export_svg { node }, say { text }. The canvas state is at the end of this message, so start designing right away; nothing outside the canvas is needed (no shell, files or browsing).
+const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, screenshot { node }, export_svg { node }, say { text }, read_guide { topic }. The canvas state is at the end of this message, so start designing right away; nothing outside the canvas is needed (no shell, files or browsing).
 
 execute tool documentation:
 ${EXECUTE_API_DOC}`;
+
+/**
+ * Claude design runs replace Claude Code's coding system prompt with ours and switch its built-in
+ * tools off: about a tenth of the context per step, and nothing to tempt it away from the canvas.
+ */
+export const CLAUDE_DESIGN_SYSTEM = `${DESIGNER_PROMPT}
+
+The archadev MCP tools are your only tools.
+
+${CORE_GUIDES}
+
+Other guides (read_guide tool):
+${GUIDE_INDEX}`;
+
+const claudeArgs = ({ mcpConfigFile, model, sessionId, extraServers = [], skills }: Omit<BuildInput, 'prompt'>) => [
+  '--setting-sources', 'project,local',
+  '--mcp-config', mcpConfigFile, '--strict-mcp-config',
+  '--allowedTools', [...MCP_TOOLS.map((t) => `mcp__archadev__${t}`), ...extraServers.map((n) => `mcp__${n}`), ...(skills ? ['Skill'] : [])].join(','),
+  '--tools', skills ? 'Skill' : '',
+  '--system-prompt', CLAUDE_DESIGN_SYSTEM,
+  ...(model ? ['--model', model] : []),
+  ...(sessionId ? ['--resume', sessionId] : []),
+];
 
 let agyRegistered = '';
 export const ADAPTERS: Adapter[] = [
@@ -317,18 +360,15 @@ export const ADAPTERS: Adapter[] = [
     bin: 'claude',
     // Prompt on stdin (no argv limit, and stdin is closed so the CLI never waits for more).
     // setting-sources without "user": the person's own hooks and plugins stay out of design runs.
-    build: ({ prompt, mcpConfigFile, model, sessionId, extraServers = [], skills }) => ({
-      args: [
-        '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-        '--setting-sources', 'project,local',
-        '--mcp-config', mcpConfigFile, '--strict-mcp-config',
-        '--allowedTools', [...MCP_TOOLS.map((t) => `mcp__archadev__${t}`), ...extraServers.map((n) => `mcp__${n}`), ...(skills ? ['Skill'] : [])].join(','),
-        '--append-system-prompt', DESIGNER_PROMPT,
-        ...(model ? ['--model', model] : []),
-        ...(sessionId ? ['--resume', sessionId] : []),
-      ],
+    build: ({ prompt, ...o }) => ({
+      args: ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', ...claudeArgs(o)],
       stdin: prompt,
     }),
+    warm: {
+      args: (o) => ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', ...claudeArgs(o)],
+      message: (text) => JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }),
+      interrupt: () => JSON.stringify({ type: 'control_request', request_id: `int-${Date.now()}`, request: { subtype: 'interrupt' } }),
+    },
     parser: claudeParser,
     models: claudeModels,
   },
@@ -353,6 +393,16 @@ export const ADAPTERS: Adapter[] = [
         '-p', withState(`${sessionId ? AGY_TOOLS_NOTE : `${DESIGNER_PROMPT}\n\n${AGY_TOOLS_NOTE}`}\n\n---\n${prompt}`, MAX_ARG_PROMPT),
       ],
     }),
+    // agy has no system-prompt flag: the designer brief rides on the first message a process gets.
+    warm: {
+      args: ({ model, sessionId }) => [
+        '--dangerously-skip-permissions', '--disable-slash-commands', '--input-format', 'stream-json', '--output-format', 'stream-json',
+        ...(model ? ['--model', model] : []),
+        ...(sessionId ? ['--conversation', sessionId] : []),
+        '-p=',
+      ],
+      message: (text, { first, resumed }) => JSON.stringify({ event: 'user', message: { content: first ? `${resumed ? AGY_TOOLS_NOTE : `${DESIGNER_PROMPT}\n\n${CORE_GUIDES}\n\n${AGY_TOOLS_NOTE}`}\n\n---\n${text}` : text } }),
+    },
     parser: agyParser,
     models: (bin) => agyModels(bin),
   },

@@ -18,6 +18,7 @@ Status: **Proposed** (this plan's recommendation, waiting for the owner) · **Ac
 | D-08 | Launch + listen agent modes, adapters ported from Gungnir | Proposed | Proven with the same four agents | Embedding one agent SDK (pen's approach) |
 | D-09 | pnpm + Turborepo monorepo, electron-vite, electron-builder | Proposed | Mainstream, fast | Nx, Forge |
 | D-10 | Plan in `docs/plan`, graduating into `docs/blueprint` + `docs/knowledge` | Proposed | Zemetiash system | — |
+| D-11 | Chat engine: keep local agent CLIs warm per thread (A) before any direct-API engine (B) | Proposed | Removes cold start and allows steering while keeping D-08 (own logins, agent-neutral) — [CHAT_AGENT](./CHAT_AGENT.md) | Direct API with keys; both |
 
 ## Open questions for the owner
 

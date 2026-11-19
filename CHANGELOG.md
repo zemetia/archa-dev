@@ -8,6 +8,21 @@ All notable changes to this project are documented in this file, following [Keep
 - Adding a Claude or Codex account no longer asks for a name or e-mail. The account is named after the login you sign in with, and for Claude, Add account opens the sign-in straight away.
 - The "Use an existing config folder" option is gone; ArchaDev keeps each account in its own folder. Accounts linked to a folder earlier keep working.
 
+### Chat agent: faster and better results
+- **Warm sessions.** Claude and Antigravity now keep one process per conversation, so follow-ups skip the start-up. The process starts as soon as you click into the composer.
+- **Queue and Send now.** While an agent works, Enter queues your next message; Ctrl+Enter (or the lightning button) stops the current turn and sends it right away. Stop keeps the session alive.
+- **Selection chip.** What you have selected is attached to the message as its focus (remove it with ×).
+- **Built-in design guides** (landing, web app, mobile, layout, taste, type and colour, components, icons). The matching guide is sent with the first message; agents can read others with `read_guide`.
+- **Leaner Claude runs.** Design runs use ArchaDev's own system prompt and no coding tools: about a tenth of the context per step.
+- **Agent helpers:** `icon()` places any lucide icon as a vector; text without a colour is fixed automatically; every building step returns a screenshot without an extra call. Each turn ends with its time and cost.
+- Agents get fewer failed steps: common CSS/Figma spellings (`auto`, `stretch`, `vertical`, `bold`, `content`…) are understood, names can be re-declared between calls, and errors quote the value that was wrong.
+- Dev runs with their own `ARCHA_HOME` use their own core pipe, so they no longer collide with the installed app.
+
+### Export
+- The Export section of the Design panel now offers **PNG, JPG, SVG, PDF, HTML + CSS and HTML + Tailwind** for any selected layer, with 1x–4x scale for PNG and JPG. The last choice is remembered.
+- **HTML + CSS** writes the page, a CSS file with one class per layer, and an assets folder for images. **HTML + Tailwind** writes one page styled with Tailwind classes. Auto-layout becomes flexbox; hug, fill and fixed sizes carry over.
+- **PDF** is one vector page at the layer's size, with selectable text.
+
 ## [0.3.0] - 2026-11-19
 
 ### Tool rail
