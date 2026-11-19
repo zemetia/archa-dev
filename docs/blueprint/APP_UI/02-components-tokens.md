@@ -82,7 +82,7 @@ Defined once in `apps/desktop/src/renderer/styles/app.css` with Tailwind v4:
 | Colours | Token utilities only (`bg-surface`, `text-fg`). No raw hex/oklch, no Tailwind palette (`bg-gray-100`) — ESLint rule |
 | Theme | `data-theme` on `<html>`: `light` \| `dark` \| `system` |
 | Density | Compact (default) / comfortable via `--spacing` scale |
-| Canvas colours | Selection, guides, agent cursors come from tokens too (`--color-selection`, `--color-agent-<id>`) |
+| Canvas colours | Selection, guides, agent cursors come from tokens too (`--color-selection`; session cursors `--color-persona-0..7`, picked by `personaColor(name)`) |
 | Pickers | Themed `Dropdown` (`renderer/ui/Dropdown.tsx`): icon, description, note, disabled rows, keyboard (↑↓ Enter Esc), opens upward in the composer. No native `<select>` in new UI — Windows draws its popup outside the theme |
 
 These are the **app's** tokens — not the user's document variables.

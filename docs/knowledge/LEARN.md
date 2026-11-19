@@ -8,6 +8,8 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-19] - Launched the dev app from the sandboxed Bash tool to test agent cursors; the UI worked but the core never wrote `runtime/core.json`, so no MCP/CLI client could connect - The sandbox blocks creating Windows named pipes (`listen EACCES`); relaunched the dev app outside the sandbox - When the core socket is missing in a dev run, check the launcher's sandbox before suspecting the code.
+
 [2026-11-19] - Told agy "don't read files or run commands" to make it faster; it then failed every `execute` (return outside a function, guessing globals), because agy learns MCP tool descriptions by reading its schema files, not from context - Put the tool list + EXECUTE_API_DOC directly in the agy prompt: one `execute`, ~100 s instead of 356 s - Before restricting an agent's behaviour, find out what that behaviour gives it. Verify every prompt change with a live run.
 
 [2026-11-19] - The real host Claude login (~/.claude) was expired. Earlier "live" Claude tests passed only because the shell had Orca's CLAUDE_CONFIG_DIR - Isolated the E2E app env (main strips inherited CLAUDE_CONFIG_DIR/ORCA_*) and saw the real failure - Run live agent tests with the same env the app gives agents, not the dev shell's env.

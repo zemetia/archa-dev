@@ -21,11 +21,10 @@
 
 | Source | Identity |
 |---|---|
-| `--run <runId>` (launched by the app) | That run's agent + profile; cursor colour from the agent |
-| MCP `initialize.clientInfo.name` | Listen-mode agent ("claude-code", "codex"…) |
-| Neither | `unknown-agent` |
+| `ARCHA_RUN_ID` / `--run <runId>` (launched by the app) | That run's thread session: author name = the thread's random name, id `<agent>:<threadId>` |
+| No run | Listen-mode agent: its own random session name per connection |
 
-Identity is the transaction `author` and appears on every activity entry.
+Identity is the transaction `author` and appears on every activity entry and `agent.trail` event. The CLI name ("claude", "agy") is never shown as the author → [AGENT_BRIDGE/03 → Sessions](../AGENT_BRIDGE/03-runs-steering.md).
 
 ---
 

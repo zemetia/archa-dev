@@ -22,6 +22,15 @@
   --color-claude: #d97757;
   --color-agy: #5b8def;
   --color-codex: #10a37f;
+  /* Agent session colours: cursor, trail and chat name of each parallel session (personaColor) */
+  --color-persona-0: #f97316;
+  --color-persona-1: #22c55e;
+  --color-persona-2: #3b82f6;
+  --color-persona-3: #ec4899;
+  --color-persona-4: #eab308;
+  --color-persona-5: #14b8a6;
+  --color-persona-6: #a855f7;
+  --color-persona-7: #f43f5e;
   --font-sans: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
 }

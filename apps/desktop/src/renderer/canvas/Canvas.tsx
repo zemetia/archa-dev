@@ -5,6 +5,7 @@ import { isContainer, type Node, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, useStore, type Camera } from '../lib/store';
 import { containerAt, fitCamera, handleCursor, handlePoint, HANDLES, hitPath, originOf, pageRoot, pickFromPath, selectionBounds, toWorld, type Handle } from '../lib/geometry';
 import { drawOverlay, type OverlayExtras } from './overlay';
+import { cursorAlive, drawCursors } from './cursors';
 import { TextEditor } from './TextEditor';
 
 type Pt = { x: number; y: number };
@@ -23,6 +24,7 @@ export function Canvas() {
   const wrap = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLCanvasElement>(null);
   const overlay = useRef<HTMLCanvasElement>(null);
+  const cursorLayer = useRef<HTMLCanvasElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const extras = useRef<OverlayExtras>({});
   const spaceDown = useRef(false);
@@ -36,7 +38,7 @@ export function Canvas() {
   const selection = useStore((s) => s.selection);
   const hover = useStore((s) => s.hover);
   const tool = useStore((s) => s.tool);
-  const agentFocus = useStore((s) => s.agentFocus);
+  const cursors = useStore((s) => s.cursors);
   const fitRequest = useStore((s) => s.fitRequest);
   const editingText = useStore((s) => s.editingText);
 
@@ -68,7 +70,7 @@ export function Canvas() {
 
   useLayoutEffect(() => {
     const dpr = window.devicePixelRatio || 1;
-    for (const c of [content.current, overlay.current]) {
+    for (const c of [content.current, overlay.current, cursorLayer.current]) {
       if (!c) continue;
       c.width = Math.round(size.width * dpr);
       c.height = Math.round(size.height * dpr);
@@ -84,13 +86,30 @@ export function Canvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitRequest]);
 
-  useEffect(() => {
-    if (!agentFocus) return;
-    const t = setTimeout(redraw, 5200);
-    return () => clearTimeout(t);
-  });
+  useEffect(redraw, [doc, rev, camera, selection, hover, editingText, size]);
 
-  useEffect(redraw, [doc, rev, camera, selection, hover, agentFocus, editingText, size]);
+  // Agent session cursors animate on their own layer, so the design is not repainted every frame.
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const el = cursorLayer.current;
+      if (!el) return;
+      const st = useStore.getState();
+      const dpr = window.devicePixelRatio || 1;
+      const ctx = el.getContext('2d')!;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, size.width, size.height);
+      const now = performance.now();
+      const working = new Set([...Object.values(st.runs).map((r) => r.persona), ...st.agents.map((a) => a.name)]);
+      const all = Object.values(st.cursors);
+      const alive = all.filter((c) => cursorAlive(c, now, working.has(c.name)));
+      if (alive.length !== all.length) useStore.setState({ cursors: Object.fromEntries(alive.map((c) => [c.id, c])) });
+      drawCursors(ctx, st.camera, alive, working, now);
+      if (alive.length) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [cursors, size]);
 
   const pointer = (e: React.PointerEvent | React.WheelEvent) => {
     const r = wrap.current!.getBoundingClientRect();
@@ -367,6 +386,7 @@ export function Canvas() {
       onPointerLeave={() => useStore.setState({ hover: null })} onDoubleClick={onDoubleClick}>
       <canvas ref={content} className="absolute inset-0" />
       <canvas ref={overlay} className="absolute inset-0" />
+      <canvas ref={cursorLayer} className="pointer-events-none absolute inset-0" />
       {doc && editingText && doc.get(editingText) && <TextEditor nodeId={editingText} camera={camera} />}
       {tool !== 'select' && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-panel-2 px-3 py-1 text-xs text-fg-muted">{toolHint(tool)}</div>}
     </div>

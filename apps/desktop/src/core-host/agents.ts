@@ -2,12 +2,13 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { newId } from '@archa/schema';
-import type { ChatMessage, ModelOption } from '@archa/protocol';
+import type { ChatMessage, ChatRunEvent, ModelOption } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import type { Workspace } from './workspace';
 import { describeState } from './execute';
 import { ADAPTERS, type AgentEvent, type McpCommand } from './agent-adapters';
 import { resolveCli } from './accounts';
+import { randomPersona } from './personas';
 
 /*
  * Launch mode (blueprint AGENT_BRIDGE): the app starts the agent's own CLI headless,
@@ -17,7 +18,7 @@ import { resolveCli } from './accounts';
 
 export { ADAPTERS, findBin, type McpCommand } from './agent-adapters';
 
-type Run = { id: string; docId: string; threadId: string; agent: string; prompt: string; child: ChildProcess | null; stopped: boolean; replied: boolean; failed: boolean };
+type Run = { id: string; docId: string; threadId: string; agent: string; persona: string; prompt: string; child: ChildProcess | null; stopped: boolean; replied: boolean; failed: boolean };
 
 /*
  * Chat history lives in ARCHA_HOME/chats/<docId>.jsonl (one message per line) and the agent CLI
@@ -26,6 +27,7 @@ type Run = { id: string; docId: string; threadId: string; agent: string; prompt:
  */
 const chatsDir = () => join(archaHome(), 'chats');
 const safeName = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80) || 'doc';
+const threadDir = (threadId: string) => join(archaHome(), 'runtime', 'threads', safeName(threadId));
 
 export class ChatRunner {
   private runs = new Map<string, Run>();
@@ -51,8 +53,31 @@ export class ChatRunner {
     return list;
   }
 
+  /** Session name of a run's thread, for the identity of the `archa mcp` it starts. */
+  identity(runId: string): { persona: string; threadId: string; agent: string } | null {
+    const r = this.runs.get(runId);
+    return r ? { persona: r.persona, threadId: r.threadId, agent: r.agent } : null;
+  }
+
+  active(): ChatRunEvent[] {
+    return [...this.runs.values()].map((r) => this.runEvent(r, 'running'));
+  }
+
+  private runEvent(r: Run, status: ChatRunEvent['status']): ChatRunEvent {
+    return { runId: r.id, docId: r.docId, threadId: r.threadId, agent: r.agent, persona: r.persona, status };
+  }
+
+  /** A thread keeps its name across turns; a new one gets a name no other session on the doc uses. */
+  private personaFor(docId: string, threadId: string): string {
+    const list = this.list(docId);
+    const own = list.find((m) => (m.threadId ?? m.runId) === threadId && m.persona)?.persona;
+    if (own) return own;
+    return randomPersona(list.map((m) => m.persona ?? ''), [...[...this.runs.values()].map((r) => r.persona), ...this.ws.agents().map((a) => a.name)]);
+  }
+
   deleteThread(docId: string, threadId: string) {
     if ([...this.runs.values()].some((r) => r.threadId === threadId)) throw new Error('Stop the running agent before deleting this conversation');
+    rmSync(threadDir(threadId), { recursive: true, force: true });
     const kept = this.list(docId).filter((m) => (m.threadId ?? m.runId) !== threadId);
     this.messages.set(docId, kept);
     mkdirSync(chatsDir(), { recursive: true });
@@ -79,8 +104,8 @@ export class ChatRunner {
     } catch { /* resume is best-effort */ }
   }
 
-  private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent'>, role: ChatMessage['role'], text: string) {
-    const m: ChatMessage = { id: newId(), docId: run.docId, runId: run.id, threadId: run.threadId, role, agent: run.agent, text, ts: Date.now() };
+  private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent' | 'persona'>, role: ChatMessage['role'], text: string) {
+    const m: ChatMessage = { id: newId(), docId: run.docId, runId: run.id, threadId: run.threadId, role, agent: run.agent, persona: run.persona, text, ts: Date.now() };
     this.list(run.docId).push(m);
     try {
       mkdirSync(chatsDir(), { recursive: true });
@@ -89,12 +114,13 @@ export class ChatRunner {
     this.ws.broadcast('chat.message', m);
   }
 
-  send(docId: string, agentId: string, prompt: string, model?: string, account?: string, threadId = newId()): { runId: string; threadId: string } {
+  send(docId: string, agentId: string, prompt: string, model?: string, account?: string, threadId = newId()): { runId: string; threadId: string; persona: string } {
     const adapter = ADAPTERS.find((a) => a.id === agentId);
     if (!adapter) throw new Error(`Unknown agent "${agentId}"`);
     const cli = resolveCli(adapter.bin);
     if (!cli) throw new Error(`${adapter.label} CLI ("${adapter.bin}") was not found on PATH`);
-    if ([...this.runs.values()].some((r) => r.docId === docId)) throw new Error('An agent is already working on this document — stop it first');
+    // Sessions run in parallel on the same document; only one turn per conversation at a time.
+    if ([...this.runs.values()].some((r) => r.threadId === threadId)) throw new Error('This conversation is still working — stop it or start a new chat');
     // A saved account runs in its own config folder (blueprint AGENT_BRIDGE/02).
     const login = this.ws.accounts.runEnv(adapter.id, account);
     const session = this.ws.session(docId);
@@ -102,7 +128,12 @@ export class ChatRunner {
 
     const base = this.mcpCommand();
     const mcp: McpCommand = { ...base, args: [...base.args, '--doc', docId, '--agent', adapter.id] };
-    const cfgDir = join(archaHome(), 'runtime');
+    const sessionKey = `${threadId}:${agentId}:${login.label ? Object.values(login.env).join() : 'host'}`;
+    const sessionId = this.sessionMap().get(sessionKey);
+    // Each thread works in its own folder, so parallel runs never share skills or MCP config files.
+    // Claude Code files sessions by cwd: a pre-0.2.5 thread that already has one keeps the shared folder.
+    const legacy = join(archaHome(), 'runtime');
+    const cfgDir = sessionId && !existsSync(threadDir(threadId)) ? legacy : threadDir(threadId);
     mkdirSync(cfgDir, { recursive: true });
     const mcpConfigFile = join(cfgDir, `mcp-${runId}.json`);
     // Settings → MCP servers join the run next to archadev; the file may hold their secrets.
@@ -110,31 +141,29 @@ export class ChatRunner {
     writeFileSync(mcpConfigFile, JSON.stringify({ mcpServers: { ...extra, archadev: { command: mcp.command, args: mcp.args, env: mcp.env } } }, null, 2), { mode: 0o600 });
     const skills = syncRunSkills(cfgDir, this.ws.skills.forRun());
 
-    const sessionKey = `${threadId}:${agentId}:${login.label ? Object.values(login.env).join() : 'host'}`;
-    const sessionId = this.sessionMap().get(sessionKey);
     // A request stopped before the agent answered never reached its session; carry it into this turn.
     const interrupted = this.interrupted.get(threadId);
     this.interrupted.delete(threadId);
     const request = interrupted ? `Earlier request (stopped before you answered it):\n${interrupted}\n\nNow:\n${prompt}` : prompt;
     const fullPrompt = `${request}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}`;
-    const run: Run = { id: runId, docId, threadId, agent: agentId, prompt: request, child: null, stopped: false, replied: false, failed: false };
+    const run: Run = { id: runId, docId, threadId, agent: agentId, persona: this.personaFor(docId, threadId), prompt: request, child: null, stopped: false, replied: false, failed: false };
     this.runs.set(runId, run);
     this.emit(run, 'user', prompt);
     if (login.label) this.emit(run, 'status', `Running as ${login.label}`);
-    this.ws.broadcast('chat.run', { runId, docId, threadId: run.threadId, status: 'running' });
+    this.ws.broadcast('chat.run', this.runEvent(run, 'running'));
 
     const fail = (text: string) => {
       this.runs.delete(runId);
       rmSync(mcpConfigFile, { force: true });
       this.emit(run, 'error', text);
-      this.ws.broadcast('chat.run', { runId, docId, threadId: run.threadId, status: 'failed' });
+      this.ws.broadcast('chat.run', this.runEvent(run, 'failed'));
     };
     const start = () => {
       if (run.stopped) {
         this.runs.delete(runId);
         this.interrupted.set(threadId, request);
         rmSync(mcpConfigFile, { force: true });
-        this.ws.broadcast('chat.run', { runId, docId, threadId: run.threadId, status: 'stopped' });
+        this.ws.broadcast('chat.run', this.runEvent(run, 'stopped'));
         return;
       }
       const built = adapter.build({ prompt: fullPrompt, mcp, mcpConfigFile, model, sessionId, extraServers: Object.keys(extra), skills });
@@ -150,7 +179,7 @@ export class ChatRunner {
     };
     if (adapter.prepare) adapter.prepare(cli.bin, base).then(start, (e: Error) => fail(e.message));
     else start();
-    return { runId, threadId };
+    return { runId, threadId, persona: run.persona };
   }
 
   private pipe(run: Run, child: ChildProcess, parser: { line(l: string): AgentEvent[] }, sessionKey: string, mcpConfigFile: string) {
@@ -182,7 +211,7 @@ export class ChatRunner {
         this.emit(run, 'status', 'Stopped');
         if (!run.replied) this.interrupted.set(run.threadId, run.prompt);
       }
-      this.ws.broadcast('chat.run', { runId, docId, threadId: run.threadId, status });
+      this.ws.broadcast('chat.run', this.runEvent(run, status));
     });
   }
 
