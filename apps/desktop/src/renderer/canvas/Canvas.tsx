@@ -57,6 +57,7 @@ export function Canvas() {
   const cursors = useStore((s) => s.cursors);
   const fitRequest = useStore((s) => s.fitRequest);
   const editingText = useStore((s) => s.editingText);
+  const pixelGrid = useStore((s) => s.pixelGrid);
 
   const redraw = () => {
     cancelAnimationFrame(frame.current);
@@ -106,7 +107,7 @@ export function Canvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitRequest]);
 
-  useEffect(redraw, [doc, rev, camera, selection, hover, editingText, size]);
+  useEffect(redraw, [doc, rev, camera, selection, hover, editingText, size, pixelGrid]);
 
   useEffect(() => onImageLoaded(() => { cache.invalidate(); redraw(); }));
 
@@ -169,6 +170,16 @@ export function Canvas() {
     const w = toWorld(st.camera, sx, sy);
     const d = st.doc;
 
+    if (e.button === 2) {
+      // Right-click picks like a click (a hit inside the selection keeps it), then opens the menu.
+      const label = labelHit(d, st.camera, sx, sy);
+      const path = label ? [label] : hitPath(d, w.x, w.y);
+      const hit = path.find((n) => st.selection.includes(n.id)) ?? pickFromPath(d, path, st.selection, e.ctrlKey || e.metaKey);
+      if (!hit) select([]);
+      else if (!st.selection.includes(hit.id)) select([hit.id]);
+      useStore.setState({ contextMenu: { x: e.clientX, y: e.clientY, world: w } });
+      return;
+    }
     if (e.button === 1 || st.tool === 'hand' || spaceDown.current) {
       gesture.current = { kind: 'pan', sx, sy, cam: st.camera };
       setCursor('grabbing');
@@ -521,7 +532,7 @@ export function Canvas() {
   return (
     <div ref={wrap} className="absolute inset-0 overflow-hidden bg-canvas" style={{ cursor }}
       onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-      onPointerLeave={() => useStore.setState({ hover: null })} onDoubleClick={onDoubleClick}>
+      onPointerLeave={() => useStore.setState({ hover: null })} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}>
       <canvas ref={content} className="absolute inset-0" />
       <canvas ref={overlay} className="absolute inset-0" />
       <EmbedLayer />

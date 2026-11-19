@@ -84,7 +84,7 @@ export function ChatThread() {
           ))}
         </div>
       )}
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3">
+      <div className="min-h-0 flex-1 select-text space-y-2 overflow-y-auto px-3 pb-3">
         {items.length === 0 && (
           <div className="space-y-5 px-1 pt-6">
             <div>

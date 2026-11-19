@@ -2,7 +2,10 @@ import { useEffect } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { init, newDoc, openFile, redo, save, setTool, togglePanel, toggleRailPanel, undo, useStore } from './lib/store';
 import { importImageOrSvg } from './lib/importers';
-import { copy, deleteSelection, duplicate, nudge, pasteFrom, reorder, selectAll, selectChildren, selectParent, wrapInFrame } from './lib/commands';
+import {
+  arrange, copy, createComponent, deleteSelection, duplicate, group, nudge, pasteFrom, removeLayout, reorder, selectAll, selectChildren, selectParent, ungroup, wrapInFrame,
+} from './lib/commands';
+import { ContextMenu } from './ui/ContextMenu';
 import { Canvas } from './canvas/Canvas';
 import { TitleBar } from './ui/TitleBar';
 import { LeftPanel } from './ui/LeftPanel';
@@ -50,6 +53,7 @@ export function App() {
         <RightPanel />
       </div>
       <SettingsDialog />
+      <ContextMenu />
       <div className="pointer-events-none fixed bottom-16 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">
         {toasts.map((t) => (
           <div key={t.id} className={cn('max-w-[560px] rounded-lg px-3 py-2 text-[12px] shadow-xl', t.kind === 'error' ? 'bg-danger text-white' : 'bg-fg text-app')}>{t.text}</div>
@@ -91,11 +95,18 @@ function onKey(e: KeyboardEvent) {
     if (k === 'o') return run(openFile);
     if (k === 'n') return run(newDoc);
     if (k === 'd') return run(duplicate);
+    // Selected text (chat messages) copies as text, not as canvas nodes.
+    if (k === 'c' && !window.getSelection()?.isCollapsed) return;
     if (k === 'c') return run(copy);
     // Ctrl+V is left to the browser: the paste event (onPaste) carries images from other apps.
     if (k === 'v') return;
     if (k === 'a') return run(selectAll);
     if (k === 'g' && e.altKey) return run(() => wrapInFrame(false));
+    if (k === 'g' && e.shiftKey) return run(ungroup);
+    if (k === 'g') return run(group);
+    if (k === 'k' && e.altKey) return run(createComponent);
+    if (k === ']') return run(() => arrange('front'));
+    if (k === '[') return run(() => arrange('back'));
     if (k === '0') return run(() => zoomTo(1));
     if (k === '=' || k === '+') return run(() => zoomTo(useStore.getState().camera.zoom * 1.25));
     if (k === '-') return run(() => zoomTo(useStore.getState().camera.zoom / 1.25));
@@ -115,6 +126,7 @@ function onKey(e: KeyboardEvent) {
   if (k === 'enter') return run(selectChildren);
   if (e.shiftKey && e.code === 'Digit1') return run(() => useStore.setState((s) => ({ fitRequest: s.fitRequest + 1 })));
   if (e.shiftKey && e.code === 'Digit0') return run(() => zoomTo(1));
+  if (e.shiftKey && e.altKey && k === 'a') return run(removeLayout);
   if (e.shiftKey && k === 'a') return run(() => wrapInFrame(true));
   if (k === ']') return run(() => reorder(1));
   if (k === '[') return run(() => reorder(-1));
