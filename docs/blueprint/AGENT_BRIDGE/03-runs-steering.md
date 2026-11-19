@@ -59,6 +59,21 @@ Design changes are transactions in the live document (author = run), so they are
 
 Per agent, up to `maxParallel` (default 3) concurrent runs. Paused runs free their slot. Queue is FIFO per agent.
 
+**Built (0.2.5):** chat runs are parallel per **thread**, not per document — several sessions design on the same canvas at once; only a second turn in a thread that is still working is refused. Each thread works in `ARCHA_HOME/runtime/threads/<threadId>/` (its MCP config + mirrored skills), so runs never share files. `maxParallel` / queueing is not built yet.
+
+---
+
+## Sessions (built, 0.2.5)
+
+| Rule | Detail |
+|---|---|
+| Name | Every thread gets a random two-word name (`personas.ts`, e.g. "Swift Heron") on its first turn and keeps it (stored as `persona` on each `ChatMessage`). Agents never appear as "claude" / "agy" on the canvas |
+| Identity | The run's `archa mcp` sends `runId`; the core makes its author `{ kind: 'agent', id: '<agent>:<threadId>', name: <persona> }`. A terminal (listen-mode) agent gets its own name per connection |
+| Colour | `personaColor(name)` → slot 0-7 → `--color-persona-N`. A new name prefers a slot no active session uses. Same colour for the cursor, chat label and History row |
+| Trail | Every tool call that touches nodes broadcasts `agent.trail` `{ author, runId?, threadId?, steps: [{ action, nodeId, name, bounds }] }`. `execute` records each API call in order (`create`, `edit`, `move`, `delete`, `copy`, `read`, `focus`, `look`), bounds from the final layout, ≤ 40 steps |
+| Cursor | The canvas plays each session's trail: the cursor glides step to step, outlines the target, tags "<name> · <Verb> <node>", and leaves a dashed path → [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
+| UI | Chat header shows the thread's session; other sessions working on the doc appear as chips that open their thread; History rows show name + "working" |
+
 ---
 
 ## Steering

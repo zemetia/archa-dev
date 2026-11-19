@@ -1,4 +1,4 @@
-import { insertOpsFor } from '@archa/core';
+import { insertOpsFor, subtreeInput } from '@archa/core';
 import { isContainer, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, toast, useStore } from './store';
 import { originOf, pageRoot, selectionBounds } from './geometry';
@@ -8,15 +8,8 @@ import type { ArchaDocument } from '@archa/core';
 
 let clipboard: NodeInput[] = [];
 
-/** Rebuilds friendly input (with inline children) from a subtree, for copy and duplicate. */
-export function toInput(doc: ArchaDocument, id: string): NodeInput {
-  const n = doc.require(id);
-  const { id: _id, parentId: _p, ...rest } = n as typeof n & { children?: string[] };
-  const input = { ...rest } as Record<string, unknown>;
-  delete input.children;
-  if (isContainer(n)) input.children = n.children.map((c) => toInput(doc, c));
-  return input as NodeInput;
-}
+/** Friendly input from a subtree, for copy and duplicate (shared with the agent `copy()`). */
+export const toInput = subtreeInput;
 
 const ctx = () => {
   const { doc, selection } = useStore.getState();

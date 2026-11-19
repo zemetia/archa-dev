@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, Copy, FileText, Hexagon, History, Loader2, Settings, Sparkles, Square, SquarePen, UserRound, Wrench } from 'lucide-react';
 import { chatThreads, threadOf, type ModelOption } from '@archa/protocol';
-import { select, toast, useStore } from '../lib/store';
+import { runOfThread, select, toast, useStore } from '../lib/store';
+import { personaBg } from './persona';
 import { cn } from './controls';
 import { Dropdown, type DropdownOption } from './Dropdown';
 import { Markdown } from './Markdown';
@@ -28,21 +29,26 @@ export function ChatThread() {
   const chat = useStore((s) => s.chat);
   const activity = useStore((s) => s.activity);
   const docId = useStore((s) => s.activeDocId);
-  const running = useStore((s) => s.runningRun);
+  const runs = useStore((s) => s.runs);
   const agents = useStore((s) => s.agents);
   const thread = useStore((s) => s.chatThread);
-  const live = useStore((s) => (s.chatLive && s.chatLive.threadId === s.chatThread ? s.chatLive : null));
+  const running = runOfThread(runs, thread);
+  const live = useStore((s) => (s.chatThread ? s.chatLive[s.chatThread] ?? null : null));
+  // Other sessions working on this document in parallel; one click switches to their conversation.
+  const others = Object.values(runs).filter((r) => r.docId === docId && r.threadId !== thread);
   const end = useRef<HTMLDivElement>(null);
   const agentLabel = (id: string) => info?.agents.find((a) => a.id === id)?.label ?? id;
 
   const latest = chat.at(-1);
-  const title = useMemo(() => (thread ? chatThreads(chat.filter((c) => threadOf(c) === thread))[0]?.title : null), [chat, thread]);
+  const meta = useMemo(() => (thread ? chatThreads(chat.filter((c) => threadOf(c) === thread))[0] : undefined), [chat, thread]);
+  const title = meta?.title ?? null;
+  const persona = running?.persona ?? meta?.persona;
   const items = useMemo(() => {
     const own = chat.filter((c) => thread !== null && threadOf(c) === thread).map((c) => ({ ...c, nodeIds: [] as string[] }));
     // Listen-mode agents (connected through `archa mcp` from a terminal) are not threaded: show them with the newest conversation.
     const current = thread === null || (latest && threadOf(latest) === thread);
     const listen = !current ? [] : activity.filter((a) => a.docId === docId && a.author.kind === 'agent' && !a.runId && !chat.some((c) => Math.abs(c.ts - a.ts) < 50))
-      .map((a) => ({ id: a.id, ts: a.ts, role: a.tool === 'say' ? 'agent' as const : 'tool' as const, agent: a.author.name ?? a.author.id, text: a.tool === 'say' ? a.text : `${a.tool} · ${a.text}`, nodeIds: a.nodeIds }));
+      .map((a) => ({ id: a.id, ts: a.ts, role: a.tool === 'say' ? 'agent' as const : 'tool' as const, agent: a.author.id.split(':')[0]!, persona: a.author.name, text: a.tool === 'say' ? a.text : `${a.tool} · ${a.text}`, nodeIds: a.nodeIds }));
     return [...own, ...listen].sort((a, b) => a.ts - b.ts);
   }, [chat, activity, docId, thread, latest]);
 
@@ -54,6 +60,7 @@ export function ChatThread() {
   return (
     <div className="flex min-h-0 flex-1 flex-col border-t border-line">
       <div className="flex h-10 shrink-0 items-center gap-2 px-4">
+        {persona && <span title="Session name — its cursor on the canvas has this colour" className="flex shrink-0 items-center gap-1 rounded-full bg-panel-2 px-1.5 py-0.5 text-[10.5px] font-medium text-fg-muted"><span className={cn('h-1.5 w-1.5 rounded-full', personaBg(persona))} />{persona}</span>}
         <span className="min-w-0 truncate text-[12.5px] font-semibold" title={title ?? undefined}>{title ?? 'New chat'}</span>
         <div className="flex-1" />
         {agents.length > 0 && (
@@ -66,6 +73,16 @@ export function ChatThread() {
         <button title="New chat" onClick={() => { useStore.setState({ chatThread: null }); focusComposer?.(); }}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:bg-panel-2 hover:text-fg"><SquarePen size={14} /></button>
       </div>
+      {others.length > 0 && (
+        <div className="flex shrink-0 flex-wrap gap-1 px-3 pb-2">
+          {others.map((r) => (
+            <button key={r.runId} title="Working in parallel — open this conversation" onClick={() => useStore.setState({ chatThread: r.threadId })}
+              className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[10.5px] text-fg-muted hover:bg-panel-2 hover:text-fg">
+              <span className={cn('h-1.5 w-1.5 animate-pulse rounded-full', personaBg(r.persona))} />{r.persona}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3">
         {items.length === 0 && (
           <div className="space-y-5 px-1 pt-6">
@@ -99,7 +116,7 @@ export function ChatThread() {
         {items.map((m) => (
           <div key={m.id}>
             {m.role === 'user' && <div className="ml-6 rounded-xl rounded-br-sm bg-accent-soft px-3 py-2 text-[12.5px] leading-relaxed text-fg">{m.text}</div>}
-            {m.role === 'agent' && <AgentText agent={m.agent} label={agentLabel(m.agent)} text={m.text} />}
+            {m.role === 'agent' && <AgentText agent={m.agent} persona={m.persona} label={agentLabel(m.agent)} text={m.text} />}
             {m.role === 'tool' && (
               <button onClick={() => m.nodeIds.length && select(m.nodeIds.filter((id) => useStore.getState().doc?.get(id)).slice(0, 50))}
                 className="flex w-full items-center gap-1.5 truncate px-1 text-left text-[11.5px] text-fg-subtle hover:text-fg-muted">
@@ -110,19 +127,20 @@ export function ChatThread() {
             {m.role === 'error' && <div className="whitespace-pre-wrap rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{m.text}</div>}
           </div>
         ))}
-        {live && <AgentText agent={live.agent} label={agentLabel(live.agent)} text={live.text} streaming />}
-        {running && !live && <div className="flex items-center gap-2 px-1 text-[12px] text-agent"><Loader2 size={13} className="animate-spin" />Working on the canvas…</div>}
+        {live && <AgentText agent={live.agent} persona={persona} label={agentLabel(live.agent)} text={live.text} streaming />}
+        {running && !live && <div className="flex items-center gap-2 px-1 text-[12px] text-agent"><Loader2 size={13} className="animate-spin" />{running.persona} is working on the canvas…</div>}
         <div ref={end} />
       </div>
     </div>
   );
 }
 
-function AgentText({ agent, label, text, streaming }: { agent: string; label: string; text: string; streaming?: boolean }) {
+function AgentText({ agent, persona, label, text, streaming }: { agent: string; persona?: string; label: string; text: string; streaming?: boolean }) {
   return (
     <div className="break-words px-1 text-[12.5px] leading-relaxed text-fg">
       <span className="mb-0.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-fg-muted">
-        <span className={cn('h-1.5 w-1.5 rounded-full', AGENT_DOT[agent] ?? 'bg-agent')} />{label}
+        <span className={cn('h-1.5 w-1.5 rounded-full', persona ? personaBg(persona) : AGENT_DOT[agent] ?? 'bg-agent')} />
+        {persona ?? label}{persona && <span className="font-normal normal-case tracking-normal text-fg-subtle">· {label}</span>}
       </span>
       <Markdown text={text} />
       {streaming && <span className="inline-block h-3 w-1.5 animate-pulse rounded-sm bg-agent align-middle" />}
@@ -160,9 +178,9 @@ export function ChatComposer() {
   const info = useStore((s) => s.info);
   const docId = useStore((s) => s.activeDocId);
   const docName = useStore((s) => s.docs.find((d) => d.id === s.activeDocId)?.name);
-  const running = useStore((s) => s.runningRun);
   const client = useStore((s) => s.client);
   const thread = useStore((s) => s.chatThread);
+  const running = useStore((s) => runOfThread(s.runs, s.chatThread));
   const prompt = useStore((s) => s.chatDraft);
   const setPrompt = (chatDraft: string) => useStore.setState({ chatDraft });
   const [agent, setAgentState] = useState(() => remembered('archa.chatAgent', 'claude'));
@@ -252,14 +270,14 @@ export function ChatComposer() {
           <FileText size={11} className="shrink-0" /><span className="truncate">{docName ?? 'Canvas'}</span>
         </span>
       </div>
-      <textarea ref={input} value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} placeholder={running ? 'The agent is working — stop it to send a new message' : 'Describe what to design…'}
+      <textarea ref={input} value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} placeholder={running ? `${running.persona} is working — stop it, or start a New chat to run another session in parallel` : 'Describe what to design…'}
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
         className="block w-full resize-none bg-transparent px-1.5 py-1 text-[12.5px] leading-relaxed placeholder:text-fg-subtle" />
       <div className="flex items-center gap-0.5">
         <Dropdown className="max-w-[45%] shrink-0" value={agent} options={agentOptions} onChange={setAgent} header="Agent" title="Agent that runs this prompt" menuWidth={250} />
         <Dropdown className="flex-1" value={model} options={modelOptions} onChange={setModel} header={models?.source ?? 'Model'} loading={loadingModels} title="Model" menuWidth={260} />
         {running ? (
-          <button title="Stop" onClick={() => void client?.call('chat.stop', { runId: running })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-agent/20 text-agent ring-1 ring-agent/40 hover:bg-agent/30"><Square size={11} fill="currentColor" strokeWidth={0} /></button>
+          <button title={`Stop ${running.persona}`} onClick={() => void client?.call('chat.stop', { runId: running.runId })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-agent/20 text-agent ring-1 ring-agent/40 hover:bg-agent/30"><Square size={11} fill="currentColor" strokeWidth={0} /></button>
         ) : (
           <button title="Send (Enter)" disabled={!canSend} onClick={() => void send()}
             className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-fg shadow-lg shadow-accent/30 transition-opacity', !canSend && 'opacity-30 shadow-none')}>

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { MessageSquare, SquarePen, Trash2 } from 'lucide-react';
 import { chatThreads, threadOf } from '@archa/protocol';
-import { toast, useStore } from '../lib/store';
+import { runOfThread, toast, useStore } from '../lib/store';
+import { personaBg } from './persona';
 import { cn } from './controls';
 
 const AGENT_DOT: Record<string, string> = { claude: 'bg-claude', agy: 'bg-agy', codex: 'bg-codex' };
@@ -22,14 +23,15 @@ export function HistoryPanel() {
       </div>
       <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
         {threads.length === 0 && <p className="px-2 pt-6 text-center text-[12px] text-fg-subtle">No conversations on this document yet.</p>}
-        {threads.map((t) => <ThreadRow key={t.id} id={t.id} title={t.title} agent={t.agent} updatedAt={t.updatedAt} messages={t.messages} active={t.id === current} />)}
+        {threads.map((t) => <ThreadRow key={t.id} id={t.id} title={t.title} agent={t.agent} persona={t.persona} updatedAt={t.updatedAt} messages={t.messages} active={t.id === current} />)}
       </div>
     </div>
   );
 }
 
-function ThreadRow({ id, title, agent, updatedAt, messages, active }: { id: string; title: string; agent: string; updatedAt: number; messages: number; active: boolean }) {
+function ThreadRow({ id, title, agent, persona, updatedAt, messages, active }: { id: string; title: string; agent: string; persona?: string; updatedAt: number; messages: number; active: boolean }) {
   const client = useStore((s) => s.client);
+  const working = useStore((s) => !!runOfThread(s.runs, id));
   const docId = useStore((s) => s.activeDocId);
   const [confirm, setConfirm] = useState(false);
 
@@ -49,8 +51,9 @@ function ThreadRow({ id, title, agent, updatedAt, messages, active }: { id: stri
         <span className="min-w-0 flex-1">
           <span className={cn('line-clamp-2 text-[12px] leading-snug', active ? 'text-fg' : 'text-fg-muted')}>{title}</span>
           <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-fg-subtle">
-            <span className={cn('h-1.5 w-1.5 rounded-full', AGENT_DOT[agent] ?? 'bg-fg-subtle')} />
-            {when(updatedAt)} · {messages} message{messages === 1 ? '' : 's'}
+            <span className={cn('h-1.5 w-1.5 rounded-full', persona ? personaBg(persona) : AGENT_DOT[agent] ?? 'bg-fg-subtle', working && 'animate-pulse')} />
+            {persona && <span className="text-fg-muted">{persona}</span>}{persona && ' · '}
+            {working ? 'working' : when(updatedAt)} · {messages} message{messages === 1 ? '' : 's'}
           </span>
         </span>
       </button>

@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, threadOf, type AccountsOverview, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, threadOf, type AccountsOverview, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodePng } from '@archa/render';
+import { pushTrail, type AgentCursor } from '../canvas/cursors';
 
 export type LeftTab = 'chat' | 'history' | 'layers' | 'components' | 'slides' | 'library';
 export type Tool = 'select' | 'frame' | 'rect' | 'ellipse' | 'text' | 'hand';
@@ -34,10 +35,12 @@ type State = {
   agents: AgentClient[];
   activity: ActivityEntry[];
   chat: ChatMessage[];
-  runningRun: string | null;
-  /** Reply the launched agent is still writing (streamed); null when none. */
-  chatLive: { runId: string; threadId: string; agent: string; text: string } | null;
-  agentFocus: { name: string; nodeIds: string[]; ts: number } | null;
+  /** Launched runs still working, by run id. Sessions run in parallel, one per thread. */
+  runs: Record<string, ChatRunEvent>;
+  /** Replies still being written (streamed), by thread. */
+  chatLive: Record<string, { runId: string; threadId: string; agent: string; text: string }>;
+  /** One cursor per agent session on the active document, by author id (canvas/cursors.ts). */
+  cursors: Record<string, AgentCursor>;
   editingText: string | null;
   toasts: Toast[];
   fitRequest: number;
@@ -58,7 +61,7 @@ export const useStore = create<State>(() => ({
   client: null, info: null, docs: [], activeDocId: null, doc: null, rev: 0,
   selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, library: null,
   leftOpen: readFlag('archa.leftOpen'), rightOpen: readFlag('archa.rightOpen'), chatDraft: '',
-  agents: [], activity: [], chat: [], runningRun: null, chatLive: null, agentFocus: null, editingText: null, toasts: [], fitRequest: 0,
+  agents: [], activity: [], chat: [], runs: {}, chatLive: {}, cursors: {}, editingText: null, toasts: [], fitRequest: 0,
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
   browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
 }));
@@ -127,26 +130,28 @@ export async function init() {
       selection: s.selection.filter((id) => doc.get(id)),
       docs: s.docs.map((d) => (d.id === e.docId ? { ...d, dirty: true, revision: e.revision } : d)),
     }));
-    if (e.author.kind === 'agent') set({ agentFocus: { name: e.author.name ?? e.author.id, nodeIds: e.touched.filter((id) => doc.get(id)), ts: Date.now() } });
   });
   client.on('agents.changed', (agents) => set({ agents }));
   client.on('activity', (a) => {
     set((s) => ({ activity: [...s.activity.slice(-300), a] }));
-    if (a.author.kind === 'agent' && a.nodeIds.length) set({ agentFocus: { name: a.author.name ?? a.author.id, nodeIds: a.nodeIds, ts: Date.now() } });
   });
   client.on('chat.message', (m) => {
     if (m.docId !== get().activeDocId) return;
     // A finished agent message replaces the streamed preview of the same run.
-    set((s) => ({ chat: [...s.chat, m], chatLive: m.role === 'agent' && s.chatLive?.runId === m.runId ? null : s.chatLive }));
+    set((s) => ({ chat: [...s.chat, m], chatLive: m.role === 'agent' && s.chatLive[threadOf(m)]?.runId === m.runId ? omit(s.chatLive, threadOf(m)) : s.chatLive }));
   });
   client.on('chat.delta', (d) => {
     if (d.docId !== get().activeDocId) return;
-    set({ chatLive: d.text ? { runId: d.runId, threadId: d.threadId, agent: d.agent, text: d.text } : null });
+    set((s) => ({ chatLive: d.text ? { ...s.chatLive, [d.threadId]: { runId: d.runId, threadId: d.threadId, agent: d.agent, text: d.text } } : omit(s.chatLive, d.threadId) }));
   });
   client.on('chat.run', (r) => {
     // A run started elsewhere (another window, the CLI) opens its conversation when none is shown.
-    if (r.status === 'running') set((s) => ({ runningRun: r.runId, chatThread: s.chatThread === null && r.docId === s.activeDocId ? r.threadId : s.chatThread }));
-    else if (get().runningRun === r.runId) set({ runningRun: null });
+    if (r.status === 'running') set((s) => ({ runs: { ...s.runs, [r.runId]: r }, chatThread: s.chatThread === null && r.docId === s.activeDocId ? r.threadId : s.chatThread }));
+    else set((s) => ({ runs: omit(s.runs, r.runId) }));
+  });
+  client.on('agent.trail', (t) => {
+    if (t.docId !== get().activeDocId) return;
+    set((s) => ({ cursors: { ...s.cursors, [t.author.id]: pushTrail(s.cursors[t.author.id], t, performance.now()) } }));
   });
   let accountsTimer: ReturnType<typeof setTimeout> | undefined;
   client.on('accounts.changed', () => { clearTimeout(accountsTimer); accountsTimer = setTimeout(() => void loadAccounts(), 120); });
@@ -173,8 +178,8 @@ export async function init() {
     if (intent.kind === 'file' && intent.path) await openPath(intent.path);
   });
 
-  const [docs, agents, info] = await Promise.all([client.call('workspace.list'), client.call('agents.list'), client.call('app.info')]);
-  set({ docs, agents, info });
+  const [docs, agents, info, runs] = await Promise.all([client.call('workspace.list'), client.call('agents.list'), client.call('app.info'), client.call('chat.runs')]);
+  set({ docs, agents, info, runs: Object.fromEntries(runs.map((r) => [r.runId, r])) });
   void loadAccounts();
   await activate(docs.at(-1)?.id ?? null);
 }
@@ -232,8 +237,18 @@ export async function activate(docId: string | null) {
   const chat = await client.call('chat.list', { docId });
   // Reopen the most recent conversation of this document.
   const last = chat.at(-1);
-  set((s) => ({ activeDocId: docId, doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1, selection: [], chat, chatThread: last ? threadOf(last) : null, editingText: null, fitRequest: s.fitRequest + 1 }));
+  set((s) => ({ activeDocId: docId, doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1, selection: [], chat, chatThread: last ? threadOf(last) : null, cursors: {}, editingText: null, fitRequest: s.fitRequest + 1 }));
 }
+
+function omit<T>(map: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in map)) return map;
+  const { [key]: _gone, ...rest } = map;
+  return rest;
+}
+
+/** The run working in a thread, if any. */
+export const runOfThread = (runs: Record<string, ChatRunEvent>, threadId: string | null) =>
+  threadId ? Object.values(runs).find((r) => r.threadId === threadId) ?? null : null;
 
 export async function resync() {
   const { client, activeDocId } = get();

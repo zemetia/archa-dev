@@ -29,7 +29,7 @@ const TITLES: Partial<Record<LeftTab, string>> = { history: 'Chat history', ...O
 export function LeftPanel() {
   const open = useStore((s) => s.leftOpen);
   const tab = useStore((s) => s.leftTab);
-  const running = useStore((s) => s.runningRun);
+  const running = useStore((s) => Object.keys(s.runs).length > 0);
   const label = TITLES[tab];
 
   return (

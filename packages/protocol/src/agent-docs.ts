@@ -6,6 +6,7 @@ API (ids are strings; any ref may be a node id or a unique node name):
   insert(parentRef | null, node, index?) -> id        null = the page. node = { type: "frame"|"rect"|"ellipse"|"text"|"group", name, ...props, children?: [node...] }
   update(ref, patch)                                  e.g. update(card, { fills: ["#fff"], cornerRadius: 12 })
   move(ref, parentRef, index?)   remove(ref)
+  copy(ref, parentRef?, { x?, y?, index?, name? }) -> id   unlinked copy of a subtree; default: next to the source
   get(ref, { depth? })  children(ref)  getPage()  getSelection()
   find(visitor, { under: ref, limit? })              visitor(node) returns true to collect, 'skip' to prune
   findEmptySpace(width, height) -> { x, y }          place new top-level frames here so they never overlap

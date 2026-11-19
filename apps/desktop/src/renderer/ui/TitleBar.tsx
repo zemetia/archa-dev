@@ -7,8 +7,8 @@ export function TitleBar() {
   const docs = useStore((s) => s.docs);
   const active = useStore((s) => s.activeDocId);
   const agents = useStore((s) => s.agents);
-  const running = useStore((s) => s.runningRun);
-  const live = agents.length > 0 || !!running;
+  const running = useStore((s) => Object.keys(s.runs).length);
+  const live = agents.length > 0 || running > 0;
   const browserOpen = useStore((s) => s.browserOpen);
 
   return (
@@ -36,7 +36,7 @@ export function TitleBar() {
       <div className={cn('no-drag flex h-7 items-center gap-1.5 rounded-full px-3 text-[12px]', live ? 'bg-agent/15 text-agent' : 'bg-panel text-fg-subtle')}
         title={agents.map((a) => a.name).join(', ') || 'No agent connected'}>
         <span className={cn('h-1.5 w-1.5 rounded-full', live ? 'animate-pulse bg-agent' : 'bg-fg-subtle')} />
-        {running ? 'Agent working' : agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''} connected` : 'No agent'}
+        {running ? (running > 1 ? `${running} sessions working` : 'Agent working') : agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''} connected` : 'No agent'}
       </div>
       <IconButton title="Browser (Ctrl+Shift+B)" active={browserOpen} onClick={toggleBrowser}><Globe size={16} /></IconButton>
       <IconButton title="Open (Ctrl+O)" onClick={() => void openFile()}><FolderOpen size={16} /></IconButton>

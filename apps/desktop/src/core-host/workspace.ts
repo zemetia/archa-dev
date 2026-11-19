@@ -3,7 +3,7 @@ import { basename } from 'node:path';
 import { ArchaDocument, DocumentError, DocumentSession, findEmptySpace, libraryInsertOps, subtreeHash } from '@archa/core';
 import { decodeArcha, encodeArcha, exportSvg } from '@archa/formats';
 import { newId, opSchema, type Author, type Op } from '@archa/schema';
-import { browserCommandSchema, type ActivityEntry, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
+import { browserCommandSchema, type ActivityEntry, type TrailStep, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
 import { z } from 'zod';
 import { AgentExecutor, describeState } from './execute';
 import { ADAPTERS, ChatRunner, findBin, type McpCommand } from './agents';
@@ -12,6 +12,7 @@ import { LibraryStore, libraryInsertSchema, libraryItemSchema, libraryPublishSch
 import { SkillManager } from './skills';
 import { McpServerManager } from './mcp-servers';
 import { callBrowser } from './main-bridge';
+import { randomPersona } from './personas';
 
 const chatSendSchema = z.object({
   docId: z.string().min(1), agent: z.string().min(1), prompt: z.string().min(1).max(100_000),
@@ -37,7 +38,8 @@ export function mcpCommand(): McpCommand {
   return { command: process.execPath, args: [cliPath(), 'mcp'], env: { ELECTRON_RUN_AS_NODE: '1' } };
 }
 
-export type Connection = { id: string; channel: Channel; client: ClientInfo; author: Author; connectedAt: number };
+/** threadId: the chat thread of a launched run's `archa mcp`; its trail is tagged with it. */
+export type Connection = { id: string; channel: Channel; client: ClientInfo; author: Author; connectedAt: number; threadId?: string };
 
 type Handler<M extends MethodName> = (params: CoreMethods[M]['params'], conn: Connection) => Promise<CoreMethods[M]['result']> | CoreMethods[M]['result'];
 
@@ -66,10 +68,16 @@ export class Workspace {
   attach(channel: Channel, raw: ClientInfo): Connection {
     const id = newId();
     const client = clientInfoSchema.parse(raw);
+    // Agents work under a session name, never the CLI id: a launched run takes its thread's name,
+    // a terminal (listen-mode) agent gets one per connection (blueprint AGENT_BRIDGE/03 → Sessions).
+    const run = client.runId ? this.chat.identity(client.runId) : null;
+    const taken = [...this.connections.values()].map((c) => c.author.name ?? '');
     const author: Author = client.kind === 'renderer'
       ? { kind: 'user', id: `window-${id}`, name: 'You' }
-      : { kind: 'agent', id: client.agentId ?? client.name, name: client.name };
-    const conn: Connection = { id, channel, client, author, connectedAt: Date.now() };
+      : run
+        ? { kind: 'agent', id: `${run.agent}:${run.threadId}`, name: run.persona }
+        : { kind: 'agent', id: `${client.agentId ?? client.name}:${id}`, name: randomPersona([], [...taken, ...this.chat.active().map((r) => r.persona)]) };
+    const conn: Connection = { id, channel, client, author, connectedAt: Date.now(), ...(run ? { threadId: run.threadId } : {}) };
     this.connections.set(id, conn);
     channel.onMessage((msg) => void this.onMessage(conn, msg));
     if (client.kind !== 'renderer') this.broadcast('agents.changed', this.agents());
@@ -83,7 +91,7 @@ export class Workspace {
   }
 
   agents(): AgentClient[] {
-    return [...this.connections.values()].filter((c) => c.client.kind !== 'renderer').map((c) => ({ id: c.id, name: c.client.name, kind: c.client.kind, connectedAt: c.connectedAt }));
+    return [...this.connections.values()].filter((c) => c.client.kind !== 'renderer').map((c) => ({ id: c.id, name: c.author.name ?? c.client.name, kind: c.client.kind, connectedAt: c.connectedAt }));
   }
 
   broadcast<E extends EventName>(event: E, data: CoreEvents[E]) {
@@ -133,6 +141,12 @@ export class Workspace {
     this.activity.push(entry);
     if (this.activity.length > 2000) this.activity.shift();
     this.broadcast('activity', entry);
+  }
+
+  /** Moves the session's cursor on the canvas along the steps of one tool call. */
+  trail(conn: Connection, docId: string, steps: TrailStep[]) {
+    if (!steps.length || conn.author.kind !== 'agent') return;
+    this.broadcast('agent.trail', { docId, author: conn.author, steps, ...(conn.client.runId ? { runId: conn.client.runId } : {}), ...(conn.threadId ? { threadId: conn.threadId } : {}) });
   }
 
   /** Asks a connected window to rasterise a node (the renderer owns the canvas engine). */
@@ -244,15 +258,20 @@ export class Workspace {
       const r = await this.screenshot(conn, s.id, id, scale ?? 1);
       if (r.error) throw new DocumentError('CONFLICT', r.error);
       this.log(s.id, conn.author, 'screenshot', `Screenshot "${r.name}"`, [id], conn.client.runId);
+      this.trail(conn, s.id, [trailStep(s, 'look', id)]);
       return r;
     },
-    'agent.exportSvg': ({ docId, node }) => {
+    'agent.exportSvg': ({ docId, node }, conn) => {
       const s = this.session(docId);
-      return { svg: exportSvg(s.doc, resolveRef(s, node)) };
+      const id = resolveRef(s, node);
+      this.trail(conn, s.id, [trailStep(s, 'read', id)]);
+      return { svg: exportSvg(s.doc, id) };
     },
     'agent.say': ({ docId, text, nodeId }, conn) => {
       const s = this.session(docId);
-      this.log(s.id, conn.author, 'say', text, nodeId ? [resolveRef(s, nodeId)] : [], conn.client.runId);
+      const id = nodeId ? resolveRef(s, nodeId) : null;
+      this.log(s.id, conn.author, 'say', text, id ? [id] : [], conn.client.runId);
+      if (id) this.trail(conn, s.id, [trailStep(s, 'focus', id)]);
     },
     'agent.browser': async (params, conn) => {
       const parsed = browserCommandSchema.safeParse(params);
@@ -283,6 +302,7 @@ export class Workspace {
       return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId);
     },
     'chat.stop': ({ runId }) => this.chat.stop(runId),
+    'chat.runs': () => this.chat.active(),
     'chat.list': ({ docId }) => this.chat.list(this.session(docId).id),
     'library.list': () => this.library.list(),
     'library.publish': (params) => {
@@ -336,6 +356,10 @@ export class Workspace {
     'mcp.importCandidates': () => this.mcpServers.importCandidates(),
     'mcp.import': (p) => this.mcpServers.import(p),
   };
+}
+
+function trailStep(s: DocumentSession, action: TrailStep['action'], id: string): TrailStep {
+  return { action, nodeId: id, name: s.doc.require(id).name, bounds: s.doc.worldBounds(id) };
 }
 
 export function resolveRef(s: DocumentSession, ref: string): string {
