@@ -55,6 +55,15 @@ describe('.archa', () => {
     expect(data.nodes.frame00001?.name).toBe('Card');
   });
 
+  it('migrates the v2 fixture to the current format', () => {
+    const dir = join(__dirname, 'fixtures/archa-v2');
+    const file = (p: string) => new Uint8Array(readFileSync(join(dir, p)));
+    const data = decodeArcha(zipSync({ 'manifest.json': file('manifest.json'), 'document.json': file('document.json'), 'pages/page00001.json': file('pages/page00001.json') }));
+    expect(data.meta.formatVersion).toBe(FORMAT_VERSION);
+    const card = data.nodes.frame00001;
+    expect(card?.type === 'frame' && card.effects[0]?.type).toBe('drop-shadow');
+  });
+
   it('rejects garbage with a clear error', () => {
     expect(() => decodeArcha(new Uint8Array([1, 2, 3]))).toThrow(FormatError);
   });

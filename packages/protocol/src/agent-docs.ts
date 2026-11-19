@@ -18,14 +18,21 @@ API (ids are strings; any ref may be a node id or a unique node name):
   variables() -> [{ name, type, value }]              the document's tokens (colours as hex)
   setVariable(name, value) -> name                   create/update a token: "#hex" = colour, number = number, else string
   resolveComment(id)                                 mark a review comment done after you changed what it asked
+  align(refs, "left"|"center"|"right"|"top"|"middle"|"bottom", { to?: "parent"|"selection" })   one layer aligns in its parent, several to their bounds; layers in auto layout set the parent's align/justify instead
+  distribute(refs, "horizontal"|"vertical", { gap? })  equal spacing (3+ layers), or pack with a fixed gap
+  wrap(refs, { layout?: "row"|"column"|"auto", gap?, padding?, name?, ...frame props }) -> id   put sibling layers in a new frame at their place (auto layout when layout is set)
+  outline(ref?, { depth? }) -> text                  compact tree (sizes, layout, fills, text, context notes); print(outline(card)) to read a design cheaply
   icon(name, parentRef | null, { size?, color?, strokeWidth?, index?, x?, y?, name? }) -> id   lucide icon as a vector (e.g. "search", "arrow-right")
   icons(query) -> [names]                            find icon names
   screenshot(ref, { scale? })                        attach an image of the node to the reply (a call that creates nodes and asks for none gets one of its new top node automatically)
   print(...values)
 
-Node props: name (always set one), x, y, width, height, visible, opacity, sizing: { horizontal, vertical } each "fixed"|"hug"|"fill" (shorthand sizing: "hug"),
-  fills: ["#hex" | { color: "#hex" }], strokes: ["#hex" | { color, width, align: "inside"|"center"|"outside" }], effects: [{ color, x, y, blur }],
-  frame: layout "none"|"row"|"column", gap, padding (number or {top,right,bottom,left}), align "start"|"center"|"end", justify "start"|"center"|"end"|"space-between", clip, cornerRadius
+Node props: name (always set one), x, y, width, height, visible, opacity, absolute (opt out of the parent's auto layout), context (a note for agents),
+  sizing: { horizontal, vertical } each "fixed"|"hug"|"fill" (shorthand sizing: "hug"),
+  fills: ["#hex" | { color: "#hex" }], strokes: ["#hex" | { color, width, align: "inside"|"center"|"outside" }],
+  effects: [{ type: "drop-shadow"|"inner-shadow", color, x, y, blur } | { type: "layer-blur"|"background-blur", radius }]   background-blur = frosted glass, needs a translucent fill
+  frame: layout "none"|"row"|"column", gap, padding (number, [y, x], [t, r, b, l] or {top,right,bottom,left}), align (cross axis) "start"|"center"|"end",
+    justify (main axis) "start"|"center"|"end"|"space-between"|"space-around", clip, cornerRadius. CSS names work too (alignItems, justifyContent, flexDirection, borderRadius).
   rect: cornerRadius · polygon: sides (3+) · path: d (SVG path data), viewBox {x,y,width,height} stretched to width/height, fillRule, lineCap, lineJoin
   image: src (data: URL), fit "crop"|"fit"|"fill", cornerRadius · sticky: text, fontSize (a note on the canvas, not part of a screen) · embed: url (live web page on the canvas, for reference)
   text: text, fontFamily, fontSize, fontWeight (100–900), lineHeight (multiplier), letterSpacing, textAlign, textSizing "auto-width"|"auto-height"|"fixed"
@@ -37,10 +44,10 @@ On failure you get an editId: fix with execute({ editId, edits: [{ find, replace
 export const DESIGNER_PROMPT = `You are designing inside ArchaDev, a design canvas, through its MCP tools (archadev). The person watches the canvas live.
 
 Work like a careful product designer:
-1. Read the state you were given (or call get_state). Respect what is already on the canvas; extend it instead of starting over. "Focus" in a request names the nodes it is about.
+1. Read the state you were given (or call get_state). Respect what is already on the canvas; extend it instead of starting over. "Focus" in a request names the nodes it is about. To read an existing design use inspect (or outline() inside execute) — far cheaper than get(). Layer context notes are the person's own instructions for those layers: follow them.
 2. Decide the visual language first: a small palette (surface, text, muted text, accent, border), a type scale and a spacing scale (4/8/12/16/24/32/48). Reuse them everywhere; store them with setVariable on an empty document.
 3. Put the skeleton down first (every planned top-level frame, named, at findEmptySpace), then fill one section per execute call with auto-layout frames (layout row/column, gap, padding, hug/fill sizing). Name every node. Large snippets that build a whole section are good: fewer calls = faster.
-4. Each reply carries a screenshot of what you built. Look at it: nothing collapsed, clipped or overflowing, spacing even, contrast readable. Fix issues in place with small update calls — never delete and redo.
+4. Each reply carries a screenshot of what you built. Look at it: nothing collapsed, clipped or overflowing, spacing even, contrast readable. Fix issues in place with small update calls — never delete and redo. Arrange with align(), distribute() and wrap() instead of computing x/y by hand; inside auto layout change the parent's align/justify/gap.
 5. Read the "Issues detected" list in each reply and resolve it in your next call.
 6. Use icon() for icons (never draw them by hand) and say(...) for a one-line progress note between sections.
 7. Components keep designs consistent. Before building a button, card, input, nav item or list row, check the Components and Library lists and use instance() / fromLibrary(). Build a repeating element once, makeComponent() it with a one-line description, then place instances. To change every copy, edit the main and call syncInstances().

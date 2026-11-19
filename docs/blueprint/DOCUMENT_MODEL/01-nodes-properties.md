@@ -30,6 +30,8 @@ Flat map + parent pointers: O(1) lookup, cheap moves, cache keys stable when a n
 | Type | Container | Notes |
 |---|---|---|
 | `frame` | ✓ | Auto-layout, clip, fills, strokes, effects, corner radius. Top-level = screen/artboard |
+
+Effects (format 3): `drop-shadow` / `inner-shadow` `{ x, y, blur, color }`, `layer-blur` / `background-blur` `{ radius }`. `meta.context` = the person's note for agents on a layer (no format change; `meta` is free-form).
 | `group` | ✓ | No own box; bounds = union of children |
 | `rect` `ellipse` `line` `polygon` `star` | ✗ | Primitives |
 | `path` | ✗ | Vector network / SVG path data |

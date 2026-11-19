@@ -57,6 +57,8 @@ export interface CoreMethods {
   'agent.execute': { params: { docId?: string; code?: string; editId?: string; edits?: Array<{ find: string; replace: string }> }; result: ExecuteResult };
   'agent.screenshot': { params: { docId?: string; node: string; scale?: number }; result: { png?: string; unchanged?: boolean; name: string; nodeId: string } };
   'agent.exportSvg': { params: { docId?: string; node: string }; result: { svg: string } };
+  /** Compact text tree of a node (default: the selection, else the page) — what the design panel shows, per layer. */
+  'agent.outline': { params: { docId?: string; node?: string; depth?: number }; result: string };
   'agent.say': { params: { docId?: string; text: string; nodeId?: string }; result: void };
   /** Drive the in-app browser (blueprint BROWSER). */
   'agent.browser': { params: BrowserCommand; result: BrowserReply };
@@ -66,6 +68,8 @@ export interface CoreMethods {
   'export.save': { params: { docId: string; nodeId: string; format: ExportFormat; path: string; image?: string }; result: { files: string[] } };
   /** Self-contained HTML page of a node (CSS inlined, images embedded) — main prints it to PDF. */
   'export.page': { params: { docId: string; nodeId: string }; result: { html: string; width: number; height: number } };
+  /** Code of a node for the clipboard: one HTML file (CSS inlined in a <style>, or Tailwind classes), images embedded. */
+  'export.code': { params: { docId: string; nodeId: string; style: 'css' | 'tailwind' }; result: { code: string } };
   // Chat: launch a local agent CLI on this document (blueprint AGENT_BRIDGE/03)
   /** No threadId = start a new conversation. */
   /**

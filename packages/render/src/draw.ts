@@ -27,6 +27,8 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node, anim?: AnimMa
       ctx.translate(-node.width / 2, -node.height / 2);
     }
   }
+  const blur = 'effects' in node ? node.effects.find((e) => e.visible && e.type === 'layer-blur') : undefined;
+  if (blur?.type === 'layer-blur' && blur.radius > 0) ctx.filter = `blur(${blur.radius * deviceScale(ctx)}px)`;
 
   switch (node.type) {
     case 'frame':
@@ -124,17 +126,29 @@ function shape(ctx: Ctx, node: VisualNode, path: () => Path2D | void, phase: 'al
 }
 
 function paintFills(ctx: Ctx, node: VisualNode, path: () => Path2D | void, fill: (p: Path2D | void) => void) {
+  const k = deviceScale(ctx);
+  const solid = node.fills.find((f) => f.visible);
   for (const fx of node.effects) {
-    if (!fx.visible) continue;
+    if (!fx.visible || fx.type !== 'drop-shadow') continue;
     ctx.save();
+    // Shadow offset and blur are in device pixels: scale them so they match at every zoom.
     ctx.shadowColor = colorToCss(fx.color);
-    ctx.shadowBlur = fx.blur;
-    ctx.shadowOffsetX = fx.x;
-    ctx.shadowOffsetY = fx.y;
+    ctx.shadowBlur = fx.blur * k;
+    ctx.shadowOffsetX = fx.x * k;
+    ctx.shadowOffsetY = fx.y * k;
     const p = path();
-    const solid = node.fills.find((f) => f.visible);
     ctx.fillStyle = solid ? colorToCss(solid.color) : 'rgba(0,0,0,1)';
     fill(p);
+    ctx.restore();
+  }
+  for (const fx of node.effects) {
+    if (!fx.visible || fx.type !== 'background-blur' || fx.radius <= 0) continue;
+    // Frosted glass: blur what is already drawn under the shape, then the (translucent) fills go on top.
+    ctx.save();
+    clipTo(ctx, node, path());
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.filter = `blur(${fx.radius * k}px)`;
+    ctx.drawImage(ctx.canvas, 0, 0);
     ctx.restore();
   }
   for (const f of node.fills) {
@@ -143,6 +157,39 @@ function paintFills(ctx: Ctx, node: VisualNode, path: () => Path2D | void, fill:
     ctx.fillStyle = colorToCss(f.color);
     fill(p);
   }
+  for (const fx of node.effects) {
+    if (!fx.visible || fx.type !== 'inner-shadow') continue;
+    // Inner shadow: clip to the shape and cast the shadow of everything outside it. The caster is drawn far
+    // to the side (outside the clip) and its shadow is offset back, so only the shadow lands inside.
+    ctx.save();
+    clipTo(ctx, node, path());
+    const reach = fx.blur * 2 + Math.abs(fx.x) + Math.abs(fx.y) + 8;
+    const away = node.width + reach * 2 + 100;
+    ctx.shadowColor = colorToCss(fx.color);
+    ctx.shadowBlur = fx.blur * k;
+    ctx.shadowOffsetX = (fx.x + away) * k;
+    ctx.shadowOffsetY = fx.y * k;
+    ctx.translate(-away, 0);
+    const p = path();
+    const ring = new Path2D();
+    if (p) ring.addPath(p);
+    else ctx.rect(-reach, -reach, node.width + reach * 2, node.height + reach * 2);
+    ring.rect(-reach, -reach, node.width + reach * 2, node.height + reach * 2);
+    ctx.fillStyle = '#000';
+    if (p) ctx.fill(ring, 'evenodd'); else ctx.fill('evenodd');
+    ctx.restore();
+  }
+}
+
+function clipTo(ctx: Ctx, node: VisualNode, p: Path2D | void) {
+  const rule = node.type === 'path' ? node.fillRule : 'nonzero';
+  if (p) ctx.clip(p, rule); else ctx.clip(rule);
+}
+
+/** Canvas units → device pixels (zoom × DPR × export scale); rotation is not supported, so one factor fits both axes. */
+function deviceScale(ctx: Ctx): number {
+  const m = ctx.getTransform();
+  return Math.hypot(m.a, m.b) || 1;
 }
 
 const pathCache = new Map<string, Path2D>();
