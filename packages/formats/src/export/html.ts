@@ -128,8 +128,18 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
       else if (st.align === 'outside') shadows.push(`0 0 0 ${px(st.width)} ${c}`);
       else shadows.push(`inset 0 0 0 ${px(st.width / 2)} ${c}`, `0 0 0 ${px(st.width / 2)} ${c}`);
     }
-    for (const fx of n.effects) if (fx.visible) shadows.push(`${px(fx.x)} ${px(fx.y)} ${px(fx.blur)} ${hex(fx.color)}`);
+    for (const fx of n.effects) {
+      if (!fx.visible || (fx.type !== 'drop-shadow' && fx.type !== 'inner-shadow')) continue;
+      shadows.push(`${fx.type === 'inner-shadow' ? 'inset ' : ''}${px(fx.x)} ${px(fx.y)} ${px(fx.blur)} ${hex(fx.color)}`);
+    }
     if (shadows.length) s.push(['box-shadow', shadows.join(', ')]);
+  }
+  if ('effects' in n) {
+    for (const fx of n.effects) {
+      if (!fx.visible) continue;
+      if (fx.type === 'layer-blur' && fx.radius > 0) s.push(['filter', `blur(${px(fx.radius)})`]);
+      if (fx.type === 'background-blur' && fx.radius > 0) s.push(['backdrop-filter', `blur(${px(fx.radius)})`]);
+    }
   }
 
   switch (n.type) {
@@ -141,7 +151,7 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
         if (p.top || p.right || p.bottom || p.left) s.push(['padding', [p.top, p.right, p.bottom, p.left].map(px).join(' ')]);
         if (n.align !== 'start') s.push(['align-items', n.align === 'center' ? 'center' : 'flex-end']);
         else s.push(['align-items', 'flex-start']);
-        if (n.justify !== 'start') s.push(['justify-content', n.justify === 'center' ? 'center' : n.justify === 'end' ? 'flex-end' : 'space-between']);
+        if (n.justify !== 'start') s.push(['justify-content', n.justify === 'center' ? 'center' : n.justify === 'end' ? 'flex-end' : n.justify]);
       }
       if (n.clip) s.push(['overflow', 'hidden']);
       break;

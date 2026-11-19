@@ -25,11 +25,19 @@ const DEFAULT_NAMES: Record<string, string> = { frame: 'Frame', rect: 'Rectangle
 /** Colour fields accept `"#ff0000"` strings; paints accept a bare colour string. */
 export function normaliseInput(input: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...input };
+  // CSS / Figma property names → the schema's (only when the schema's own key is absent).
+  for (const [from, to] of KEY_ALIASES) {
+    if (out[from] !== undefined && out[to] === undefined) out[to] = out[from];
+    if (from in out) delete out[from];
+  }
   if (!out.name && typeof out.type === 'string') out.name = (out.type === 'text' && typeof out.text === 'string' && out.text.slice(0, 24)) || DEFAULT_NAMES[out.type] || out.type;
   for (const key of ['fills', 'strokes', 'effects'] as const) {
     if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).map((p) => normalisePaint(p, key));
   }
   if (typeof out.fill === 'string') { out.fills = [normalisePaint(out.fill, 'fills')]; delete out.fill; }
+  // A note for agents on this layer (design panel → Context) lives in meta.
+  if (typeof out.context === 'string') { out.meta = { ...(out.meta as object | undefined), context: out.context }; delete out.context; }
+  if (typeof out.stroke === 'string') { out.strokes = [normalisePaint(out.stroke, 'strokes')]; delete out.stroke; }
   if (typeof out.padding === 'number') { const p = out.padding; out.padding = { top: p, right: p, bottom: p, left: p }; }
   if (Array.isArray(out.padding) && out.padding.every((v) => typeof v === 'number')) {
     const [t = 0, r = t, b = t, l = r] = out.padding as number[];
@@ -61,7 +69,19 @@ export function normaliseInput(input: Record<string, unknown>): Record<string, u
 /* Spellings agents carry over from CSS, Figma or other tools → the schema's words. */
 const SIZING: Record<string, string> = { 'auto-height': 'hug', 'auto-width': 'hug', auto: 'hug', content: 'hug', fit: 'hug', 'fit-content': 'hug', 'hug-contents': 'hug', wrap: 'hug', stretch: 'fill', full: 'fill', 'fill-container': 'fill', '100%': 'fill', expand: 'fill', fixed: 'fixed' };
 const ALIGN: Record<string, string> = { 'flex-start': 'start', left: 'start', top: 'start', middle: 'center', 'flex-end': 'end', right: 'end', bottom: 'end', stretch: 'start', baseline: 'center' };
-const JUSTIFY: Record<string, string> = { 'flex-start': 'start', left: 'start', top: 'start', middle: 'center', 'flex-end': 'end', right: 'end', bottom: 'end', between: 'space-between', 'space-around': 'space-between', 'space-evenly': 'space-between' };
+const JUSTIFY: Record<string, string> = { 'flex-start': 'start', left: 'start', top: 'start', middle: 'center', 'flex-end': 'end', right: 'end', bottom: 'end', between: 'space-between', around: 'space-around', 'space-evenly': 'space-around', evenly: 'space-around' };
+const KEY_ALIASES: Array<[string, string]> = [
+  ['alignItems', 'align'], ['counterAxisAlignItems', 'align'], ['justifyContent', 'justify'], ['primaryAxisAlignItems', 'justify'],
+  ['flexDirection', 'layout'], ['direction', 'layout'], ['layoutMode', 'layout'], ['itemSpacing', 'gap'], ['spacing', 'gap'],
+  ['radius', 'cornerRadius'], ['borderRadius', 'cornerRadius'], ['clipContent', 'clip'], ['clipsContent', 'clip'],
+  ['shadows', 'effects'],
+];
+const EFFECT_TYPES: Record<string, string> = {
+  shadow: 'drop-shadow', 'box-shadow': 'drop-shadow', drop: 'drop-shadow', dropshadow: 'drop-shadow', 'drop_shadow': 'drop-shadow',
+  inner: 'inner-shadow', inset: 'inner-shadow', 'inset-shadow': 'inner-shadow', innershadow: 'inner-shadow', 'inner_shadow': 'inner-shadow',
+  blur: 'layer-blur', 'layer_blur': 'layer-blur', layerblur: 'layer-blur', filter: 'layer-blur',
+  backdrop: 'background-blur', 'backdrop-blur': 'background-blur', 'backdrop-filter': 'background-blur', 'background_blur': 'background-blur', backgroundblur: 'background-blur', glass: 'background-blur',
+};
 const LAYOUT: Record<string, string> = { horizontal: 'row', vertical: 'column', col: 'column', flex: 'row', stack: 'column', vstack: 'column', hstack: 'row', absolute: 'none' };
 const TEXT_ALIGN: Record<string, string> = { start: 'left', end: 'right', middle: 'center' };
 const TEXT_SIZING: Record<string, string> = { auto: 'auto-width', hug: 'auto-width', 'width-auto': 'auto-width', autowidth: 'auto-width', wrap: 'auto-height', fill: 'auto-height', 'height-auto': 'auto-height', autoheight: 'auto-height', 'fixed-width': 'auto-height', none: 'fixed' };
@@ -77,7 +97,15 @@ function normalisePaint(p: unknown, key: 'fills' | 'strokes' | 'effects'): unkno
     const o = { ...(p as Record<string, unknown>) };
     if (typeof o.color === 'string') o.color = hexToColor(o.color);
     if (key === 'fills' && !o.type) o.type = 'solid';
-    if (key === 'effects' && !o.type) o.type = 'drop-shadow';
+    if (key === 'effects') {
+      if (o.inset === true && !o.type) o.type = 'inner-shadow';
+      delete o.inset;
+      o.type = typeof o.type === 'string' ? EFFECT_TYPES[o.type.toLowerCase()] ?? o.type : 'drop-shadow';
+      // Blurs take `radius`; agents often write `blur` for it.
+      if ((o.type === 'layer-blur' || o.type === 'background-blur') && o.radius === undefined && typeof o.blur === 'number') { o.radius = o.blur; delete o.blur; }
+      if ((o.type === 'drop-shadow' || o.type === 'inner-shadow') && o.color === undefined) o.color = hexToColor('#00000026');
+      if (o.type === 'layer-blur' || o.type === 'background-blur') { delete o.color; delete o.x; delete o.y; }
+    }
     return o;
   }
   return p;

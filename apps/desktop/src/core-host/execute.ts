@@ -1,6 +1,6 @@
 import { getQuickJS, shouldInterruptAfterDeadline, type QuickJSContext, type QuickJSWASMModule } from 'quickjs-emscripten';
 import {
-  applyOps, DocumentError, findEmptySpace, insertOpsFor, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, subtreeInput, syncInstanceOps,
+  alignOps, applyOps, contextOf, distributeOps, DocumentError, findEmptySpace, insertOpsFor, outline, wrapOps, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, subtreeInput, syncInstanceOps,
   type ArchaDocument, type DocumentSession,
 } from '@archa/core';
 import { iconKey, iconPath, searchIcons } from '@archa/core/icons';
@@ -36,6 +36,10 @@ var fromLibrary = (ref, parent, opts) => __call('fromLibrary', [ref, parent, opt
 var variables = () => __call('variables', []);
 var setVariable = (name, value) => __call('setVariable', [name, value]);
 var resolveComment = (id) => __call('resolveComment', [id]);
+var align = (refs, edge, opts) => __call('align', [[].concat(refs), edge, opts || {}]);
+var distribute = (refs, axis, opts) => __call('distribute', [[].concat(refs), axis, typeof opts === 'number' ? { gap: opts } : opts || {}]);
+var wrap = (refs, frame) => __call('wrap', [[].concat(refs), frame || {}]);
+var outline = (ref, opts) => __call('outline', [ref, opts || {}]);
 var icon = (name, parent, opts) => __call('icon', [name, parent, opts || {}]);
 var icons = (query) => __call('icons', [query]);
 var print = (...v) => __call('print', [v.map((x) => typeof x === 'string' ? x : JSON.stringify(x))]);
@@ -193,6 +197,9 @@ export class AgentExecutor {
         const merged: Record<string, unknown> = { ...patch };
         if (patch.sizing && typeof patch.sizing === 'object') merged.sizing = { ...cur.sizing, ...(patch.sizing as object) };
         if (patch.padding && typeof patch.padding === 'object' && !Array.isArray(patch.padding) && cur.padding) merged.padding = { ...cur.padding, ...(patch.padding as object) };
+        // `context` is the person's note on the layer (design panel → Context); it lives in meta, next to component data.
+        if ('context' in patch) { merged.meta = { ...cur.meta, ...(merged.meta as object | undefined), context: String(patch.context ?? '') }; delete merged.context; }
+        else if (merged.meta && typeof merged.meta === 'object') merged.meta = { ...cur.meta, ...(merged.meta as object) };
         const norm = normaliseInput({ ...merged, type: cur.type });
         delete norm.type;
         if (!('name' in patch)) delete norm.name;
@@ -344,6 +351,30 @@ export class AgentExecutor {
         step('create', rootId);
         return rootId;
       }
+      case 'align':
+      case 'distribute': {
+        const [refs, how, opts] = args as [string[], string, { to?: 'auto' | 'parent' | 'selection'; gap?: number }];
+        const ids = refs.map(ref);
+        const r = name === 'align' ? alignOps(doc, ids, String(how ?? ''), opts?.to ?? 'auto') : distributeOps(doc, ids, String(how ?? ''), opts?.gap);
+        commit(r.ops);
+        for (const op of r.ops) if (op.op === 'update') { st.changed.set(op.id, doc.require(op.id).name); step('edit', op.id); }
+        st.output.push(...r.notes.map((n) => `${name}: ${n}`));
+        return null;
+      }
+      case 'wrap': {
+        const [refs, frame] = args as [string[], Record<string, unknown>];
+        const { ops, rootId } = wrapOps(doc, refs.map(ref), frame ?? {});
+        commit(ops);
+        st.created.push({ id: rootId, name: doc.require(rootId).name });
+        step('create', rootId);
+        return rootId;
+      }
+      case 'outline': {
+        const [r, opts] = args as [string | null | undefined, { depth?: number }];
+        const id = r ? ref(r) : st.pageRoot;
+        step('read', id);
+        return outline(doc, id, opts?.depth ?? (id === st.pageRoot ? 1 : 3));
+      }
       case 'icons':
         return searchIcons(String(args[0] ?? ''), 30);
       case 'print':
@@ -446,16 +477,34 @@ export function describeState(ws: Workspace, s: DocumentSession): string {
     `Document "${doc.meta.name}" (id ${s.id}) · revision ${s.revision}${s.filePath ? ` · ${s.filePath}` : ' · unsaved'}`,
     `Page "${page.name}" root id "${page.rootId}" — insert(null, …) places nodes on this page.`,
     `Selection: ${sel.length ? sel.map((n) => `${n.name} "${n.id}" (${n.type} ${n.width}×${n.height})`).join(', ') : 'none'}`,
+    ...describeSelection(doc, sel),
     `Top-level nodes (${top.length}):`,
     ...top.slice(0, 30).map((n) => `  - ${n.name} "${n.id}" ${n.type} at ${n.x},${n.y} size ${n.width}×${n.height}${isContainer(n) ? ` · ${n.children.length} children` : ''}`),
     ...(top.length > 30 ? [`  … +${top.length - 30} more`] : []),
     ...describeVariables(doc),
+    ...describeContext(doc),
     ...describeComments(doc),
     ...describeComponents(doc),
     ...describeLibrary(ws),
     `Other open documents: ${ws.summaries().filter((d) => d.id !== s.id).map((d) => `${d.name} (${d.id})`).join(', ') || 'none'}`,
   ];
   return lines.join('\n');
+}
+
+/** The selected layers as the design panel shows them, so the agent edits what the person points at without a read call. */
+function describeSelection(doc: ArchaDocument, sel: Node[]): string[] {
+  if (!sel.length || sel.length > 6) return [];
+  return ['Selected layers (outline):', ...sel.map((n) => outline(doc, n.id, 2, 60).replace(/^/gm, '  '))];
+}
+
+/** Notes people wrote on layers (Context): constraints the agent must follow when it touches them. */
+function describeContext(doc: ArchaDocument): string[] {
+  const noted = [...doc.nodes.values()].filter((n) => contextOf(n));
+  if (!noted.length) return [];
+  return [
+    `Layer context notes (${noted.length}) — the person's instructions for these layers; follow them:`,
+    ...noted.slice(0, 30).map((n) => `  - ${n.name} "${n.id}": ${contextOf(n).replace(/\s+/g, ' ').slice(0, 300)}`),
+  ];
 }
 
 function describeVariables(doc: ArchaDocument): string[] {

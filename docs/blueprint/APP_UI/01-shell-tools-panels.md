@@ -95,7 +95,7 @@ Thumbnails: `lib/thumbs.ts` renders with `renderNodePng`, cached by subtree hash
 | Panel | Content |
 |---|---|
 | Layers | Virtualised tree → [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
-| Design | Position, sizing modes, auto-layout, fills/strokes/effects with variable pickers, text, component props, theme switcher |
+| Design | **Built 0.5:** name + type icon · Create component / instance actions · **Context** (note for agents, `meta.context`) · Alignment (6 edges, distribute for 3+; a child of auto layout sets the parent's align/justify) · Position (+ ignore auto layout) · Auto layout (direction, 9-dot placement, gap, space between/around, padding per axis or side) · Dimensions (W/H, Fill / Hug checkboxes; typing a size makes the axis fixed) · Appearance · Text · Fill (hex + %) · Stroke · Effects (drop/inner shadow, layer/background blur) · Code (copy / export HTML + Tailwind or CSS) · Export. Arrange logic lives in `@archa/core` `arrange.ts`, shared with agents. Target adds variable pickers, theme switcher |
 | Inspect | Computed values + variable behind each; live DOM styles for code frames |
 | Variables | → [DESIGN_SYSTEM/01](../DESIGN_SYSTEM/01-variables-themes.md) |
 | Issues | Lint for the current page |

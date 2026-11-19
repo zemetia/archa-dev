@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { userInfo } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join } from 'node:path';
-import { ArchaDocument, DocumentError, DocumentSession, findEmptySpace, libraryInsertOps, subtreeHash } from '@archa/core';
+import { ArchaDocument, DocumentError, DocumentSession, findEmptySpace, libraryInsertOps, outline, subtreeHash } from '@archa/core';
 import { decodeArcha, encodeArcha, exportHtml, exportHtmlStandalone, exportSvg } from '@archa/formats';
 import { newId, opSchema, type Author, type Op } from '@archa/schema';
 import { browserCommandSchema, type ActivityEntry, type TrailStep, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
@@ -36,6 +36,8 @@ const exportSaveSchema = z.object({
   image: z.string().max(200_000_000).optional(),
 });
 const exportPageSchema = z.object({ docId: z.string().min(1), nodeId: z.string().min(1) });
+const exportCodeSchema = z.object({ docId: z.string().min(1), nodeId: z.string().min(1), style: z.enum(['css', 'tailwind']) });
+const outlineSchema = z.object({ docId: z.string().optional(), node: z.string().min(1).optional(), depth: z.number().int().min(0).max(12).optional() });
 const chatThreadSchema = z.object({ docId: z.string().min(1), threadId: z.string().min(1).max(64) });
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -280,6 +282,16 @@ export class Workspace {
       this.trail(conn, s.id, [trailStep(s, 'read', id)]);
       return { svg: exportSvg(s.doc, id) };
     },
+    'agent.outline': (params, conn) => {
+      const { docId, node, depth } = parse(outlineSchema, params);
+      const s = this.session(docId);
+      const sel = (this.selection.get(s.id) ?? []).filter((id) => s.doc.get(id));
+      const ids = node ? [resolveRef(s, node)] : sel.length ? sel : [s.doc.pages[0]!.rootId];
+      const read = ids.filter((id) => id !== s.doc.pages[0]!.rootId).slice(0, 5);
+      if (read.length) this.trail(conn, s.id, read.map((id) => trailStep(s, 'read', id)));
+      const head = node ? '' : sel.length ? `Selection (${sel.length}):\n` : 'Nothing selected — the page:\n';
+      return head + ids.map((id) => outline(s.doc, id, depth ?? (id === s.doc.pages[0]!.rootId ? 1 : 3))).join('\n');
+    },
     'agent.say': ({ docId, text, nodeId }, conn) => {
       const s = this.session(docId);
       const id = nodeId ? resolveRef(s, nodeId) : null;
@@ -334,6 +346,13 @@ export class Workspace {
       const s = this.session(docId);
       const n = s.doc.require(nodeId);
       return { html: exportHtmlStandalone(s.doc, nodeId), width: n.width, height: n.height };
+    },
+    'export.code': (params) => {
+      const { docId, nodeId, style } = parse(exportCodeSchema, params);
+      const s = this.session(docId);
+      if (style === 'css') return { code: exportHtmlStandalone(s.doc, nodeId) };
+      const [page] = exportHtml(s.doc, nodeId, { style: 'tailwind', inlineAssets: true });
+      return { code: String(page!.data) };
     },
     'chat.send': (params) => {
       const p = parse(chatSendSchema, params);

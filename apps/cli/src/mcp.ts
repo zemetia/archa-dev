@@ -40,6 +40,11 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
     },
   }, (args) => guard(async (c) => formatExecute(await c.call('agent.execute', { docId, ...args }))));
 
+  server.registerTool('inspect', {
+    description: 'Compact outline of layers as the design panel shows them: type, size, sizing, auto layout (gap/padding/align/justify), fills, strokes, effects, text and context notes people left on layers. No node = the current selection (else the page). Cheaper than get() for reading an existing design before editing it.',
+    inputSchema: { node: z.string().optional().describe('Node id or unique name'), depth: z.number().int().min(0).max(12).optional().describe('Levels of children (default 3)') },
+  }, ({ node, depth }) => guard(async (c) => [{ type: 'text', text: await c.call('agent.outline', { docId, node, depth }) }]));
+
   // ArchaDev's internal skill: short design guides, answered locally (no app round-trip).
   server.registerTool('read_guide', {
     description: `Built-in ArchaDev design guide for a topic. Read the one that fits the task before designing. Topics:

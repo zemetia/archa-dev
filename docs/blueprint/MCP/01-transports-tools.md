@@ -34,6 +34,7 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 |---|---|---|
 | `get_state` | `{ docId? }` | Active doc/page, selection, top-level frames (max 30 + "N more"), components id→name, variables summary, pending comments/decisions, issues count |
 | `execute` | `{ code } \| { editId, edits: [{find, replace}] }` | Run a snippet as one transaction → [02](./02-execute-api.md) |
+| `inspect` | `{ node?, depth? }` | **Built 0.5:** compact outline (core `outline.ts`) of a node, else the selection, else the page: sizes, sizing, auto layout, paints, effects, text, context notes. RPC `agent.outline` |
 | `screenshot` | `{ nodeId, scale? }` | Image or `unchanged` → [RENDERING/03](../RENDERING/03-export.md) |
 | `export` | `{ nodeId?, format, options? }` | png/jpeg/webp/svg/pdf/html/react/tokens; returns path or content |
 | `get_style` | `{ name?, params? }` | Style profiles, two-step load → [DESIGN_SYSTEM/03](../DESIGN_SYSTEM/03-style-profiles.md) |

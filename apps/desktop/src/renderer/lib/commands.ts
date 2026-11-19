@@ -1,7 +1,7 @@
-import { insertOpsFor, subtreeInput } from '@archa/core';
+import { insertOpsFor, subtreeInput, wrapOps } from '@archa/core';
 import { isContainer, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, toast, useStore } from './store';
-import { originOf, pageRoot, selectionBounds } from './geometry';
+import { pageRoot } from './geometry';
 import type { ArchaDocument } from '@archa/core';
 
 /* Editing commands shared by shortcuts and menus. Every change is one transaction. */
@@ -86,24 +86,8 @@ export async function wrapInFrame(layout: boolean) {
       return;
     }
   }
-  const parentId = doc.require(ids[0]!).parentId!;
-  if (!ids.every((id) => doc.get(id)?.parentId === parentId)) { toast('Select layers with the same parent', 'error'); return; }
-  const parent = doc.require(parentId);
-  const b = selectionBounds(doc, ids)!;
-  const o = originOf(doc, parentId);
-  const sorted = isContainer(parent) ? [...ids].sort((a, c) => parent.children.indexOf(a) - parent.children.indexOf(c)) : ids;
-  const index = isContainer(parent) ? parent.children.indexOf(sorted[0]!) : undefined;
-  const frame = { type: 'frame', name: layout ? 'Auto layout' : 'Frame', x: Math.round(b.x - o.x), y: Math.round(b.y - o.y), width: Math.round(b.width), height: Math.round(b.height), clip: false,
-    ...(layout ? { layout: b.width > b.height * 1.5 ? 'row' : 'column', gap: 12, sizing: { horizontal: 'hug', vertical: 'hug' } } : {}) } as unknown as NodeInput;
-  const inserted = insertOpsFor(frame, parentId, index);
-  const rootId = inserted.rootId;
-  const ops: Op[] = [...inserted.ops];
-  const byPos = layout ? [...sorted].sort((a, c) => (b.width > b.height * 1.5 ? doc.require(a).x - doc.require(c).x : doc.require(a).y - doc.require(c).y)) : sorted;
-  for (const id of byPos) {
-    const wb = doc.worldBounds(id);
-    ops.push({ op: 'move', id, parentId: rootId });
-    if (!layout) ops.push({ op: 'update', id, patch: { x: Math.round(wb.x - b.x), y: Math.round(wb.y - b.y) } });
-  }
+  if (!ids.every((id) => doc.get(id)?.parentId === doc.get(ids[0]!)?.parentId)) { toast('Select layers with the same parent', 'error'); return; }
+  const { ops, rootId } = wrapOps(doc, ids, layout ? { layout: 'auto' } : {});
   if (await commit(layout ? 'Wrap in auto layout' : 'Frame selection', ops)) select([rootId]);
 }
 

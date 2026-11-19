@@ -21,15 +21,23 @@ export const strokeSchema = z.object({
 });
 export type Stroke = z.infer<typeof strokeSchema>;
 
-export const shadowSchema = z.object({
-  type: z.literal('drop-shadow'),
+const shadowFields = {
   x: z.number().default(0),
   y: z.number().default(4),
   blur: z.number().min(0).default(12),
   color: colorSchema,
   visible: z.boolean().default(true),
-});
-export type Shadow = z.infer<typeof shadowSchema>;
+};
+
+export const shadowSchema = z.object({ type: z.literal('drop-shadow'), ...shadowFields });
+export const innerShadowSchema = z.object({ type: z.literal('inner-shadow'), ...shadowFields });
+const blurFields = { radius: z.number().min(0).default(8), visible: z.boolean().default(true) };
+export const layerBlurSchema = z.object({ type: z.literal('layer-blur'), ...blurFields }).describe('Blurs the node itself');
+export const backgroundBlurSchema = z.object({ type: z.literal('background-blur'), ...blurFields }).describe('Blurs what is behind the node (frosted glass); needs a translucent fill');
+export const effectSchema = z.discriminatedUnion('type', [shadowSchema, innerShadowSchema, layerBlurSchema, backgroundBlurSchema]);
+export type Shadow = z.infer<typeof shadowSchema> | z.infer<typeof innerShadowSchema>;
+export type Effect = z.infer<typeof effectSchema>;
+export type EffectType = Effect['type'];
 
 const paddingSchema = z.object({ top: z.number().min(0), right: z.number().min(0), bottom: z.number().min(0), left: z.number().min(0) });
 
@@ -52,7 +60,7 @@ const base = {
 const visual = {
   fills: z.array(paintSchema).default([]),
   strokes: z.array(strokeSchema).default([]),
-  effects: z.array(shadowSchema).default([]),
+  effects: z.array(effectSchema).default([]),
 };
 
 const container = { children: z.array(nodeIdSchema).default([]) };
@@ -68,7 +76,7 @@ export const frameNodeSchema = z.object({
   gap: z.number().min(0).default(0),
   padding: paddingSchema.default({ top: 0, right: 0, bottom: 0, left: 0 }),
   align: z.enum(['start', 'center', 'end']).default('start').describe('Cross-axis alignment'),
-  justify: z.enum(['start', 'center', 'end', 'space-between']).default('start').describe('Main-axis distribution'),
+  justify: z.enum(['start', 'center', 'end', 'space-between', 'space-around']).default('start').describe('Main-axis distribution'),
 });
 
 export const groupNodeSchema = z.object({ ...base, ...container, type: z.literal('group') });

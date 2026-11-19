@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### Design panel
+- **Rebuilt right sidebar.** Layer name with type icon, then Create component, Context, Alignment, Position, Auto layout, Dimensions, Appearance, Text, Fill, Stroke, Effects, Code and Export.
+- **Alignment works everywhere.** One layer aligns inside its frame; several align to their bounds; distribute evens out 3+ layers. A layer inside auto layout now changes the parent's alignment instead of doing nothing, and a lone top-level layer says why it can't be aligned.
+- **Auto layout:** pick freeform / vertical / horizontal, place children with a 9-dot grid, gap with Space between / Space around, padding per axis or per side.
+- **Dimensions:** Fill width/height and Hug width/height checkboxes; typing a width or height makes that side fixed again (text switches to wrapping).
+- **Context:** a note for agents on any layer ("keep the price on one line"). Agents see it in their state and in `inspect`.
+- **Effects:** drop shadow, inner shadow, layer blur and background blur (frosted glass). Shadows now keep their size at every zoom.
+- **Fill opacity** can be typed again (the % field was read-only). **Code:** copy HTML + Tailwind or HTML + CSS to the clipboard, or export it.
+- `.archa` format 3 (new effect types, `space-around`); format 2 files open unchanged.
+
+### Agents
+- New `inspect` tool and `outline()` helper: a compact read of a design (sizes, layout, paints, text, context) instead of large `get()` JSON.
+- `align()`, `distribute()` and `wrap()` in `execute` use the same code as the design panel, so agents arrange layers in one call instead of computing x/y.
+- More CSS / Figma spellings are understood (`alignItems`, `justifyContent`, `flexDirection`, `borderRadius`, `stroke`, `blur` / `inset` / `backdrop` effects).
+- `get_state` includes an outline of the selected layers and every context note.
+
 ## [0.4.0] - 2026-11-19
 
 ### Settings
