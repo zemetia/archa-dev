@@ -67,6 +67,10 @@ type State = {
   commentDraft: { nodeId: string | null; x: number; y: number } | null;
   /** Embed node whose page takes pointer input (double-click it; Esc leaves). */
   interactEmbed: string | null;
+  /** Canvas right-click menu: screen position and the page point under it. */
+  contextMenu: { x: number; y: number; world: { x: number; y: number } } | null;
+  /** 1px grid drawn when zoomed in far enough; remembered per machine. */
+  pixelGrid: boolean;
 };
 
 export const useStore = create<State>(() => ({
@@ -77,6 +81,7 @@ export const useStore = create<State>(() => ({
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
   browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
   railPanel: null, showComments: true, openComment: null, commentDraft: null, interactEmbed: null,
+  contextMenu: null, pixelGrid: readFlag('archa.pixelGrid'),
 }));
 
 /** Switches tool and closes per-tool UI that no longer applies. */
@@ -90,6 +95,12 @@ export function toggleRailPanel(p: Exclude<RailPanel, null>) {
 
 function readFlag(key: string) {
   try { return localStorage.getItem(key) !== '0'; } catch { return true; }
+}
+
+export function togglePixelGrid() {
+  const next = !useStore.getState().pixelGrid;
+  useStore.setState({ pixelGrid: next });
+  try { localStorage.setItem('archa.pixelGrid', next ? '1' : '0'); } catch { /* storage blocked: keep in-memory state */ }
 }
 
 export function togglePanel(side: 'left' | 'right', open?: boolean) {

@@ -12,7 +12,10 @@ export type OverlayExtras = {
   pen?: { d: string; points: Array<{ x: number; y: number; in?: { x: number; y: number }; out?: { x: number; y: number } }>; cursor: { x: number; y: number } | null };
 };
 
-type View = { camera: Camera; selection: string[]; hover: string | null; editingText: string | null };
+type View = { camera: Camera; selection: string[]; hover: string | null; editingText: string | null; pixelGrid: boolean };
+
+/** Zoom at which the 1px grid appears (a pixel is 8 screen px wide). */
+const PIXEL_GRID_ZOOM = 8;
 
 const ACCENT = '#8b5cf6';
 
@@ -25,6 +28,25 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
   };
   ctx.font = '500 11px Inter, "Segoe UI", system-ui, sans-serif';
   ctx.textBaseline = 'alphabetic';
+
+  // Pixel grid: one line per page unit, over the content (mid grey so it reads on light and dark fills).
+  if (v.pixelGrid && cam.zoom >= PIXEL_GRID_ZOOM) {
+    const w = ctx.canvas.clientWidth, h = ctx.canvas.clientHeight;
+    ctx.beginPath();
+    for (let px = Math.ceil(-cam.x / cam.zoom); ; px++) {
+      const s = Math.round(cam.x + px * cam.zoom) + 0.5;
+      if (s > w) break;
+      ctx.moveTo(s, 0); ctx.lineTo(s, h);
+    }
+    for (let py = Math.ceil(-cam.y / cam.zoom); ; py++) {
+      const s = Math.round(cam.y + py * cam.zoom) + 0.5;
+      if (s > h) break;
+      ctx.moveTo(0, s); ctx.lineTo(w, s);
+    }
+    ctx.strokeStyle = '#80808033';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 
   // Frame labels.
   const root = doc.get(pageRoot(doc));
