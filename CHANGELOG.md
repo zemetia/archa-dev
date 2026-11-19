@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-19
+
 ### Settings
 - Adding a Claude or Codex account no longer asks for a name or e-mail. The account is named after the login you sign in with, and for Claude, Add account opens the sign-in straight away.
 - The "Use an existing config folder" option is gone; ArchaDev keeps each account in its own folder. Accounts linked to a folder earlier keep working.
