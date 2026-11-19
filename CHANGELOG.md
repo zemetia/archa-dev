@@ -20,6 +20,16 @@ All notable changes to this project are documented in this file, following [Keep
 - More CSS / Figma spellings are understood (`alignItems`, `justifyContent`, `flexDirection`, `borderRadius`, `stroke`, `blur` / `inset` / `backdrop` effects).
 - `get_state` includes an outline of the selected layers and every context note.
 
+### Canvas
+- **Connectors** (tool L) for workflows, flowcharts and page maps: drag from one layer to another; the line sticks to both and follows when they move. Elbow (90°) or straight, rounded corners, arrow / dot / no caps; drag an end handle onto another layer to reattach. Exported to SVG and HTML; agents create them with `insert(null, { type: "connector", start, end })`.
+- **Right-click menu**: paste here, copy, duplicate, bring to front / send to back, group (Ctrl+G), frame, ungroup (Ctrl+Shift+G), add / remove auto layout, create component, delete, and a pixel grid toggle.
+- Chat messages can be selected and copied.
+
+### Orchestrate mode
+- **Orchestrate** in the chat composer turns the agent you talk to into a team lead. It splits the job and sends other agents to research or build different sections of the same page at the same time, then checks and joins their work. Each worker has its own name, colour and cursor on the canvas, and can be Claude Code, Antigravity or Codex.
+- **Team view** (the Team button in the chat header) fills the window with the team as connected circles: which AI each agent is, its task and the prompt the lead gave it, live status and latest step. Hover shows the whole prompt; clicking an agent zooms into it and opens its chat. Back or Esc returns to the canvas.
+- When the whole team is done, the lead is told on its own and checks the result. Stopping the lead stops its team. Worker chats open from the team view and have a back arrow to the lead; History lists only the lead.
+
 ## [0.4.0] - 2026-11-19
 
 ### Settings

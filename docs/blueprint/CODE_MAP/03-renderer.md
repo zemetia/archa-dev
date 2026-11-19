@@ -52,6 +52,7 @@
 | [`ui/LeftPanel.tsx`](../../../apps/desktop/src/renderer/ui/LeftPanel.tsx) | Left card: tab header, collapse | [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
 | [`ui/ChatPanel.tsx`](../../../apps/desktop/src/renderer/ui/ChatPanel.tsx) | Chat thread + composer (agent / model / account picker, queue, Send now, selection chip, images) | [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md), [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
 | [`ui/HistoryPanel.tsx`](../../../apps/desktop/src/renderer/ui/HistoryPanel.tsx) | Past conversations; open = resume | [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md) |
+| [`ui/OrchestraView.tsx`](../../../apps/desktop/src/renderer/ui/OrchestraView.tsx) | Team view of an Orchestrate thread: lead + worker circles, live status, zoom into a worker's chat | [AGENT_BRIDGE/06](../AGENT_BRIDGE/06-orchestrate.md) |
 | [`ui/Markdown.tsx`](../../../apps/desktop/src/renderer/ui/Markdown.tsx) | Safe Markdown subset for agent replies (React elements, no raw HTML) | [APP_UI/02](../APP_UI/02-components-tokens.md) |
 | [`ui/LayersPanel.tsx`](../../../apps/desktop/src/renderer/ui/LayersPanel.tsx) | Layer tree | [RENDERING/02](../RENDERING/02-layers-hit-testing.md), [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
 | [`ui/ContextMenu.tsx`](../../../apps/desktop/src/renderer/ui/ContextMenu.tsx) | Canvas right-click menu: paste here, arrange, group / ungroup, auto layout, component, pixel grid | [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |

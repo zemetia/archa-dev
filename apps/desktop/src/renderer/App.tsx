@@ -15,6 +15,7 @@ import { RailPanels } from './ui/RailPanels';
 import { ZoomBar } from './ui/ZoomBar';
 import { cn } from './ui/controls';
 import { SettingsDialog } from './ui/SettingsDialog';
+import { OrchestraView } from './ui/OrchestraView';
 import { BrowserPanel, toggleBrowser, useBrowserSync } from './ui/BrowserPanel';
 
 export function App() {
@@ -52,6 +53,7 @@ export function App() {
         {browserOpen && <div className="flex shrink-0 pl-2"><BrowserPanel /></div>}
         <RightPanel />
       </div>
+      <OrchestraView />
       <SettingsDialog />
       <ContextMenu />
       <div className="pointer-events-none fixed bottom-16 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">

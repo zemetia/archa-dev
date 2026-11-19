@@ -48,6 +48,7 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 | `variants` | `{ nodeId, takes: [{ label, code }] }` | Build takes on forks; block until one is chosen |
 | `say` | `{ text, nodeId? }` | One-line status in Activity, moves the agent cursor |
 | `library` | `{ action: list\|import\|remove, … }` | Component libraries |
+| `delegate` / `wait_workers` / `tell_worker` | `{ tasks[] }` / `{ workers?, timeoutSec? }` / `{ worker, message }` | **Built:** orchestrate-mode team tools, lead threads only → [AGENT_BRIDGE/06](../AGENT_BRIDGE/06-orchestrate.md) |
 | `plugin_<id>_<tool>` | Plugin-defined | Added by enabled plugins → [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md) |
 
 ---

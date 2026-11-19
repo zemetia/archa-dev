@@ -72,7 +72,7 @@ export type Adapter = {
   models: (bin: string | null, env: Record<string, string>) => Promise<{ models: ModelOption[]; source: string }>;
 };
 
-export const MCP_TOOLS = ['get_state', 'execute', 'inspect', 'screenshot', 'export_svg', 'say', 'browser', 'read_guide'];
+export const MCP_TOOLS = ['get_state', 'execute', 'inspect', 'screenshot', 'export_svg', 'say', 'browser', 'read_guide', 'delegate', 'wait_workers', 'tell_worker'];
 /** Windows caps a command line near 32 KiB. */
 const MAX_ARG_PROMPT = 28_000;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/[\]@+-]{0,127}$/;
@@ -318,6 +318,9 @@ export function toolSummary(name: string, input: unknown): string {
   if (short === 'execute' && i.editId) return `execute · patch ${String(i.editId)}`;
   if (short === 'screenshot') return `screenshot · ${String(i.node ?? '')}`;
   if (short === 'say') return String(i.text ?? '');
+  if (short === 'delegate' && Array.isArray(i.tasks)) return `delegate · ${(i.tasks as Array<{ title?: unknown }>).map((t) => String(t.title ?? '')).join(' · ')}`;
+  if (short === 'wait_workers') return 'waiting for the team';
+  if (short === 'tell_worker') return `tell ${String(i.worker ?? '')} · ${String(i.message ?? '').slice(0, 80)}`;
   if (short === 'browser') return `browser · ${String(i.action ?? '')}${i.url ? ` ${String(i.url)}` : i.ref ? ` ${String(i.ref)}` : ''}`;
   return short;
 }
@@ -427,6 +430,8 @@ export const ADAPTERS: Adapter[] = [
         '-c', `mcp_servers.archadev.command=${toml(mcp.command)}`,
         '-c', `mcp_servers.archadev.args=${toml([...mcp.args])}`,
         ...Object.entries(mcp.env).flatMap(([k, v]) => ['-c', `mcp_servers.archadev.env.${k}=${toml(v)}`]),
+        // wait_workers (orchestrate mode) blocks for minutes; codex gives an MCP call 60 s by default.
+        '-c', 'mcp_servers.archadev.tool_timeout_sec=660',
         ...(model ? ['--model', model] : []),
         // `=` form: the flag takes several values and must not swallow the `resume` subcommand.
         ...(images.length ? [`--image=${images.map((i) => i.path).join(',')}`] : []),

@@ -19,7 +19,7 @@ import { randomPersona } from './personas';
 const chatSendSchema = z.object({
   docId: z.string().min(1), agent: z.string().min(1), prompt: z.string().min(1).max(100_000),
   model: z.string().max(100).optional(), account: z.string().max(100).optional(), threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
-  now: z.boolean().optional(), focus: z.array(z.string().min(1).max(100)).max(50).optional(),
+  now: z.boolean().optional(), focus: z.array(z.string().min(1).max(100)).max(50).optional(), mode: z.enum(['chat', 'orchestrate']).optional(),
   images: z.array(z.object({
     mime: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
     data: z.string().min(1).max(15_000_000).regex(/^[A-Za-z0-9+/]+=*$/),
@@ -43,6 +43,14 @@ const exportSaveSchema = z.object({
 const exportPageSchema = z.object({ docId: z.string().min(1), nodeId: z.string().min(1) });
 const exportCodeSchema = z.object({ docId: z.string().min(1), nodeId: z.string().min(1), style: z.enum(['css', 'tailwind']) });
 const outlineSchema = z.object({ docId: z.string().optional(), node: z.string().min(1).optional(), depth: z.number().int().min(0).max(12).optional() });
+const orchestraDelegateSchema = z.object({
+  tasks: z.array(z.object({
+    title: z.string().min(1).max(120), prompt: z.string().min(1).max(40_000), kind: z.string().max(40).optional(),
+    agent: z.enum(['claude', 'agy', 'codex']).optional(), model: z.string().max(100).optional(), frame: z.string().min(1).max(100).optional(),
+  })).min(1).max(8),
+});
+const orchestraWaitSchema = z.object({ workers: z.array(z.string().min(1).max(100)).max(8).optional(), timeoutSec: z.number().min(5).max(600).optional() });
+const orchestraTellSchema = z.object({ worker: z.string().min(1).max(100), message: z.string().min(1).max(40_000) });
 const chatThreadSchema = z.object({ docId: z.string().min(1), threadId: z.string().min(1).max(64) });
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -361,13 +369,17 @@ export class Workspace {
     },
     'chat.send': (params) => {
       const p = parse(chatSendSchema, params);
-      return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId, { now: p.now, focus: p.focus, images: p.images });
+      return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId, { now: p.now, focus: p.focus, images: p.images, mode: p.mode });
     },
     'chat.warm': (params) => {
       const p = parse(chatWarmSchema, params);
       return this.chat.warmUp(this.session(p.docId).id, p.agent, p.model, p.account, p.threadId);
     },
     'chat.stop': ({ runId }) => this.chat.stop(runId),
+    // Team tools of an orchestrate lead; the connection's thread is the lead (blueprint AGENT_BRIDGE/06).
+    'orchestra.delegate': (params, conn) => this.chat.delegate(conn.threadId, parse(orchestraDelegateSchema, params).tasks),
+    'orchestra.wait': (params, conn) => { const p = parse(orchestraWaitSchema, params ?? {}); return this.chat.wait(conn.threadId, p.workers, p.timeoutSec); },
+    'orchestra.tell': (params, conn) => { const p = parse(orchestraTellSchema, params); return this.chat.tell(conn.threadId, p.worker, p.message); },
     'chat.runs': () => this.chat.active(),
     'chat.list': ({ docId }) => this.chat.list(this.session(docId).id),
     'library.list': () => this.library.list(),

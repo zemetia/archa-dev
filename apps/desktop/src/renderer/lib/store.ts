@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, threadOf, type AccountsOverview, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, threadOf, type AccountsOverview, type ChatMode, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodeImage, renderNodePng } from '@archa/render';
 import { onChatRun } from './comments';
@@ -29,6 +29,10 @@ type State = {
   leftTab: LeftTab;
   /** Conversation shown in the Chat tab; null = a new conversation (blueprint APP_UI/01 → Left menu). */
   chatThread: string | null;
+  /** Lead thread whose team view fills the window (orchestrate mode); null = closed. */
+  orchestraView: string | null;
+  /** Mode of the next new chat; remembered per machine. */
+  chatMode: ChatMode;
   /** Global library components (Library tab, DESIGN_SYSTEM/02). Loaded on demand. */
   library: LibraryItem[] | null;
   /** Sidebar visibility; remembered per machine (localStorage), never part of the document. */
@@ -76,7 +80,7 @@ type State = {
 
 export const useStore = create<State>(() => ({
   client: null, info: null, docs: [], activeDocId: null, doc: null, rev: 0,
-  selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, library: null,
+  selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, orchestraView: null, chatMode: readMode(), library: null,
   leftOpen: readFlag('archa.leftOpen'), rightOpen: readFlag('archa.rightOpen'), chatDraft: '',
   agents: [], activity: [], chat: [], runs: {}, chatLive: {}, cursors: {}, editingText: null, toasts: [], fitRequest: 0,
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
@@ -102,6 +106,10 @@ export function togglePixelGrid() {
   const next = !useStore.getState().pixelGrid;
   useStore.setState({ pixelGrid: next });
   try { localStorage.setItem('archa.pixelGrid', next ? '1' : '0'); } catch { /* storage blocked: keep in-memory state */ }
+}
+
+function readMode(): ChatMode {
+  try { return localStorage.getItem('archa.chatMode') === 'orchestrate' ? 'orchestrate' : 'chat'; } catch { return 'chat'; }
 }
 
 export function togglePanel(side: 'left' | 'right', open?: boolean) {
@@ -276,7 +284,7 @@ export async function activate(docId: string | null) {
   changes.reset();
   // Reopen the most recent conversation of this document.
   const last = chat.at(-1);
-  set((s) => ({ activeDocId: docId, doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1, selection: [], chat, chatThread: last ? threadOf(last) : null, cursors: {}, editingText: null, fitRequest: s.fitRequest + 1 }));
+  set((s) => ({ activeDocId: docId, doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1, selection: [], chat, chatThread: last ? threadOf(last) : null, orchestraView: null, cursors: {}, editingText: null, fitRequest: s.fitRequest + 1 }));
 }
 
 function omit<T>(map: Record<string, T>, key: string): Record<string, T> {

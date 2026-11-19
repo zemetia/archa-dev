@@ -1,6 +1,6 @@
 # Agent Bridge — 05: Skills and MCP Servers
 
-← [AGENT_BRIDGE.md](../AGENT_BRIDGE.md) | [Blueprint INDEX](../INDEX.md) | [← 04 — Review loop](./04-review-loop.md)
+← [AGENT_BRIDGE.md](../AGENT_BRIDGE.md) | [Blueprint INDEX](../INDEX.md) | [← 04 — Review loop](./04-review-loop.md) | [06 — Orchestrate mode →](./06-orchestrate.md)
 
 **Phase:** MVP. Code: `apps/desktop/src/core-host/skills.ts`, `core-host/mcp-servers.ts`, `renderer/ui/settings/`. Types: `packages/protocol/src/settings.ts`. Tests: `apps/desktop/test/settings.test.ts`.
 
