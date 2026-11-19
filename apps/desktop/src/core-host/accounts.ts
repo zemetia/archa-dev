@@ -342,8 +342,9 @@ export class AccountManager {
   /* --------------------------- sign-in (claude, codex) ---------------------- */
 
   /**
-   * Claude: `claude auth login` in the profile folder prints a link, the person signs in and
-   * pastes the code back. Codex: `codex login` opens the browser and finishes on its own.
+   * Both CLIs run their own OAuth flow: they open the browser on the provider's sign-in page and
+   * finish on their own through a localhost callback. Claude also prints a fallback link whose
+   * page shows a code to paste back, for when the browser did not open.
    */
   async startLogin(params: unknown): Promise<LoginState> {
     const { id: accountId } = parse(accountParams.byId, params);
@@ -358,7 +359,7 @@ export class AccountManager {
 
     const email = a.agent === 'claude' && /^[^\s@]+@[^\s@]+$/.test(a.name) ? a.name : '';
     const args = a.agent === 'claude' ? ['auth', 'login', ...(email ? ['--email', email] : [])] : ['login'];
-    const env = a.agent === 'claude' ? { CLAUDE_CONFIG_DIR: a.dir, BROWSER: 'none' } : { CODEX_HOME: a.dir };
+    const env = a.agent === 'claude' ? { CLAUDE_CONFIG_DIR: a.dir } : { CODEX_HOME: a.dir };
     const child = spawn(cli.bin, [...cli.pre, ...args], { shell: false, windowsHide: true, env: { ...process.env, ...env, NO_COLOR: '1' } });
 
     let resolveFinished = () => {};
