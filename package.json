@@ -9,7 +9,9 @@
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "cli": "pnpm --filter @archa/cli build",
-    "dist": "pnpm --filter @archa/cli build && pnpm --filter @archa/desktop dist"
+    "dist": "pnpm --filter @archa/cli build && pnpm --filter @archa/desktop dist",
+    "docs:links": "node scripts/gen-backlinks.mjs",
+    "docs:check": "node scripts/gen-backlinks.mjs --check"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

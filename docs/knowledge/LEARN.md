@@ -8,6 +8,8 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-20] - Blueprint audit: code comments cited `blueprint APP_UI/04` (inspector PR) but that doc was never written; `BROWSER.md` was in no index; docs still said `formatVersion` 2 (code: 3), "pre-code", and listed `pnpm lint` / `bench` / `gen:api-docs` that do not exist; 4 of 8 built MCP tools were missing from MCP/01 - Wrote APP_UI/04, CODE_MAP, TOPICS, backlinks generator with `--check` (dangling `blueprint X/NN` refs, unmapped files, broken links, 150-line limit) - A blueprint drifts silently unless a check fails; run `node scripts/gen-backlinks.mjs --check` before declaring any code or docs change done.
+
 [2026-11-19] - Live-checked agent cursors over CDP; the cursor layer stayed empty and screenshots hung, which looked like a cursor bug - The dev window was minimized (`document.visibilityState === 'hidden'`), so requestAnimationFrame never ran - Before reading anything drawn by rAF (cursors, animations) over CDP, check `document.visibilityState`; a hidden window draws nothing.
 [2026-11-19] - Design panel "Align" did nothing for a layer inside auto layout or a lone top-level layer, and the fill opacity % field was read-only (controlled input with a no-op onChange); the align logic also lived only in the renderer - Moved arrange logic to `@archa/core` `arrange.ts` (auto-layout children change the parent's align/justify; no-op cases return a note shown as a toast) and gave every ColorField input local state - Panel controls must be exercised with real DOM events in the running app; a control that silently does nothing is a bug, so return a reason when an action is a no-op.
 

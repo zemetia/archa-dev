@@ -38,8 +38,13 @@ Local-first design tool in the spirit of pen.dev: a TypeScript **Electron app**,
 | Plugins | [docs/blueprint/PLUGINS.md](docs/blueprint/PLUGINS.md) |
 | `archa` commands | [docs/blueprint/CLI.md](docs/blueprint/CLI.md) |
 | TypeScript, tests, git, anti-patterns | [docs/blueprint/BEST_PRACTICE.md](docs/blueprint/BEST_PRACTICE.md) |
+| In-app browser the agent drives | [docs/blueprint/BROWSER.md](docs/blueprint/BROWSER.md) |
 | Knowledge system rules | [docs/blueprint/KNOWLEDGE.md](docs/blueprint/KNOWLEDGE.md) |
 | pen.dev stack comparison (clean-room) | [docs/blueprint/REFERENCE.md](docs/blueprint/REFERENCE.md) |
+| **Where code lives today** (file → purpose → docs; RPC, tools, paths, tests) | [docs/blueprint/CODE_MAP.md](docs/blueprint/CODE_MAP.md) |
+| **A–Z topic index** (keyword → doc → code) | [docs/blueprint/TOPICS.md](docs/blueprint/TOPICS.md) |
+
+**Finding things:** keyword → [TOPICS.md](docs/blueprint/TOPICS.md); source file → [CODE_MAP.md](docs/blueprint/CODE_MAP.md); every blueprint doc ends with a generated **Backlinks** block (docs linking to it + code implementing it). After adding, moving or deleting a source file or doc, update its CODE_MAP row and run `node scripts/gen-backlinks.mjs` (`--check` must exit 0).
 
 Plan, decisions and roadmap (intent, not contract): [docs/plan/INDEX.md](docs/plan/INDEX.md). Current phase: [docs/plan/ROADMAP.md](docs/plan/ROADMAP.md).
 
@@ -49,15 +54,19 @@ TypeScript (strict) · pnpm + Turborepo · Electron + electron-vite · React 19 
 
 ## Commands
 
+Scripts that exist today (on this machine prefix with `corepack pnpm@9.15.0` — see [CODE_MAP → Commands](docs/blueprint/CODE_MAP.md)):
+
 ```bash
-pnpm install        # install workspace
-pnpm dev            # run the desktop app in dev
-pnpm lint           # must exit 0 (--max-warnings 0)
-pnpm typecheck
-pnpm test
-pnpm bench
-pnpm gen:api-docs   # regenerate skills/archadev/references/api.md from @archa/schema
+pnpm install        # then: node node_modules/electron/install.js
+pnpm dev            # run the desktop app in dev (isolate ARCHA_HOME + --user-data-dir)
+pnpm typecheck      # pnpm -r typecheck
+pnpm test           # vitest run
+pnpm cli            # build the archa CLI bundle
+pnpm dist           # CLI + installer
+pnpm docs:check     # blueprint backlinks, code-map coverage, broken links, 150-line limit
 ```
+
+Planned, not wired yet: `pnpm lint` (zero warnings), `pnpm bench`, `pnpm gen:api-docs`.
 
 ## Non-negotiables
 
