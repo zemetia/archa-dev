@@ -20,7 +20,7 @@ export function insertOpsFor(input: NodeInput, parentId: string, index?: number)
   return { ops, rootId, created };
 }
 
-const DEFAULT_NAMES: Record<string, string> = { frame: 'Frame', rect: 'Rectangle', ellipse: 'Ellipse', text: 'Text', group: 'Group', polygon: 'Polygon', path: 'Vector', image: 'Image', sticky: 'Sticky note', embed: 'Web page' };
+const DEFAULT_NAMES: Record<string, string> = { frame: 'Frame', rect: 'Rectangle', ellipse: 'Ellipse', text: 'Text', group: 'Group', polygon: 'Polygon', path: 'Vector', image: 'Image', sticky: 'Sticky note', embed: 'Web page', connector: 'Connector' };
 
 /** Colour fields accept `"#ff0000"` strings; paints accept a bare colour string. */
 export function normaliseInput(input: Record<string, unknown>): Record<string, unknown> {
@@ -59,6 +59,12 @@ export function normaliseInput(input: Record<string, unknown>): Record<string, u
   if (out.textAlign !== undefined) out.textAlign = alias(TEXT_ALIGN, out.textAlign);
   if (out.textSizing !== undefined) out.textSizing = alias(TEXT_SIZING, out.textSizing);
   if (typeof out.fontWeight === 'string') out.fontWeight = WEIGHT[out.fontWeight.toLowerCase()] ?? (Number(out.fontWeight) || out.fontWeight);
+  // Connector ends: `from`/`to` and a bare node id are accepted.
+  if (out.type === 'connector') {
+    if (out.start === undefined && out.from !== undefined) { out.start = out.from; delete out.from; }
+    if (out.end === undefined && out.to !== undefined) { out.end = out.to; delete out.to; }
+  }
+  for (const k of ['start', 'end'] as const) if (typeof out[k] === 'string') out[k] = { nodeId: out[k] };
   // Text content under the names other tools use.
   if ((out.type === 'text' || out.type === 'sticky') && out.text === undefined) {
     for (const k of ['content', 'characters', 'value', 'label']) if (typeof out[k] === 'string') { out.text = out[k]; delete out[k]; break; }

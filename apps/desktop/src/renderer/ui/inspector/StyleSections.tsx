@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Circle, CircleDashed, Eye, EyeOff, Minus, Plus, Square, SquareDashed, TextAlignCenter, TextAlignEnd, TextAlignStart } from 'lucide-react';
+import { Circle, CircleDashed, CornerDownRight, Eye, EyeOff, MoveUpRight, Minus, Plus, Square, SquareDashed, TextAlignCenter, TextAlignEnd, TextAlignStart } from 'lucide-react';
 import { hexToColor, type Effect, type EffectType, type Node, type Paint, type Stroke } from '@archa/schema';
 import { Check, ColorField, IconButton, MenuButton, NumberField, Section, Segmented, Select } from '../controls';
 
@@ -16,7 +16,7 @@ export function AppearanceSection({ node: n, set }: { node: Node; set: SetProps 
     }>
       <div className="grid grid-cols-2 gap-2">
         <NumberField label={<span title="Opacity">Opacity</span>} value={Math.round(n.opacity * 100)} min={0} max={100} suffix="%" onCommit={(v) => set({ opacity: v / 100 }, 'Opacity')} />
-        {'cornerRadius' in n && <NumberField label={<span title="Corner radius">Radius</span>} value={n.cornerRadius} min={0} onCommit={(cornerRadius) => set({ cornerRadius }, 'Corner radius')} />}
+        {'cornerRadius' in n && n.type !== 'connector' && <NumberField label={<span title="Corner radius">Radius</span>} value={n.cornerRadius} min={0} onCommit={(cornerRadius) => set({ cornerRadius }, 'Corner radius')} />}
         {n.type === 'polygon' && <NumberField label="Sides" value={n.sides} min={3} max={64} onCommit={(sides) => set({ sides: Math.round(sides) }, 'Polygon sides')} />}
         {n.type === 'sticky' && <NumberField label="Text" value={n.fontSize} min={6} suffix="px" onCommit={(fontSize) => set({ fontSize }, 'Font size')} />}
       </div>
@@ -118,8 +118,8 @@ export function StrokeSection({ node: n, set }: { node: Extract<Node, { strokes:
             <RowTools items={n.strokes} i={i} onChange={onChange} />
           </div>
           <div className="grid grid-cols-2 gap-2 pr-[60px]">
-            {n.type === 'path'
-              ? <div className="flex h-8 items-center px-1 text-[11px] text-fg-subtle">Centred on the path</div>
+            {n.type === 'path' || n.type === 'connector'
+              ? <div className="flex h-8 items-center px-1 text-[11px] text-fg-subtle">Centred on the {n.type === 'path' ? 'path' : 'line'}</div>
               : <Select title="Stroke position" value={s.align} onChange={(align) => u({ align })} options={[{ value: 'inside', label: 'Inside' }, { value: 'center', label: 'Center' }, { value: 'outside', label: 'Outside' }]} />}
             <NumberField label={<span title="Weight">W</span>} value={s.width} min={0} step={0.5} onCommit={(width) => u({ width })} />
           </div>
@@ -175,6 +175,27 @@ export function EffectsSection({ node: n, set }: { node: Extract<Node, { effects
 }
 
 export function TypeExtras({ node: n, set }: { node: Node; set: SetProps }) {
+  if (n.type === 'connector') {
+    const caps = [{ value: 'none' as const, label: 'None' }, { value: 'arrow' as const, label: 'Arrow' }, { value: 'dot' as const, label: 'Dot' }];
+    const attached = [n.start, n.end].filter((e) => e.nodeId).length;
+    return (
+      <Section title="Connector">
+        <div className="space-y-2">
+          <Segmented value={n.routing} onChange={(routing) => set({ routing }, 'Connector type')} options={[
+            { value: 'elbow', label: <CornerDownRight size={14} />, title: 'Elbow (90°)' },
+            { value: 'straight', label: <MoveUpRight size={14} />, title: 'Straight' },
+          ]} />
+          <div className="grid grid-cols-2 gap-2">
+            <NumberField label={<span title="Corner radius">Radius</span>} value={n.cornerRadius} min={0} disabled={n.routing === 'straight'} onCommit={(cornerRadius) => set({ cornerRadius }, 'Corner radius')} />
+            <div />
+            <Select title="Start" value={n.startCap} onChange={(startCap) => set({ startCap }, 'Start cap')} options={caps.map((c) => ({ ...c, label: `Start: ${c.label}` }))} />
+            <Select title="End" value={n.endCap} onChange={(endCap) => set({ endCap }, 'End cap')} options={caps.map((c) => ({ ...c, label: `End: ${c.label}` }))} />
+          </div>
+          <p className="text-[11px] text-fg-subtle">{attached === 2 ? 'Both ends follow their layers.' : attached === 1 ? 'One end follows its layer; drag the other onto a layer to attach it.' : 'Drag an end onto a layer to attach it.'}</p>
+        </div>
+      </Section>
+    );
+  }
   if (n.type === 'embed') {
     return (
       <Section title="Web page">

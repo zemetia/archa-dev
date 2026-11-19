@@ -54,6 +54,7 @@
 | [`ui/HistoryPanel.tsx`](../../../apps/desktop/src/renderer/ui/HistoryPanel.tsx) | Past conversations; open = resume | [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md) |
 | [`ui/Markdown.tsx`](../../../apps/desktop/src/renderer/ui/Markdown.tsx) | Safe Markdown subset for agent replies (React elements, no raw HTML) | [APP_UI/02](../APP_UI/02-components-tokens.md) |
 | [`ui/LayersPanel.tsx`](../../../apps/desktop/src/renderer/ui/LayersPanel.tsx) | Layer tree | [RENDERING/02](../RENDERING/02-layers-hit-testing.md), [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
+| [`ui/ContextMenu.tsx`](../../../apps/desktop/src/renderer/ui/ContextMenu.tsx) | Canvas right-click menu: paste here, arrange, group / ungroup, auto layout, component, pixel grid | [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
 | [`ui/ComponentsPanel.tsx`](../../../apps/desktop/src/renderer/ui/ComponentsPanel.tsx) | Make / insert / sync / publish components | [DESIGN_SYSTEM/02](../DESIGN_SYSTEM/02-components-libraries.md) |
 | [`ui/SlidesPanel.tsx`](../../../apps/desktop/src/renderer/ui/SlidesPanel.tsx) | Top-level frames as thumbnails | [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
 | [`ui/LibraryPanel.tsx`](../../../apps/desktop/src/renderer/ui/LibraryPanel.tsx) | Global library browser + insert | [DESIGN_SYSTEM/02](../DESIGN_SYSTEM/02-components-libraries.md) |

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ChevronRight, Circle, Component, Copy, Eye, EyeOff, Frame, Globe, Group, Image, Lock, PenTool, Square, StickyNote, Triangle, Type, Unlock } from 'lucide-react';
+import { ChevronRight, Circle, Component, Copy, Eye, EyeOff, Frame, Globe, Group, Image, Lock, PenTool, Square, StickyNote, Triangle, Type, Unlock, Workflow } from 'lucide-react';
 import { componentMeta, instanceOf } from '@archa/core';
 import { isContainer, type Node } from '@archa/schema';
 import { commit, select, useStore } from '../lib/store';
 import { pageRoot } from '../lib/geometry';
 import { cn } from './controls';
 
-const ICON: Record<string, typeof Square> = { frame: Frame, rect: Square, ellipse: Circle, text: Type, group: Group, polygon: Triangle, path: PenTool, image: Image, sticky: StickyNote, embed: Globe };
+const ICON: Record<string, typeof Square> = { frame: Frame, rect: Square, ellipse: Circle, text: Type, group: Group, polygon: Triangle, path: PenTool, image: Image, sticky: StickyNote, embed: Globe, connector: Workflow };
 
 export function LayersPanel() {
   const doc = useStore((s) => s.doc);

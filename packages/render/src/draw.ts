@@ -1,5 +1,5 @@
-import { colorToCss, isContainer, type EmbedNode, type ImageNode, type Node, type PathNode, type StickyNode, type TextNode, type VisualNode } from '@archa/schema';
-import { polygonPoints, viewBoxMatrix, type ArchaDocument } from '@archa/core';
+import { colorToCss, isContainer, type ConnectorNode, type EmbedNode, type ImageNode, type Node, type PathNode, type StickyNode, type TextNode, type VisualNode } from '@archa/schema';
+import { connectorGeometry, connectorStroke, polygonPoints, viewBoxMatrix, type ArchaDocument } from '@archa/core';
 import { imageFor } from './images';
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -79,8 +79,24 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node, anim?: AnimMa
     case 'embed':
       drawEmbed(ctx, node);
       break;
+    case 'connector':
+      drawConnector(ctx, node);
+      break;
   }
   ctx.restore();
+}
+
+function drawConnector(ctx: Ctx, node: ConnectorNode) {
+  const { line, caps } = connectorGeometry(node);
+  if (!line) return;
+  const { css, width } = connectorStroke(node);
+  ctx.strokeStyle = css;
+  ctx.fillStyle = css;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke(new Path2D(line));
+  for (const c of caps) ctx.fill(new Path2D(c));
 }
 
 function drawChildren(ctx: Ctx, doc: ArchaDocument, node: Node, anim?: AnimMap) {

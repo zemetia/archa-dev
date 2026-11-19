@@ -45,7 +45,23 @@ Effects (format 3): `drop-shadow` / `inner-shadow` `{ x, y, blur, color }`, `lay
 
 Images are fills (`{ type: 'image', asset, fit }`), not a node type.
 
-**Built today (`formatVersion` 3; v3 adds inner-shadow, layer-blur and background-blur effects and justify `space-around`):** `page`, `frame`, `group`, `rect`, `ellipse`, `text`, plus `polygon` (`sides`, stretched to the box), `path` (`d` + `viewBox` stretched to width × height, `fillRule`, `lineCap`, `lineJoin`; strokes always centred), `image` (`src` data URL until the asset store lands, `fit` crop/fit/fill), `sticky` (`text`, `fontSize`) and `embed` (`url`; the live page of a code frame without the code link). Document-level, not nodes: `variables` and `comments` (`packages/schema/src/variables.ts`).
+**Built today (`formatVersion` 3; v3 adds inner-shadow, layer-blur and background-blur effects, justify `space-around` and the `connector` node):** `page`, `frame`, `group`, `rect`, `ellipse`, `text`, plus `polygon` (`sides`, stretched to the box), `path` (`d` + `viewBox` stretched to width × height, `fillRule`, `lineCap`, `lineJoin`; strokes always centred), `image` (`src` data URL until the asset store lands, `fit` crop/fit/fill), `sticky` (`text`, `fontSize`) `embed` (`url`; the live page of a code frame without the code link) and `connector` (below). Document-level, not nodes: `variables` and `comments` (`packages/schema/src/variables.ts`).
+
+---
+
+## Connectors
+
+Lines for flowcharts, workflows and page maps (`packages/core/src/connectors.ts`).
+
+| Property | Meaning |
+|---|---|
+| `start`, `end` | `{ nodeId \| null, side: auto\|top\|right\|bottom\|left, x, y }` — attached ends follow their node; `x/y` (parent coords) place a free end and are kept current while attached, so deleting the node leaves the line where it was |
+| `routing` | `elbow` (90° segments, out of the facing sides) or `straight` (box edge to box edge) |
+| `cornerRadius` · `startCap` · `endCap` | Elbow rounding; caps `none`/`arrow`/`dot` (default: arrow at the end) |
+| `strokes` | First visible stroke is the line; none = grey 2px |
+| `points`, `x`, `y`, `width`, `height` | **Derived**: `routeConnectors` rebuilds them at the end of `runLayout`, in the core and the renderer mirror, so moving a node needs no connector ops |
+
+Renderer, SVG and HTML export all draw from `connectorGeometry` (one path + filled caps). Connectors are part of `formatVersion` 3; an older app quarantines them (kept and saved back, not drawn).
 
 ---
 
@@ -97,5 +113,5 @@ gap:  { $var: 'space/4' }
 
 **Linked from:** [MCP/02](../MCP/02-execute-api.md)
 
-**Code:** [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`packages/core/src/document.ts`](../../../packages/core/src/document.ts) · [`packages/schema/src/color.ts`](../../../packages/schema/src/color.ts) · [`packages/schema/src/ids.ts`](../../../packages/schema/src/ids.ts) · [`packages/schema/src/index.ts`](../../../packages/schema/src/index.ts) · [`packages/schema/src/nodes.ts`](../../../packages/schema/src/nodes.ts)
+**Code:** [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`packages/core/src/connectors.ts`](../../../packages/core/src/connectors.ts) · [`packages/core/src/document.ts`](../../../packages/core/src/document.ts) · [`packages/core/test/connectors.test.ts`](../../../packages/core/test/connectors.test.ts) · [`packages/schema/src/color.ts`](../../../packages/schema/src/color.ts) · [`packages/schema/src/ids.ts`](../../../packages/schema/src/ids.ts) · [`packages/schema/src/index.ts`](../../../packages/schema/src/index.ts) · [`packages/schema/src/nodes.ts`](../../../packages/schema/src/nodes.ts)
 <!-- backlinks:end -->

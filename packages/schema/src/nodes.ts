@@ -134,9 +134,35 @@ export const embedNodeSchema = z.object({
   cornerRadius: z.number().min(0).default(12),
 });
 
+const pointSchema = z.object({ x: z.number(), y: z.number() });
+
+export const connectorEndSchema = z.object({
+  nodeId: nodeIdSchema.nullable().default(null).describe('Node this end sticks to; the line follows when it moves. null = a free end at x/y'),
+  side: z.enum(['auto', 'top', 'right', 'bottom', 'left']).default('auto').describe('Side of the attached node the line leaves or enters; auto faces the other end'),
+  x: z.number().default(0).describe('Free end in parent coordinates (kept up to date while attached)'),
+  y: z.number().default(0),
+});
+export type ConnectorEnd = z.infer<typeof connectorEndSchema>;
+
+const capSchema = z.enum(['none', 'arrow', 'dot']);
+
+/** A line between two nodes or points, for flowcharts, workflows and page maps. Its box and `points` are derived from the ends. */
+export const connectorNodeSchema = z.object({
+  ...base,
+  type: z.literal('connector'),
+  start: connectorEndSchema.default({ nodeId: null, side: 'auto', x: 0, y: 0 }),
+  end: connectorEndSchema.default({ nodeId: null, side: 'auto', x: 100, y: 0 }),
+  routing: z.enum(['elbow', 'straight']).default('elbow').describe('elbow: 90° segments · straight: one direct line'),
+  cornerRadius: z.number().min(0).default(8).describe('Rounding of elbow corners'),
+  startCap: capSchema.default('none'),
+  endCap: capSchema.default('arrow'),
+  strokes: z.array(strokeSchema).default([]).describe('First visible stroke = line colour and width (default grey, 2px)'),
+  points: z.array(pointSchema).default([]).describe('Computed route in node coordinates — read-only, rebuilt from start/end'),
+});
+
 export const nodeSchema = z.discriminatedUnion('type', [
   pageNodeSchema, frameNodeSchema, groupNodeSchema, rectNodeSchema, ellipseNodeSchema, textNodeSchema,
-  polygonNodeSchema, pathNodeSchema, imageNodeSchema, stickyNodeSchema, embedNodeSchema,
+  polygonNodeSchema, pathNodeSchema, imageNodeSchema, stickyNodeSchema, embedNodeSchema, connectorNodeSchema,
 ]);
 
 export type PageNode = z.infer<typeof pageNodeSchema>;
@@ -150,6 +176,7 @@ export type PathNode = z.infer<typeof pathNodeSchema>;
 export type ImageNode = z.infer<typeof imageNodeSchema>;
 export type StickyNode = z.infer<typeof stickyNodeSchema>;
 export type EmbedNode = z.infer<typeof embedNodeSchema>;
+export type ConnectorNode = z.infer<typeof connectorNodeSchema>;
 export type Node = z.infer<typeof nodeSchema>;
 export type NodeType = Node['type'];
 export type ContainerNode = PageNode | FrameNode | GroupNode;

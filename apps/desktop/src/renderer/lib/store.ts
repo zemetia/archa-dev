@@ -8,7 +8,7 @@ import { pushTrail, type AgentCursor } from '../canvas/cursors';
 import * as changes from '../canvas/changes';
 
 export type LeftTab = 'chat' | 'history' | 'layers' | 'components' | 'slides' | 'library';
-export type Tool = 'select' | 'scale' | 'hand' | 'frame' | 'rect' | 'ellipse' | 'polygon' | 'pen' | 'text' | 'sticky' | 'embed' | 'comment';
+export type Tool = 'select' | 'scale' | 'hand' | 'frame' | 'rect' | 'ellipse' | 'polygon' | 'pen' | 'text' | 'sticky' | 'embed' | 'connector' | 'comment';
 /** Floating panels opened from the tool rail. */
 export type RailPanel = 'variables' | 'find' | 'icons' | null;
 export type Camera = { x: number; y: number; zoom: number };

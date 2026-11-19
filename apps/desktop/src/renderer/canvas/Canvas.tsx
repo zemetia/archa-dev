@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { insertOpsFor, runLayout } from '@archa/core';
+import { attachedBox, connectorRoute, insertOpsFor, routeConnectors, runLayout, type ArchaDocument } from '@archa/core';
 import { drawPage, FrameBitmapCache } from '@archa/render';
-import { isContainer, type Node, type NodeInput, type Op } from '@archa/schema';
+import { isContainer, type ConnectorEnd, type ConnectorNode, type Node, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, setTool, useStore, type Camera, type Tool } from '../lib/store';
-import { containerAt, fitCamera, handleCursor, handlePoint, HANDLES, hitPath, originOf, pageRoot, pickFromPath, selectionBounds, toWorld, type Handle } from '../lib/geometry';
+import { connectorEnds, containerAt, fitCamera, handleCursor, handlePoint, HANDLES, hitPath, originOf, pageRoot, pickFromPath, selectionBounds, toWorld, type Handle } from '../lib/geometry';
 import { drawOverlay, type OverlayExtras } from './overlay';
 import { cursorAlive, drawCursors } from './cursors';
 import * as changes from './changes';
@@ -17,13 +17,16 @@ import { scaleOps } from './scale';
 type Pt = { x: number; y: number };
 type Gesture =
   | { kind: 'pan'; sx: number; sy: number; cam: Camera }
-  | { kind: 'move'; start: Pt; ids: string[]; orig: Map<string, Pt>; moved: boolean; reorder: { parentId: string; index: number } | null; drop: string | null }
+  | { kind: 'move'; start: Pt; ids: string[]; orig: Map<string, Pt>; ends: Map<string, Ends>; moved: boolean; reorder: { parentId: string; index: number } | null; drop: string | null }
+  /** Drawing a new connector (id null) or dragging one end of an existing one. */
+  | { kind: 'connect'; id: string | null; which: 'start' | 'end'; fixed: ConnectorEnd; start: Pt; end: ConnectorEnd | null }
   | { kind: 'resize'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt }
   | { kind: 'marquee'; start: Pt; cur: Pt }
   | { kind: 'create'; tool: CreateTool; start: Pt; cur: Pt; parentId: string }
   | { kind: 'scale'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt; cur: { x: number; y: number; width: number; height: number } }
   | { kind: 'pen'; index: number };
 
+type Ends = { start: ConnectorEnd; end: ConnectorEnd };
 type CreateTool = 'frame' | 'rect' | 'ellipse' | 'polygon' | 'sticky' | 'embed';
 const CREATE_TOOLS: ReadonlySet<Tool> = new Set<Tool>(['frame', 'rect', 'ellipse', 'polygon', 'sticky', 'embed']);
 /** Size used when the person clicks instead of dragging (shapes centre on the click, the rest start there). */
@@ -33,6 +36,8 @@ const NAMES: Record<CreateTool, string> = { frame: 'Frame', rect: 'Rectangle', e
 const cache = new FrameBitmapCache();
 const DEFAULT_FILL: Record<string, string> = { frame: '#ffffff', rect: '#d4d4d8', ellipse: '#d4d4d8', polygon: '#d4d4d8', sticky: '#fde68a' };
 let frameCounter = 1;
+/** Line style of connectors drawn with the tool. */
+const CONNECTOR_STROKE = { color: '#71717a', width: 2, align: 'center' };
 
 export function Canvas() {
   const wrap = useRef<HTMLDivElement>(null);
@@ -213,9 +218,23 @@ export function Canvas() {
       void createText(w);
       return;
     }
+    if (st.tool === 'connector') {
+      gesture.current = { kind: 'connect', id: null, which: 'end', fixed: endAt(d, w, e.ctrlKey || e.metaKey).end, start: w, end: null };
+      return;
+    }
+
+    // Ends of a selected connector: drag to reattach.
+    const selConn = st.selection.length === 1 ? d.get(st.selection[0]!) : undefined;
+    if (selConn?.type === 'connector') {
+      const which = connectorHandleAt(d, selConn, w, st.camera.zoom);
+      if (which) {
+        gesture.current = { kind: 'connect', id: selConn.id, which, fixed: which === 'start' ? selConn.end : selConn.start, start: w, end: null };
+        return;
+      }
+    }
 
     // Resize handle of a single selection.
-    if (st.selection.length === 1) {
+    if (st.selection.length === 1 && selConn?.type !== 'connector') {
       const r = selectionBounds(d, st.selection)!;
       const tol = 6 / st.camera.zoom;
       for (const h of HANDLES) {
@@ -249,7 +268,8 @@ export function Canvas() {
     const ids = useStore.getState().selection;
     picked = d.require(ids[0]!);
     const orig = new Map(ids.map((id) => [id, { x: d.require(id).x, y: d.require(id).y }]));
-    gesture.current = { kind: 'move', start: w, ids, orig, moved: false, reorder: null, drop: null };
+    const ends = new Map(ids.flatMap((id) => { const n = d.require(id); return n.type === 'connector' ? [[id, { start: n.start, end: n.end }] as const] : []; }));
+    gesture.current = { kind: 'move', start: w, ids, orig, ends, moved: false, reorder: null, drop: null };
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -263,7 +283,10 @@ export function Canvas() {
     if (!g) {
       if (st.tool === 'pen' && pen.current.length) showPen(w);
       if ((st.tool !== 'select' && st.tool !== 'scale') || spaceDown.current) { setCursor(st.tool === 'hand' || spaceDown.current ? 'grab' : 'crosshair'); return; }
-      if (st.selection.length === 1) {
+      const hovered = st.selection.length === 1 ? d.get(st.selection[0]!) : undefined;
+      if (hovered?.type === 'connector') {
+        if (connectorHandleAt(d, hovered, w, st.camera.zoom)) { setCursor('crosshair'); return; }
+      } else if (st.selection.length === 1) {
         const r = selectionBounds(d, st.selection)!;
         const tol = 6 / st.camera.zoom;
         const h = HANDLES.find((hh) => { const p = handlePoint(r, hh); return Math.abs(p.x - w.x) <= tol && Math.abs(p.y - w.y) <= tol; });
@@ -301,6 +324,25 @@ export function Canvas() {
       g.cur = { x, y, width: Math.max(1, width), height: Math.max(1, height) };
       extras.current = { create: g.cur };
       redraw();
+    } else if (g.kind === 'connect') {
+      const hit = endAt(d, w, e.ctrlKey || e.metaKey);
+      // One node at both ends makes no line: that end stays free.
+      if (hit.end.nodeId && hit.end.nodeId === g.fixed.nodeId) { hit.end = { ...hit.end, nodeId: null }; hit.box = null; }
+      if (g.id) {
+        const n = d.require(g.id) as ConnectorNode;
+        const o = originOf(d, n.parentId!);
+        g.end = { ...hit.end, x: round2(w.x - o.x), y: round2(w.y - o.y) };
+        d.nodes.set(g.id, { ...n, [g.which]: g.end });
+        routeConnectors(d);
+        extras.current = { connect: { points: null, target: hit.box } };
+        cache.invalidate();
+        useStore.setState((s) => ({ rev: s.rev + 1 }));
+      } else {
+        g.end = hit.end;
+        const from = { box: attachedBox(d, g.fixed.nodeId), point: { x: g.fixed.x, y: g.fixed.y }, side: g.fixed.side };
+        extras.current = { connect: { points: connectorRoute(from, { box: hit.box, point: w, side: 'auto' }, 'elbow'), target: hit.box } };
+        redraw();
+      }
     } else if (g.kind === 'pan') {
       useStore.setState({ camera: { ...g.cam, x: g.cam.x + sx - g.sx, y: g.cam.y + sy - g.sy } });
     } else if (g.kind === 'marquee' || g.kind === 'create') {
@@ -333,8 +375,14 @@ export function Canvas() {
       for (const id of g.ids) {
         const o = g.orig.get(id)!;
         const n = d.require(id);
-        d.nodes.set(id, { ...n, x: Math.round(o.x + dx), y: Math.round(o.y + dy) });
+        const ends = g.ends.get(id);
+        if (n.type === 'connector' && ends) {
+          // Free ends follow the drag; attached ends stay on their nodes.
+          const shift = (en: ConnectorEnd) => (attachedBox(d, en.nodeId, id) ? en : { ...en, x: round2(en.x + dx), y: round2(en.y + dy) });
+          d.nodes.set(id, { ...n, start: shift(ends.start), end: shift(ends.end) });
+        } else d.nodes.set(id, { ...n, x: Math.round(o.x + dx), y: Math.round(o.y + dy) });
       }
+      routeConnectors(d);
       const exclude = new Set(g.ids);
       const target = containerAt(d, w.x, w.y, exclude);
       g.drop = target.id !== first.parentId ? target.id : null;
@@ -377,6 +425,24 @@ export function Canvas() {
       redraw();
       const ops = scaleOps(d, g.id, g.cur);
       if (ops.length) await commit('Scale', ops);
+      return;
+    }
+
+    if (g.kind === 'connect') {
+      redraw();
+      if (!g.end) return;
+      if (g.id) {
+        const n = d.require(g.id) as ConnectorNode;
+        await commit('Reconnect', [{ op: 'update', id: g.id, patch: { [g.which]: n[g.which] } }]);
+        return;
+      }
+      setTool('select');
+      setCursor('default');
+      const w = toWorld(st.camera, pointer(e).sx, pointer(e).sy);
+      if (Math.hypot(w.x - g.start.x, w.y - g.start.y) * st.camera.zoom < 4) return;
+      const input = { type: 'connector', name: 'Connector', start: g.fixed, end: g.end, strokes: [CONNECTOR_STROKE] } as unknown as NodeInput;
+      const { ops, rootId } = insertOpsFor(input, pageRoot(d));
+      if (await commit('Create connector', ops)) select([rootId]);
       return;
     }
 
@@ -424,6 +490,11 @@ export function Canvas() {
       }
       for (const id of g.ids) {
         const n = d.require(id);
+        if (n.type === 'connector') {
+          const o = g.ends.get(id);
+          if (o && JSON.stringify({ s: n.start, e: n.end }) !== JSON.stringify({ s: o.start, e: o.end })) ops.push({ op: 'update', id, patch: { start: n.start, end: n.end } });
+          continue;
+        }
         if (g.drop) {
           const target = d.require(g.drop);
           const world = d.worldBounds(id);
@@ -584,9 +655,30 @@ function labelHit(d: NonNullable<ReturnType<typeof useStore.getState>['doc']>, c
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
+/**
+ * A connector end at page point `w`: stuck to the node under it, or free. The top-level node wins
+ * (a whole screen in a page map); Ctrl picks the deepest one. Connectors are never targets.
+ */
+function endAt(d: ArchaDocument, w: Pt, deep: boolean): { end: ConnectorEnd; box: { x: number; y: number; width: number; height: number } | null } {
+  const lines = new Set([...d.nodes.values()].filter((n) => n.type === 'connector').map((n) => n.id));
+  const path = hitPath(d, w.x, w.y, lines);
+  const t = deep ? path.at(-1) : path[0];
+  return { end: { nodeId: t?.id ?? null, side: 'auto', x: round2(w.x), y: round2(w.y) }, box: t ? d.worldBounds(t.id) : null };
+}
+
+/** Which end handle of a connector is under `w`, if any. */
+function connectorHandleAt(d: ArchaDocument, n: ConnectorNode, w: Pt, zoom: number): 'start' | 'end' | null {
+  const ends = connectorEnds(d, n.id);
+  if (!ends) return null;
+  const tol = 8 / zoom;
+  if (Math.hypot(ends.end.x - w.x, ends.end.y - w.y) <= tol) return 'end';
+  if (Math.hypot(ends.start.x - w.x, ends.start.y - w.y) <= tol) return 'start';
+  return null;
+}
+
 const toolHint = (t: string) => ({
   frame: 'Drag to draw a frame · click for 400×300', rect: 'Drag to draw a rectangle · Shift for square', ellipse: 'Drag to draw an ellipse · Shift for circle',
   polygon: 'Drag to draw a polygon · Shift keeps it even', text: 'Click to place text', hand: 'Drag to pan', scale: 'Drag a handle to scale everything inside, text and strokes too',
   pen: 'Click to add points · drag for curves · click the first point to close · Enter to finish', sticky: 'Click to add a sticky note',
-  embed: 'Drag to place a web page · double-click it to scroll and click inside', comment: 'Click anywhere to leave a comment',
+  embed: 'Drag to place a web page · double-click it to scroll and click inside', connector: 'Drag from a shape to another · Ctrl targets the layer inside', comment: 'Click anywhere to leave a comment',
 }[t] ?? '');

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
-  ChevronDown, Circle, Copy, Droplet, Frame, Globe, Group, Hash, Image, MoreHorizontal, PenTool, Plus, Search, Square, StickyNote, Trash2, Triangle, Type, X,
+  ChevronDown, Circle, Copy, Droplet, Frame, Globe, Group, Hash, Image, MoreHorizontal, PenTool, Plus, Search, Square, StickyNote, Trash2, Triangle, Type, Workflow, X,
 } from 'lucide-react';
 import { hexToColor, newId, type Node, type Variable, type VariableType } from '@archa/schema';
 import { commit, select, toast, useStore } from '../lib/store';
@@ -140,7 +140,7 @@ function VariableRow({ v, all, save }: { v: Variable; all: Variable[]; save: (v:
 
 /* --------------------------------- Find layer ------------------------------- */
 
-const NODE_ICON: Record<string, typeof Square> = { frame: Frame, rect: Square, ellipse: Circle, text: Type, group: Group, polygon: Triangle, path: PenTool, image: Image, sticky: StickyNote, embed: Globe };
+const NODE_ICON: Record<string, typeof Square> = { frame: Frame, rect: Square, ellipse: Circle, text: Type, group: Group, polygon: Triangle, path: PenTool, image: Image, sticky: StickyNote, embed: Globe, connector: Workflow };
 
 function FindPanel() {
   const doc = useStore((s) => s.doc);

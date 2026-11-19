@@ -1,5 +1,5 @@
 import {
-  Circle, Diamond, Frame, Globe, Group, Image as ImageIcon, PanelRightClose, PenTool, Square, StickyNote, Triangle, Type, type LucideIcon,
+  Circle, Diamond, Frame, Globe, Group, Image as ImageIcon, PanelRightClose, PenTool, Square, StickyNote, Triangle, Type, Workflow, type LucideIcon,
 } from 'lucide-react';
 import type { Node, NodeType } from '@archa/schema';
 import { togglePanel, useStore } from '../lib/store';
@@ -27,7 +27,7 @@ export function RightPanel() {
 }
 
 const TYPE_ICONS: Record<NodeType, LucideIcon> = {
-  page: Frame, frame: Frame, group: Group, rect: Square, ellipse: Circle, text: Type, polygon: Triangle, path: PenTool, image: ImageIcon, sticky: StickyNote, embed: Globe,
+  page: Frame, frame: Frame, group: Group, rect: Square, ellipse: Circle, text: Type, polygon: Triangle, path: PenTool, image: ImageIcon, sticky: StickyNote, embed: Globe, connector: Workflow,
 };
 
 function DesignPanel() {
@@ -89,10 +89,13 @@ function NodeSections({ node: n }: { node: Node }) {
     <>
       <ComponentRow node={n} />
       <ContextSection node={n} />
-      <AlignmentSection ids={[n.id]} />
-      <PositionSection node={n} />
-      {n.type === 'frame' && <LayoutSection node={n} />}
-      <DimensionsSection node={n} />
+      {/* A connector's box comes from its ends: it gets line controls instead of position and size. */}
+      {n.type !== 'connector' && <>
+        <AlignmentSection ids={[n.id]} />
+        <PositionSection node={n} />
+        {n.type === 'frame' && <LayoutSection node={n} />}
+        <DimensionsSection node={n} />
+      </>}
       <AppearanceSection node={n} set={set} />
       {n.type === 'text' && <TextSection node={n} set={set} />}
       <TypeExtras node={n} set={set} />

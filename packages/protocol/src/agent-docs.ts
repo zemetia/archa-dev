@@ -3,7 +3,7 @@
 export const EXECUTE_API_DOC = `Run a JavaScript snippet against the open ArchaDev document. The whole snippet is ONE transaction: if anything throws, nothing changes.
 
 API (ids are strings; any ref may be a node id or a unique node name):
-  insert(parentRef | null, node, index?) -> id        null = the page. node = { type: "frame"|"rect"|"ellipse"|"polygon"|"path"|"text"|"image"|"sticky"|"embed"|"group", name, ...props, children?: [node...] }
+  insert(parentRef | null, node, index?) -> id        null = the page. node = { type: "frame"|"rect"|"ellipse"|"polygon"|"path"|"text"|"image"|"sticky"|"embed"|"group"|"connector", name, ...props, children?: [node...] }
   update(ref, patch)                                  e.g. update(card, { fills: ["#fff"], cornerRadius: 12 })
   move(ref, parentRef, index?)   remove(ref)
   copy(ref, parentRef?, { x?, y?, index?, name? }) -> id   unlinked copy of a subtree; default: next to the source
@@ -35,6 +35,8 @@ Node props: name (always set one), x, y, width, height, visible, opacity, absolu
     justify (main axis) "start"|"center"|"end"|"space-between"|"space-around", clip, cornerRadius. CSS names work too (alignItems, justifyContent, flexDirection, borderRadius).
   rect: cornerRadius · polygon: sides (3+) · path: d (SVG path data), viewBox {x,y,width,height} stretched to width/height, fillRule, lineCap, lineJoin
   image: src (data: URL), fit "crop"|"fit"|"fill", cornerRadius · sticky: text, fontSize (a note on the canvas, not part of a screen) · embed: url (live web page on the canvas, for reference)
+  connector: a line for flowcharts, workflows and page maps: start, end (a node id, or { nodeId, side: "auto"|"top"|"right"|"bottom"|"left" }, or a free point { x, y }),
+    routing "elbow" (90°, default)|"straight", cornerRadius (elbow rounding, default 8), startCap/endCap "none"|"arrow"|"dot" (default end arrow), strokes. Insert it on the page (parent null) AFTER the nodes it joins; it follows them when they move, so never set its x/y/width/height
   text: text, fontFamily, fontSize, fontWeight (100–900), lineHeight (multiplier), letterSpacing, textAlign, textSizing "auto-width"|"auto-height"|"fixed"
 Text with no fills gets a readable ink automatically (reported under "Auto-fixed"); still set fills deliberately.
 Layout rules: no percentages, no margins. Inside an auto-layout frame x/y are ignored. "fill" only works inside an auto-layout parent. Text has NO colour unless you give it fills.

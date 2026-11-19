@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Check, ChevronDown, Circle, Code, Diamond, Frame, Globe, Hand, ImageUp, MessageCircle, MousePointer2,
-  PanelLeft, PenTool, Scaling, Search, Shapes, Square, StickyNote, Triangle, Type,
+  PanelLeft, PenTool, Scaling, Search, Shapes, Square, StickyNote, Triangle, Type, Workflow,
 } from 'lucide-react';
 import { setTool, toast, togglePanel, toggleRailPanel, useStore, type Tool } from '../lib/store';
 import { importImageOrSvg } from '../lib/importers';
@@ -15,7 +15,7 @@ type Item = { id: string; label: string; key?: string; icon: typeof Square; tool
 
 /** Single-key tool shortcuts (blueprint APP_UI/01 → Tool rail). */
 export const TOOL_KEYS: Record<string, Tool> = {
-  v: 'select', k: 'scale', h: 'hand', r: 'rect', o: 'ellipse', p: 'pen', t: 'text', f: 'frame', s: 'sticky', b: 'embed', c: 'comment',
+  v: 'select', k: 'scale', h: 'hand', r: 'rect', o: 'ellipse', p: 'pen', t: 'text', f: 'frame', s: 'sticky', b: 'embed', l: 'connector', c: 'comment',
 };
 
 const POINTER: Item[] = [
@@ -64,6 +64,7 @@ export function ToolRail() {
       {single('frame', 'Frame', 'F', Frame)}
       {single('sticky', 'Sticky note', 'S', StickyNote)}
       {single('embed', 'Web page', 'B', Globe)}
+      {single('connector', 'Connector', 'L', Workflow)}
       {single('comment', 'Comment', 'C', MessageCircle)}
       <div className="mx-1.5 my-0.5 h-px bg-line" />
       <IconButton title="Variables" active={railPanel === 'variables'} onClick={() => toggleRailPanel('variables')}><Diamond size={17} /></IconButton>

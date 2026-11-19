@@ -1,5 +1,6 @@
 import type { FrameNode, Node, TextNode } from '@archa/schema';
 import type { ArchaDocument } from './document';
+import { routeConnectors } from './connectors';
 
 export type TextMeasure = (node: TextNode, maxWidth?: number) => { width: number; height: number };
 
@@ -48,6 +49,8 @@ type Mutable = { -readonly [K in keyof Node]: Node[K] };
  */
 export function runLayout(doc: ArchaDocument): void {
   for (const page of doc.pages) layoutNode(doc, page.rootId);
+  // Connectors last: they follow the boxes layout just placed.
+  routeConnectors(doc);
 }
 
 function layoutNode(doc: ArchaDocument, id: string): void {

@@ -7,7 +7,11 @@ export const toScreen = (cam: Camera, wx: number, wy: number) => ({ x: wx * cam.
 
 export const pageRoot = (doc: ArchaDocument) => doc.pages[0]!.rootId;
 
+/** How close (page units) a click must land to a connector line to hit it. */
+const LINE_HIT = 6;
+
 function contains(n: Node, r: Rect, x: number, y: number): boolean {
+  if (n.type === 'connector') return distanceToPolyline(n.points, r.x, r.y, x, y) <= LINE_HIT;
   if (x < r.x || y < r.y || x > r.x + r.width || y > r.y + r.height) return false;
   if (n.type === 'ellipse') {
     const rx = r.width / 2, ry = r.height / 2;
@@ -110,3 +114,25 @@ export function handlePoint(r: Rect, h: Handle): { x: number; y: number } {
 }
 
 export const handleCursor: Record<Handle, string> = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
+
+/** A connector's route in page coordinates, with its two ends. */
+export function connectorEnds(doc: ArchaDocument, id: string) {
+  const n = doc.get(id);
+  if (n?.type !== 'connector' || n.points.length < 2) return null;
+  const b = doc.worldBounds(id);
+  const points = n.points.map((p) => ({ x: b.x + p.x, y: b.y + p.y }));
+  return { points, start: points[0]!, end: points.at(-1)! };
+}
+
+/** Distance from (x, y) to a polyline whose points are relative to (ox, oy). */
+export function distanceToPolyline(pts: ReadonlyArray<{ x: number; y: number }>, ox: number, oy: number, x: number, y: number): number {
+  let best = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const ax = ox + pts[i - 1]!.x, ay = oy + pts[i - 1]!.y, bx = ox + pts[i]!.x, by = oy + pts[i]!.y;
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2)) : 0;
+    best = Math.min(best, Math.hypot(x - (ax + dx * t), y - (ay + dy * t)));
+  }
+  return best;
+}

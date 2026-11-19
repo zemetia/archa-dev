@@ -119,7 +119,7 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
   const radius = 'cornerRadius' in n ? n.cornerRadius : n.type === 'ellipse' ? -1 : 0;
   if (radius === -1) s.push(['border-radius', '50%']);
   else if (radius > 0) s.push(['border-radius', px(radius)]);
-  if ('strokes' in n && n.type !== 'polygon' && n.type !== 'path' && n.type !== 'text') {
+  if ('strokes' in n && 'effects' in n && n.type !== 'polygon' && n.type !== 'path' && n.type !== 'text') {
     const shadows: string[] = [];
     for (const st of n.strokes) {
       if (!st.visible || st.width <= 0) continue;
@@ -178,6 +178,7 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
       break;
     case 'polygon':
     case 'path':
+    case 'connector':
       el.tag = 'svg';
       // The node's own SVG minus its outer size attributes: the box comes from the class.
       el.raw = exportSvg(ctx.doc, n.id).replace(/^<svg xmlns="[^"]*" width="[^"]*" height="[^"]*"/, '');

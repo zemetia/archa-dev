@@ -1,6 +1,6 @@
 import type { ArchaDocument } from '@archa/core';
 import { isContainer } from '@archa/schema';
-import { handlePoint, HANDLES, pageRoot, selectionBounds, toScreen } from '../lib/geometry';
+import { connectorEnds, handlePoint, HANDLES, pageRoot, selectionBounds, toScreen } from '../lib/geometry';
 import type { Camera } from '../lib/store';
 
 export type OverlayExtras = {
@@ -9,6 +9,8 @@ export type OverlayExtras = {
   insertLine?: { x1: number; y1: number; x2: number; y2: number };
   dropTarget?: string | null;
   /** Pen tool in progress: committed path, its points, and the rubber-band line to the pointer. */
+  /** Connector being drawn or reattached: preview route (page coords) and the node it would stick to. */
+  connect?: { points: Array<{ x: number; y: number }> | null; target: { x: number; y: number; width: number; height: number } | null };
   pen?: { d: string; points: Array<{ x: number; y: number; in?: { x: number; y: number }; out?: { x: number; y: number } }>; cursor: { x: number; y: number } | null };
 };
 
@@ -67,8 +69,19 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
     }
   }
 
+  // A connector's outline is its line, not its box.
+  const route = (id: string, width: number) => {
+    const ends = connectorEnds(doc, id);
+    if (!ends) return false;
+    polyline(ctx, ends.points.map((p) => toScreen(cam, p.x, p.y)));
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = width;
+    ctx.stroke();
+    return true;
+  };
+
   // Hover.
-  if (v.hover && !v.selection.includes(v.hover) && doc.get(v.hover)) {
+  if (v.hover && !v.selection.includes(v.hover) && doc.get(v.hover) && !route(v.hover, 1.5)) {
     const b = box(doc.worldBounds(v.hover));
     ctx.strokeStyle = ACCENT;
     ctx.lineWidth = 1.5;
@@ -87,7 +100,20 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
 
   // Selection.
   const sel = v.selection.filter((id) => doc.get(id));
-  if (sel.length && !v.editingText) {
+  const lone = sel.length === 1 ? connectorEnds(doc, sel[0]!) : null;
+  if (lone && !v.editingText) {
+    route(sel[0]!, 1.5);
+    for (const p of [lone.start, lone.end]) {
+      const s = toScreen(cam, p.x, p.y);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  } else if (sel.length && !v.editingText) {
     ctx.strokeStyle = ACCENT;
     ctx.lineWidth = 1;
     if (sel.length > 1) for (const id of sel) { const b = box(doc.worldBounds(id)); ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w, b.h); }
@@ -107,6 +133,23 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
       }
     }
     tag(ctx, `${fmt(r.width)} × ${fmt(r.height)}`, b.x + b.w / 2, b.y + b.h + 8, ACCENT, false, true);
+  }
+
+  if (x.connect) {
+    if (x.connect.target) {
+      const b = box(x.connect.target);
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(b.x, b.y, b.w, b.h);
+    }
+    if (x.connect.points) {
+      polyline(ctx, x.connect.points.map((p) => toScreen(cam, p.x, p.y)));
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
   }
 
   if (x.marquee) {
@@ -189,4 +232,9 @@ function tag(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, 
   ctx.fill();
   ctx.fillStyle = '#ffffff';
   ctx.fillText(text, left + 6, y + 13);
+}
+
+function polyline(ctx: CanvasRenderingContext2D, pts: Array<{ x: number; y: number }>) {
+  ctx.beginPath();
+  pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
 }

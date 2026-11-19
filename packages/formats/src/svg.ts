@@ -1,5 +1,5 @@
 import { colorToCss, isContainer, type Node } from '@archa/schema';
-import { polygonPoints, viewBoxMatrix, type ArchaDocument } from '@archa/core';
+import { connectorGeometry, connectorStroke, polygonPoints, viewBoxMatrix, type ArchaDocument } from '@archa/core';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -8,7 +8,7 @@ export function exportSvg(doc: ArchaDocument, nodeId: string): string {
   const root = doc.require(nodeId);
   const defs: string[] = [];
   const body = draw(doc, root, true, defs);
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${root.width}" height="${root.height}" viewBox="0 0 ${root.width} ${root.height}">${defs.length ? `<defs>${defs.join('')}</defs>` : ''}${body}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${root.width}" height="${root.height}" viewBox="0 0 ${root.width} ${root.height}"${root.type === 'connector' ? ' overflow="visible"' : ''}>${defs.length ? `<defs>${defs.join('')}</defs>` : ''}${body}</svg>`;
 }
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -62,5 +62,10 @@ function draw(doc: ArchaDocument, n: Node, isRoot: boolean, defs: string[]): str
     }
     case 'embed':
       return `<g transform="translate(${tx} ${ty})"${attrs}><rect width="${n.width}" height="${n.height}" rx="${n.cornerRadius}" fill="#ffffff" stroke="#e4e4e7"/><text x="14" y="22" font-family="Inter" font-size="13" fill="#52525b">${esc(n.url)}</text></g>`;
+    case 'connector': {
+      const { line, caps } = connectorGeometry(n);
+      const { css, width } = connectorStroke(n);
+      return `<g transform="translate(${tx} ${ty})"${attrs}><path d="${line}" fill="none" stroke="${css}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>${caps.map((d) => `<path d="${d}" fill="${css}"/>`).join('')}</g>`;
+    }
   }
 }
