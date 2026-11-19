@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-19
+
 ### Tool rail
 - The left tool rail is reorganised. A chevron under a button opens its family:
   - **Move / Scale / Hand.** Scale resizes a selection together with everything inside it: text, strokes, corner radius, gaps, padding and shadows.
