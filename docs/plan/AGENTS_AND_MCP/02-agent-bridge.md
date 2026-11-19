@@ -39,7 +39,7 @@ Unknown agents can still connect in **listen mode** through MCP; launch mode nee
 
 ## Profiles and models
 
-- An agent profile = one signed-in account, stored under `~/.archadev/profiles/<agent>/<profileId>/`. Claude: a separate config dir signed in through `claude auth login` run by the app (link shown, code pasted back). agy: a saved copy of the keyring credential, swapped in for a run and restored after.
+- An agent profile = one signed-in account, stored under `~/.archadev/profiles/<agent>/<profileId>/`. Claude: a separate config dir signed in through `claude auth login` run by the app (the CLI opens its own browser sign-in; a pasted code is the fallback). agy: a saved copy of the keyring credential, swapped in for a run and restored after.
 - Settings → Agents page: detected CLIs and versions, signed-in accounts, profiles, default model per agent (picked from `listModels()` or typed), "test connection" (Accent's `accent status [agent]` deep check).
 - Failover: if a run hits a rate limit, offer (or auto-pick, per setting) the next profile/agent.
 
