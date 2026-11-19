@@ -69,6 +69,44 @@ ${GUIDE_INDEX}`,
     return [{ type: 'text', text: 'ok' }];
   }));
 
+  // Orchestrate mode (blueprint AGENT_BRIDGE/06): only a lead thread may use these; others get an error.
+  server.registerTool('delegate', {
+    description: 'Orchestrate mode only: start one worker agent per task, in parallel on this canvas. Returns their names.',
+    inputSchema: {
+      tasks: z.array(z.object({
+        title: z.string().describe('Short task name'),
+        prompt: z.string().describe('Self-contained brief: the worker does not see your conversation'),
+        kind: z.string().optional().describe('research | design | copy | review | …'),
+        agent: z.enum(['claude', 'agy', 'codex']).optional().describe('Default: your own agent'),
+        model: z.string().optional(),
+        frame: z.string().optional().describe('Id of the frame the worker builds inside'),
+      })).min(1).max(8),
+    },
+  }, ({ tasks }) => guard(async (c) => {
+    const r = await c.call('orchestra.delegate', { tasks });
+    return [{ type: 'text', text: `Started ${r.workers.length} worker${r.workers.length === 1 ? '' : 's'}:\n${r.workers.map((w) => `- ${w.persona} (${w.agent}) — ${w.title} [${w.threadId}]`).join('\n')}\nCall wait_workers to collect their reports.` }];
+  }));
+
+  server.registerTool('wait_workers', {
+    description: 'Orchestrate mode only: wait until your workers finish (or the timeout) and get their reports. Call again while some are still working.',
+    inputSchema: {
+      workers: z.array(z.string()).optional().describe('Names or thread ids; default all'),
+      timeoutSec: z.number().min(5).max(600).optional().describe('Default 240'),
+    },
+  }, (args) => guard(async (c) => {
+    const r = await c.call('orchestra.wait', args);
+    const lines = r.workers.map((w) => `## ${w.persona} — ${w.title} (${w.status})\n${w.reply || '(no reply yet)'}`);
+    return [{ type: 'text', text: `${r.timedOut ? 'Timed out — some workers are still working; call wait_workers again.\n\n' : ''}${lines.join('\n\n') || 'No workers yet.'}` }];
+  }));
+
+  server.registerTool('tell_worker', {
+    description: 'Orchestrate mode only: send a follow-up message to one of your workers (queued if it is still working).',
+    inputSchema: { worker: z.string().describe('Worker name or thread id'), message: z.string() },
+  }, (args) => guard(async (c) => {
+    const r = await c.call('orchestra.tell', args);
+    return [{ type: 'text', text: r.queued ? 'Queued — it runs when the worker finishes its current turn.' : 'Sent.' }];
+  }));
+
   server.registerTool('browser', {
     description: BROWSER_TOOL_DOC,
     inputSchema: browserInputShape,

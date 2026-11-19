@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowUp, Copy, Crosshair, FileText, Hexagon, History, Loader2, Settings, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
-import { chatThreads, threadOf, type ChatImage, type ModelOption } from '@archa/protocol';
+import { ArrowLeft, ArrowUp, Copy, Crosshair, FileText, Hexagon, History, Loader2, MessageSquare, Network, Settings, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
+import { chatThreads, threadOf, type ChatImage, type ChatMode, type ModelOption } from '@archa/protocol';
 import { runOfThread, select, toast, useStore } from '../lib/store';
 import { imageFiles, MAX_CHAT_IMAGES, toChatImage } from '../lib/chatImages';
 import { personaBg } from './persona';
@@ -15,6 +15,12 @@ import { Markdown } from './Markdown';
  */
 
 const AGENT_DOT: Record<string, string> = { claude: 'bg-claude', agy: 'bg-agy', codex: 'bg-codex' };
+
+const TEAM_SUGGESTIONS = [
+  'Research three SaaS pricing pages, then design ours: hero, tiers, FAQ and footer in parallel',
+  'A landing page for a coffee brand — one worker per section, same style',
+  'A mobile banking app: onboarding, home and transfer screens built side by side',
+];
 
 const SUGGESTIONS = [
   'A pricing page with three tiers and a monthly / yearly toggle',
@@ -44,6 +50,11 @@ export function ChatThread() {
   const meta = useMemo(() => (thread ? chatThreads(chat.filter((c) => threadOf(c) === thread))[0] : undefined), [chat, thread]);
   const title = meta?.title ?? null;
   const persona = running?.persona ?? meta?.persona;
+  const role = meta?.orchestra;
+  const leadId = role ? ('lead' in role ? thread : role.parent) : null;
+  const leadName = useMemo(() => (role && 'parent' in role ? chatThreads(chat.filter((c) => threadOf(c) === role.parent))[0]?.persona : undefined), [chat, role]);
+  const teamSize = useMemo(() => (leadId ? new Set(chat.filter((c) => c.orchestra && 'parent' in c.orchestra && c.orchestra.parent === leadId).map(threadOf)).size : 0), [chat, leadId]);
+  const mode = useStore((s) => s.chatMode);
   const items = useMemo(() => {
     const own = chat.filter((c) => thread !== null && threadOf(c) === thread).map((c) => ({ ...c, nodeIds: [] as string[] }));
     // Listen-mode agents (connected through `archa mcp` from a terminal) are not threaded: show them with the newest conversation.
@@ -61,6 +72,10 @@ export function ChatThread() {
   return (
     <div className="flex min-h-0 flex-1 flex-col border-t border-line">
       <div className="flex h-10 shrink-0 items-center gap-2 px-4">
+        {role && 'parent' in role && (
+          <button title={`Back to ${leadName ?? 'the lead'}'s chat`} onClick={() => useStore.setState({ chatThread: role.parent })}
+            className="-ml-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:bg-panel-2 hover:text-fg"><ArrowLeft size={14} /></button>
+        )}
         {persona && <span title="Session name — its cursor on the canvas has this colour" className="flex shrink-0 items-center gap-1 rounded-full bg-panel-2 px-1.5 py-0.5 text-[10.5px] font-medium text-fg-muted"><span className={cn('h-1.5 w-1.5 rounded-full', personaBg(persona))} />{persona}</span>}
         <span className="min-w-0 truncate text-[12.5px] font-semibold" title={title ?? undefined}>{title ?? 'New chat'}</span>
         <div className="flex-1" />
@@ -68,6 +83,12 @@ export function ChatThread() {
           <span title={agents.map((a) => a.name).join(', ')} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-agent/15 px-2 py-0.5 text-[10.5px] font-medium text-agent">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-agent" />{agents.length}&nbsp;live
           </span>
+        )}
+        {leadId && (
+          <button title="Team view — the lead and its workers" onClick={() => useStore.setState({ orchestraView: leadId })}
+            className="flex h-7 shrink-0 items-center gap-1 rounded-lg bg-accent-soft px-2 text-[11px] font-medium text-accent-fg hover:bg-accent/30">
+            <Network size={13} />{teamSize > 0 ? teamSize : 'Team'}
+          </button>
         )}
         <button title="Chat history" onClick={() => useStore.setState({ leftTab: 'history' })}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:bg-panel-2 hover:text-fg"><History size={14} /></button>
@@ -90,10 +111,13 @@ export function ChatThread() {
             <div>
               <div className="mb-3 flex items-center gap-2">
                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft text-accent-fg"><Hexagon size={15} strokeWidth={2.4} /></span>
-                <span className="text-[14px] font-semibold tracking-tight">What should your agent design?</span>
+                <span className="text-[14px] font-semibold tracking-tight">{mode === 'orchestrate' ? 'What should your team build?' : 'What should your agent design?'}</span>
               </div>
+              {mode === 'orchestrate' && (
+                <p className="mb-3 text-[11.5px] leading-relaxed text-fg-subtle">Orchestrate: the agent you talk to leads. It splits the work and sends other agents to research or build different sections at the same time, then checks and joins the result.</p>
+              )}
               <div className="flex flex-col items-start gap-1.5">
-                {SUGGESTIONS.map((t) => (
+                {(mode === 'orchestrate' ? TEAM_SUGGESTIONS : SUGGESTIONS).map((t) => (
                   <button key={t} onClick={() => { useStore.setState({ chatDraft: t }); focusComposer?.(); }}
                     className="group flex max-w-full items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-left text-[12px] text-fg-muted transition-colors hover:border-accent/50 hover:bg-accent-soft hover:text-fg">
                     <Sparkles size={12} className="shrink-0 text-fg-subtle group-hover:text-accent-fg" /><span className="truncate">{t}</span>
@@ -193,6 +217,13 @@ export function ChatComposer() {
   const running = useStore((s) => runOfThread(s.runs, s.chatThread));
   const prompt = useStore((s) => s.chatDraft);
   const setPrompt = (chatDraft: string) => useStore.setState({ chatDraft });
+  // A thread keeps the mode it started in; the toggle picks the mode of a new chat.
+  const chatMode = useStore((s) => s.chatMode);
+  const threadRole = useStore((s) => (s.chatThread ? s.chat.find((m) => threadOf(m) === s.chatThread && m.orchestra)?.orchestra : undefined));
+  const threadStarted = useStore((s) => !!s.chatThread && s.chat.some((m) => threadOf(m) === s.chatThread));
+  const mode: ChatMode = threadStarted ? (threadRole && 'lead' in threadRole ? 'orchestrate' : 'chat') : chatMode;
+  const isWorker = !!threadRole && 'parent' in threadRole;
+  const setMode = (m: ChatMode) => { useStore.setState({ chatMode: m }); remember('archa.chatMode', m); };
   const [agent, setAgentState] = useState(() => remembered('archa.chatAgent', 'claude'));
   const [model, setModelState] = useState(() => remembered(`archa.chatModel.${agent}`, ''));
   const [account, setAccount] = useState('');
@@ -297,7 +328,7 @@ export function ChatComposer() {
       const threadId = thread ?? reserved.current ?? undefined;
       const text = prompt.trim() || (images.length > 1 ? 'Use the attached images.' : 'Use the attached image.');
       const r = await client.call('chat.send', {
-        docId, agent, model: model || undefined, account: account || undefined, prompt: text, threadId, now: running ? now : undefined,
+        docId, agent, model: model || undefined, account: account || undefined, prompt: text, threadId, now: running ? now : undefined, mode: threadStarted ? undefined : mode,
         focus: focusNodes.map((n) => n.id), images: images.length ? images : undefined,
       });
       reserved.current = null;
@@ -317,6 +348,7 @@ export function ChatComposer() {
         <span title="The agent works on this document" className="flex h-6 max-w-[140px] shrink-0 items-center gap-1 rounded-md border border-line px-1.5 text-[11px] text-fg-muted">
           <FileText size={11} className="shrink-0" /><span className="truncate">{docName ?? 'Canvas'}</span>
         </span>
+        <ModeToggle mode={mode} locked={threadStarted} worker={isWorker} onChange={setMode} />
         {focusNodes.length > 0 && (
           <span title={`The request is about: ${focusNodes.map((n) => n.name).join(', ')}`} className="flex h-6 min-w-0 items-center gap-1 rounded-md border border-accent/40 bg-accent-soft pl-1.5 text-[11px] text-accent-fg">
             <Crosshair size={11} className="shrink-0" />
@@ -337,7 +369,7 @@ export function ChatComposer() {
         </div>
       )}
       <textarea ref={input} value={prompt} onChange={(e) => setPrompt(e.target.value)} onFocus={warm} onPaste={onPaste} rows={3}
-        placeholder={running ? `${running.persona} is working — Enter queues a follow-up, Ctrl+Enter sends it now` : 'Describe what to design…'}
+        placeholder={running ? `${running.persona} is working — Enter queues a follow-up, Ctrl+Enter sends it now` : mode === 'orchestrate' ? 'Describe the job — the lead splits it across a team…' : 'Describe what to design…'}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(e.ctrlKey || e.metaKey); }
@@ -369,5 +401,31 @@ export function ChatComposer() {
       </div>
       {available && !available.available && <p className="mt-1.5 px-1 text-[11px] text-warn">{available.label} CLI not found on PATH, or the archa CLI is not built (pnpm cli).</p>}
     </div>
+  );
+}
+
+/** Chat = one agent; Orchestrate = the agent leads a team of workers (blueprint AGENT_BRIDGE/06). Fixed once a thread starts. */
+function ModeToggle({ mode, locked, worker, onChange }: { mode: ChatMode; locked: boolean; worker: boolean; onChange: (m: ChatMode) => void }) {
+  if (locked) {
+    if (mode === 'chat' && !worker) return null;
+    return (
+      <span title={worker ? 'A worker in an orchestrated team' : 'This chat leads a team of agents'} className="flex h-6 shrink-0 items-center gap-1 rounded-md bg-accent-soft px-1.5 text-[11px] font-medium text-accent-fg">
+        <Network size={11} />{worker ? 'Worker' : 'Orchestrate'}
+      </span>
+    );
+  }
+  const item = (m: ChatMode, label: string, Icon: typeof Network, hint: string) => (
+    // The colour sits on a span: the base stylesheet makes buttons inherit theirs.
+    <button title={hint} onClick={() => onChange(m)} className={cn('flex h-[20px] items-center rounded px-1.5 text-[11px]', mode === m && (m === 'orchestrate' ? 'bg-accent-soft' : 'bg-panel-3'))}>
+      <span className={cn('flex items-center gap-1 transition-colors', mode !== m ? 'text-fg-subtle hover:text-fg-muted' : m === 'orchestrate' ? 'text-accent-fg' : 'text-fg')}>
+        <Icon size={11} />{label}
+      </span>
+    </button>
+  );
+  return (
+    <span className="flex h-6 shrink-0 items-center rounded-md border border-line p-px">
+      {item('chat', 'Chat', MessageSquare, 'One agent designs')}
+      {item('orchestrate', 'Orchestrate', Network, 'The agent leads a team: it sends other agents to research or build sections in parallel')}
+    </span>
   );
 }

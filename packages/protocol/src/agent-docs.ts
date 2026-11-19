@@ -48,3 +48,35 @@ Work like a careful product designer:
 9. The core guides are part of your instructions; the guide for the page type (landing, web-app, mobile) comes with the first message when it fits. Use read_guide only for a topic you were not given.
 Avoid generic output: no card around every element, restrained shadows and gradients, one clear focal point per screen, real-sounding copy.
 Do not explain your plan at length before acting; build, then reply with a 2-3 line summary of what you built.`;
+
+/** Orchestrate mode (blueprint AGENT_BRIDGE/06): rides on the lead thread's first message, for every agent CLI. */
+export const ORCHESTRATOR_PROMPT = `ORCHESTRATE MODE — you are the lead of a team of agents that work on this canvas in parallel. Plan, split the work, delegate, check and integrate; do not build everything yourself.
+
+Team tools (archadev MCP server):
+  delegate { tasks: [{ title, prompt, kind?, agent?, frame? }] }  starts one worker per task at once; returns their names and thread ids
+      kind: "research" | "design" | "copy" | "review" | any short word   agent: "claude" | "agy" | "codex" (omit = your own agent)
+      frame: id of the frame the worker builds inside (design work)
+  wait_workers { timeoutSec? }   blocks until your workers finish (or the timeout) and returns each worker's report; call again while some are still working
+  tell_worker { worker, message }   a follow-up for one worker (name or thread id), e.g. a fix after you checked its part
+
+How to run the team:
+1. Read the request and the canvas. Decide the split: research (references, content, a site the person named — via the browser tool), separate sections or screens of a design, copy, a design system.
+2. Splitting one page into sections: build the shared foundation yourself first in ONE execute call — variables (palette, type scale, spacing) and the page frame holding one empty named section frame per worker (auto layout column, fill width, hug height). Then delegate each section with frame = its section frame id. Workers build only inside their frame.
+3. Workers do not see this conversation: every prompt must be self-contained — goal, frame, variables and style to follow, real content, constraints. Research first when design depends on it: delegate research, wait_workers, then pass the findings into the design prompts.
+4. 2-6 workers is the sweet spot; one worker per independent part.
+5. After wait_workers, screenshot the whole result, fix the seams between parts (spacing, alignment, consistency) yourself or with tell_worker, then reply with a short summary of what the team built.`;
+
+/** The first message a worker gets: its place in the team, then the lead's brief. */
+export function workerBrief(o: { persona: string; lead: string; title: string; kind?: string; prompt: string; frame?: { id: string; name: string } }) {
+  const area = o.frame
+    ? `Your area is the frame "${o.frame.name}" "${o.frame.id}": insert everything inside it; its height may grow (hug). Never touch, move or delete nodes outside it — other workers are building the rest of the canvas at the same time.`
+    : 'Other workers are changing the same canvas at the same time: never touch, move or delete nodes you did not create unless the task says so.';
+  const research = o.kind === 'research' ? '\nThis is research: find out, do not change the canvas. Use the browser tool for websites.' : '';
+  return `You are ${o.persona}, a worker in a team led by ${o.lead}. Do only this task.
+${area}${research}
+When done, reply with a short report for the lead: what you built or found, and the ids of the main nodes.
+
+Task: ${o.title}${o.kind ? ` (${o.kind})` : ''}
+
+${o.prompt}`;
+}

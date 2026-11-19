@@ -8,6 +8,8 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-20] - The Chat / Orchestrate toggle showed both labels in full white: `text-*` utilities on a <button> had no effect - The base stylesheet sets `button { color: inherit }` outside any layer, which beats Tailwind v4's layered utilities; moved the colour classes onto a span inside the button - In this app, put text colours on a button's parent or an inner span, and check computed colours (CDP `getComputedStyle`) when a state looks wrong.
+
 [2026-11-19] - Live-checked agent cursors over CDP; the cursor layer stayed empty and screenshots hung, which looked like a cursor bug - The dev window was minimized (`document.visibilityState === 'hidden'`), so requestAnimationFrame never ran - Before reading anything drawn by rAF (cursors, animations) over CDP, check `document.visibilityState`; a hidden window draws nothing.
 
 [2026-11-19] - A dev app started with its own ARCHA_HOME still listened on `\\.\pipe\archadev-core-<USERNAME>`, the installed app's pipe; dev and installed cores could collide - `socketPath()` adds a hash of a custom ARCHA_HOME to the pipe name - Anything "isolated by ARCHA_HOME" must derive every path, pipe and lock from it; check names that come from the user or machine.

@@ -79,7 +79,7 @@ Header row (`LeftTab` in the store): **Chat** on the left (also active while His
 
 | Tab | Content | Code |
 |---|---|---|
-| Chat | Current conversation (`chatThread`; null = new). Header: History, New chat | `ui/ChatPanel.tsx` |
+| Chat | Current conversation (`chatThread`; null = new). Header: History, New chat; Team (orchestrate threads) opens the full-window team view → [AGENT_BRIDGE/06](../AGENT_BRIDGE/06-orchestrate.md) | `ui/ChatPanel.tsx`, `ui/OrchestraView.tsx` |
 | History | Conversations of this document, newest first (`chatThreads()`), open = resume, two-click delete | `ui/HistoryPanel.tsx` |
 | Layers | Tree; components/instances show a violet icon | `ui/LayersPanel.tsx` |
 | Components | Make from selected frame, description (agents read it), Insert, Sync, Publish, Unmake; instance bar: Reset / Go to main / Detach | `ui/ComponentsPanel.tsx` |

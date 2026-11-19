@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { newId } from '@archa/schema';
-import { guidesFor, guideText, type ChatImage, type ChatMessage, type ChatRunEvent, type ModelOption } from '@archa/protocol';
+import { guidesFor, guideText, ORCHESTRATOR_PROMPT, threadOf, workerBrief, type ChatImage, type ChatMessage, type ChatMode, type ChatRunEvent, type ModelOption, type OrchestraMeta, type OrchestraReport, type OrchestraTask, type OrchestraWorker } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import type { Workspace } from './workspace';
 import { describeState } from './execute';
@@ -18,9 +18,11 @@ import { randomPersona } from './personas';
 
 export { ADAPTERS, findBin, type McpCommand } from './agent-adapters';
 
-type Run = { id: string; docId: string; threadId: string; agent: string; persona: string; prompt: string; child: ChildProcess | null; stopped: boolean; replied: boolean; failed: boolean; startedAt: number };
-type SendOptions = { now?: boolean; focus?: string[]; images?: ChatImage[] };
-type Queued = { docId: string; agentId: string; prompt: string; model?: string; account?: string; focus?: string[]; images?: ChatImage[] };
+type Run = { id: string; docId: string; threadId: string; agent: string; persona: string; prompt: string; child: ChildProcess | null; stopped: boolean; replied: boolean; failed: boolean; startedAt: number; fromLead: boolean };
+/** brief: what the agent gets instead of `prompt` (a worker's team brief); fromLead: the turn was started by its orchestrate lead. */
+type SendOptions = { now?: boolean; focus?: string[]; images?: ChatImage[]; mode?: ChatMode; brief?: string; fromLead?: boolean };
+type Queued = { docId: string; agentId: string; prompt: string; model?: string; account?: string; focus?: string[]; images?: ChatImage[]; brief?: string; fromLead?: boolean };
+type Waiter = { check: () => void };
 /** A thread's agent process kept alive between turns (plan CHAT_AGENT, D-11 A). */
 type Warm = {
   id: string; threadId: string; docId: string; agent: string; key: string; persona: string;
@@ -31,6 +33,10 @@ type Warm = {
 /** An idle warm process is closed after this; the next message resumes the CLI session cold. */
 const WARM_IDLE_MS = 10 * 60_000;
 const MAX_WARM = 6;
+/** wait_workers blocks up to 10 min: Claude Code's MCP call timeout must outlast it. */
+const MCP_TIMEOUT_MS = String(11 * 60_000);
+/** Workers one orchestrate lead may have working at once. */
+const MAX_WORKERS = 8;
 
 function killTree(child: ChildProcess | null) {
   if (!child || child.exitCode !== null) return;
@@ -67,6 +73,14 @@ export class ChatRunner {
   private interrupted = new Map<string, string>(); // threadId -> prompt stopped before any reply
   private sessions: Map<string, string> | null = null; // threadId:agent:login -> CLI session id
   private messages = new Map<string, ChatMessage[]>();
+  // Orchestrate mode (blueprint AGENT_BRIDGE/06)
+  private meta = new Map<string, OrchestraMeta | null>(); // threadId -> lead / worker role (null = plain chat)
+  private names = new Map<string, string>(); // threadId -> session name reserved before its first run
+  private threadOpts = new Map<string, { docId: string; agent: string; model?: string; account?: string }>();
+  private lastStatus = new Map<string, 'finished' | 'failed' | 'stopped'>();
+  private reports = new Map<string, Set<string>>(); // lead threadId -> workers whose lead-started turn ended unreported
+  private halted = new Set<string>(); // leads the person stopped: no automatic report until they write again
+  private waiters = new Set<Waiter>();
 
   constructor(private ws: Workspace, private mcpCommand: () => McpCommand) {}
 
@@ -103,18 +117,23 @@ export class ChatRunner {
   /** A thread keeps its name across turns; a new one gets a name no other session on the doc uses. */
   private personaFor(docId: string, threadId: string): string {
     const list = this.list(docId);
-    const own = list.find((m) => (m.threadId ?? m.runId) === threadId && m.persona)?.persona ?? this.warm.get(threadId)?.persona;
+    const own = this.names.get(threadId) ?? list.find((m) => (m.threadId ?? m.runId) === threadId && m.persona)?.persona ?? this.warm.get(threadId)?.persona;
     if (own) return own;
-    return randomPersona(list.map((m) => m.persona ?? ''), [...[...this.runs.values()].map((r) => r.persona), ...this.ws.agents().map((a) => a.name)]);
+    return randomPersona(list.map((m) => m.persona ?? ''), [...[...this.runs.values()].map((r) => r.persona), ...this.names.values(), ...this.ws.agents().map((a) => a.name)]);
   }
 
   deleteThread(docId: string, threadId: string) {
-    if ([...this.runs.values()].some((r) => r.threadId === threadId)) throw new Error('Stop the running agent before deleting this conversation');
-    const w = this.warm.get(threadId);
-    if (w) this.killWarm(w);
-    this.queue.delete(threadId);
-    rmSync(threadDir(threadId), { recursive: true, force: true });
-    const kept = this.list(docId).filter((m) => (m.threadId ?? m.runId) !== threadId);
+    // A lead's workers go with it.
+    const ids = [threadId, ...(this.isLead(docId, threadId) ? this.workersOf(docId, threadId) : [])];
+    if ([...this.runs.values()].some((r) => ids.includes(r.threadId))) throw new Error('Stop the running agent before deleting this conversation');
+    for (const id of ids) {
+      const w = this.warm.get(id);
+      if (w) this.killWarm(w);
+      this.queue.delete(id);
+      this.meta.delete(id);
+      rmSync(threadDir(id), { recursive: true, force: true });
+    }
+    const kept = this.list(docId).filter((m) => !ids.includes(m.threadId ?? m.runId));
     this.messages.set(docId, kept);
     mkdirSync(chatsDir(), { recursive: true });
     writeFileSync(join(chatsDir(), `${safeName(docId)}.jsonl`), kept.map((m) => JSON.stringify(m)).join('\n') + (kept.length ? '\n' : ''));
@@ -143,6 +162,8 @@ export class ChatRunner {
   private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent' | 'persona'>, role: ChatMessage['role'], text: string, images?: ChatImage[]) {
     const m: ChatMessage = { id: newId(), docId: run.docId, runId: run.id, threadId: run.threadId, role, agent: run.agent, persona: run.persona, text, ts: Date.now() };
     if (images?.length) m.images = images.map((i) => i.thumb);
+    const team = this.metaOf(run.docId, run.threadId);
+    if (team) m.orchestra = team;
     this.list(run.docId).push(m);
     try {
       mkdirSync(chatsDir(), { recursive: true });
@@ -156,19 +177,22 @@ export class ChatRunner {
    * running turn first). Agents with a warm mode keep one process per thread between turns.
    */
   send(docId: string, agentId: string, prompt: string, model?: string, account?: string, threadId = newId(), opts: SendOptions = {}): { runId: string; threadId: string; persona: string; queued?: boolean } {
+    if (opts.mode === 'orchestrate' && !this.metaOf(docId, threadId)) this.meta.set(threadId, { lead: true });
+    // The person writing to a lead again re-enables the team's automatic report.
+    if (!opts.fromLead) this.halted.delete(threadId);
     const busy = [...this.runs.values()].find((r) => r.threadId === threadId);
     if (busy) {
       const q = this.queue.get(threadId) ?? [];
-      const item: Queued = { docId, agentId, prompt, model, account, focus: opts.focus, images: opts.images };
+      const item: Queued = { docId, agentId, prompt, model, account, focus: opts.focus, images: opts.images, brief: opts.brief, fromLead: opts.fromLead };
       if (opts.now) q.unshift(item); else q.push(item);
       this.queue.set(threadId, q);
       const echo = { docId, id: newId(), threadId, agent: agentId, persona: busy.persona };
       this.emit(echo, 'user', prompt, opts.images);
       this.emit(echo, 'status', opts.now ? `Stopping ${busy.persona} — this runs next` : 'Queued — runs when the current turn ends');
-      if (opts.now) this.stop(busy.id);
+      if (opts.now) this.stop(busy.id, false);
       return { runId: '', threadId, persona: busy.persona, queued: true };
     }
-    return this.start({ docId, agentId, prompt, model, account, focus: opts.focus, images: opts.images }, threadId, false);
+    return this.start({ docId, agentId, prompt, model, account, focus: opts.focus, images: opts.images, brief: opts.brief, fromLead: opts.fromLead }, threadId, false);
   }
 
   private start(q: Queued, threadId: string, echoed: boolean): { runId: string; threadId: string; persona: string } {
@@ -186,7 +210,11 @@ export class ChatRunner {
     // A request stopped before the agent answered never reached its session; carry it into this turn.
     const interrupted = this.interrupted.get(threadId);
     this.interrupted.delete(threadId);
-    const request = interrupted ? `Earlier request (stopped before you answered it):\n${interrupted}\n\nNow:\n${prompt}` : prompt;
+    const asked = q.brief ?? prompt;
+    const request = interrupted ? `Earlier request (stopped before you answered it):\n${interrupted}\n\nNow:\n${asked}` : asked;
+    this.threadOpts.set(threadId, { docId, agent: agentId, model, account });
+    // A lead learns the team tools on its first turn as lead (any agent CLI: it rides on the message).
+    const lead = this.isLead(docId, threadId) && !this.list(docId).some((m) => threadOf(m) === threadId && m.orchestra && 'lead' in m.orchestra && (m.role === 'agent' || m.role === 'tool'));
     const focus = (q.focus ?? []).map((id) => session.doc.get(id)).filter((n) => !!n).slice(0, 12);
     const focusLine = focus.length ? `\nFocus — this request is about: ${focus.map((n) => `${n.name} "${n.id}" (${n.type})`).join(', ')}` : '';
     const images = saveImages(threadId, q.images ?? []);
@@ -195,8 +223,8 @@ export class ChatRunner {
       : '';
     // The internal skill: guides that fit the request ride along on the first turn (saves a guide call).
     const guides = firstTurn ? guidesFor(request).map((t) => guideText(t)).join('\n\n') : '';
-    const fullPrompt = `${request}${focusLine}${imageLine}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}${guides ? `\n\n---\nGuides for this task:\n${guides}` : ''}`;
-    const run: Run = { id: runId, docId, threadId, agent: agentId, persona: this.personaFor(docId, threadId), prompt: request, child: null, stopped: false, replied: false, failed: false, startedAt: Date.now() };
+    const fullPrompt = `${lead ? `${ORCHESTRATOR_PROMPT}\n\n---\nRequest:\n` : ''}${request}${focusLine}${imageLine}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}${guides ? `\n\n---\nGuides for this task:\n${guides}` : ''}`;
+    const run: Run = { id: runId, docId, threadId, agent: agentId, persona: this.personaFor(docId, threadId), prompt: request, child: null, stopped: false, replied: false, failed: false, startedAt: Date.now(), fromLead: !!q.fromLead };
     this.runs.set(runId, run);
     if (!echoed) this.emit(run, 'user', prompt, q.images);
     if (login.label) this.emit(run, 'status', `Running as ${login.label}`);
@@ -266,7 +294,7 @@ export class ChatRunner {
       // ARCHA_RUN_ID = the process id: its `archa mcp` keeps one identity across every turn.
       w.child = spawn(cli.bin, [...cli.pre, ...args], {
         cwd: cfgDir, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...login.env, ARCHA_RUN_ID: id, ARCHA_DOC_ID: docId, NO_COLOR: '1' },
+        env: { ...process.env, ...login.env, ARCHA_RUN_ID: id, ARCHA_DOC_ID: docId, NO_COLOR: '1', MCP_TOOL_TIMEOUT: MCP_TIMEOUT_MS },
       });
       w.child.stdin?.on('error', () => { /* process gone; the close handler reports it */ });
       this.pipeWarm(w, adapter.parser());
@@ -340,11 +368,139 @@ export class ChatRunner {
       if (!run.replied) this.interrupted.set(run.threadId, run.prompt);
     }
     this.ws.broadcast('chat.run', this.runEvent(run, status));
+    this.lastStatus.set(run.threadId, status);
+    const role = this.metaOf(run.docId, run.threadId);
+    if (role && 'parent' in role && run.fromLead) this.reports.set(role.parent, new Set([...(this.reports.get(role.parent) ?? []), run.threadId]));
     const next = this.queue.get(run.threadId)?.shift();
     if (!this.queue.get(run.threadId)?.length) this.queue.delete(run.threadId);
     if (next) {
       try { this.start(next, run.threadId, true); } catch (e) { this.emit(run, 'error', (e as Error).message); }
     }
+    for (const w of [...this.waiters]) w.check();
+    if (role) this.reportToLead(run.docId, 'parent' in role ? role.parent : run.threadId);
+  }
+
+  /* ------------------------------ orchestrate ------------------------------ */
+
+  /** Lead / worker role of a thread, from memory or its stored messages. */
+  private metaOf(docId: string, threadId: string): OrchestraMeta | null {
+    if (!this.meta.has(threadId)) this.meta.set(threadId, this.list(docId).find((m) => threadOf(m) === threadId && m.orchestra)?.orchestra ?? null);
+    return this.meta.get(threadId) ?? null;
+  }
+
+  private isLead(docId: string, threadId: string) {
+    const m = this.metaOf(docId, threadId);
+    return !!m && 'lead' in m;
+  }
+
+  /** Worker thread ids of a lead, oldest first. */
+  private workersOf(docId: string, lead: string): string[] {
+    const ids = new Set<string>();
+    for (const m of this.list(docId)) if (m.orchestra && 'parent' in m.orchestra && m.orchestra.parent === lead) ids.add(threadOf(m));
+    for (const [id, m] of this.meta) if (m && 'parent' in m && m.parent === lead) ids.add(id);
+    return [...ids];
+  }
+
+  private working(threadId: string) {
+    return [...this.runs.values()].some((r) => r.threadId === threadId) || !!this.queue.get(threadId)?.length;
+  }
+
+  /** The lead behind an `archa mcp` connection (its thread must be in orchestrate mode). */
+  private leadOf(threadId: string | undefined) {
+    const opts = threadId ? this.threadOpts.get(threadId) : undefined;
+    if (!threadId || !opts || !this.isLead(opts.docId, threadId)) throw new Error('Team tools work only in an Orchestrate chat: pick Orchestrate in the ArchaDev chat composer.');
+    return { threadId, ...opts, persona: this.personaFor(opts.docId, threadId) };
+  }
+
+  /** A worker by thread id or session name. */
+  private workerOf(lead: { docId: string; threadId: string }, ref: string): string {
+    const ids = this.workersOf(lead.docId, lead.threadId);
+    const hit = ids.find((id) => id === ref) ?? ids.find((id) => this.personaFor(lead.docId, id).toLowerCase() === ref.trim().toLowerCase());
+    if (!hit) throw new Error(`No worker "${ref}" in this team. Workers: ${ids.map((id) => this.personaFor(lead.docId, id)).join(', ') || 'none yet'}`);
+    return hit;
+  }
+
+  /** `delegate`: one new worker thread per task, all started at once. */
+  delegate(leadThread: string | undefined, tasks: OrchestraTask[]): { workers: OrchestraWorker[] } {
+    const lead = this.leadOf(leadThread);
+    const live = this.workersOf(lead.docId, lead.threadId).filter((id) => this.working(id)).length;
+    if (live + tasks.length > MAX_WORKERS) throw new Error(`At most ${MAX_WORKERS} workers at once (${live} still working). Wait for them or send fewer tasks.`);
+    const doc = this.ws.session(lead.docId).doc;
+    for (const t of tasks) {
+      if (t.agent && !ADAPTERS.some((a) => a.id === t.agent)) throw new Error(`Unknown agent "${t.agent}" — use claude, agy or codex`);
+      if (t.frame && !doc.get(t.frame)) throw new Error(`Frame "${t.frame}" for "${t.title}" was not found — pass the frame id`);
+    }
+    const workers: OrchestraWorker[] = [];
+    for (const t of tasks) {
+      const agent = t.agent ?? lead.agent;
+      const own = agent === lead.agent;
+      const frame = t.frame ? doc.get(t.frame) : undefined;
+      const threadId = newId();
+      const persona = this.personaFor(lead.docId, threadId);
+      this.names.set(threadId, persona);
+      this.meta.set(threadId, { parent: lead.threadId, title: t.title, prompt: t.prompt, ...(t.kind ? { kind: t.kind } : {}) });
+      const brief = workerBrief({ persona, lead: lead.persona, title: t.title, kind: t.kind, prompt: t.prompt, frame: frame ? { id: frame.id, name: frame.name } : undefined });
+      this.send(lead.docId, agent, t.prompt, t.model ?? (own ? lead.model : undefined), own ? lead.account : undefined, threadId, { brief, fromLead: true, focus: frame ? [frame.id] : undefined });
+      workers.push({ threadId, persona, title: t.title, agent });
+    }
+    return { workers };
+  }
+
+  /** `wait_workers`: resolves when the named workers (default: all) stop working, the lead's turn ends, or the timeout. */
+  async wait(leadThread: string | undefined, refs: string[] = [], timeoutSec = 240): Promise<{ workers: OrchestraReport[]; timedOut: boolean }> {
+    const lead = this.leadOf(leadThread);
+    const ids = refs.length ? refs.map((r) => this.workerOf(lead, r)) : this.workersOf(lead.docId, lead.threadId);
+    const busy = () => ids.some((id) => this.working(id));
+    const leadRunning = () => [...this.runs.values()].some((r) => r.threadId === lead.threadId);
+    let timedOut = false;
+    if (busy()) {
+      await new Promise<void>((resolve) => {
+        const done = () => { clearTimeout(timer); this.waiters.delete(waiter); resolve(); };
+        const waiter: Waiter = { check: () => { if (!busy() || !leadRunning()) done(); } };
+        const timer = setTimeout(() => { timedOut = true; done(); }, Math.min(Math.max(timeoutSec, 5), 600) * 1000);
+        this.waiters.add(waiter);
+      });
+    }
+    const pending = this.reports.get(lead.threadId);
+    for (const id of ids) pending?.delete(id);
+    return { workers: ids.map((id) => this.report(lead.docId, id)), timedOut };
+  }
+
+  /** `tell_worker`: a follow-up from the lead to one of its workers (queued if it is still working). */
+  tell(leadThread: string | undefined, ref: string, message: string): { queued: boolean } {
+    const lead = this.leadOf(leadThread);
+    const id = this.workerOf(lead, ref);
+    const o = this.threadOpts.get(id) ?? { agent: this.report(lead.docId, id).agent || lead.agent, model: undefined, account: undefined };
+    const r = this.send(lead.docId, o.agent, message, o.model, o.account, id, { fromLead: true });
+    return { queued: !!r.queued };
+  }
+
+  private report(docId: string, id: string): OrchestraReport {
+    const role = this.metaOf(docId, id);
+    const msgs = this.list(docId).filter((m) => threadOf(m) === id);
+    const reply = msgs.filter((m) => m.role === 'agent' || m.role === 'error').at(-1)?.text ?? '';
+    return {
+      threadId: id, persona: this.personaFor(docId, id), title: role && 'parent' in role ? role.title : '', agent: msgs[0]?.agent ?? this.threadOpts.get(id)?.agent ?? '',
+      status: this.working(id) ? 'working' : this.lastStatus.get(id) ?? 'finished', reply: reply.length > 2400 ? `${reply.slice(0, 2400)}…` : reply,
+    };
+  }
+
+  /**
+   * Workers that finish while their lead is idle (it ended its turn without waiting) report back on
+   * their own once the whole team is done, so the lead can check and integrate the work.
+   */
+  private reportToLead(docId: string, lead: string) {
+    const pending = this.reports.get(lead);
+    if (!pending?.size || this.halted.has(lead) || this.working(lead)) return;
+    if (this.workersOf(docId, lead).some((id) => this.working(id))) return;
+    const opts = this.threadOpts.get(lead);
+    if (!opts) return;
+    const reports = [...pending].map((id) => this.report(docId, id));
+    this.reports.delete(lead);
+    const text = `Your workers finished:\n${reports.map((r) => `- ${r.persona} — ${r.title} (${r.status}):\n${r.reply || '(no reply)'}`).join('\n\n')}\n\nCheck their work on the canvas (screenshot), fix the seams between parts, then reply with a short summary.`;
+    const at = { docId, id: newId(), threadId: lead, agent: opts.agent, persona: this.personaFor(docId, lead) };
+    this.emit(at, 'status', `Team finished — ${at.persona} is checking their work`);
+    try { this.start({ docId, agentId: opts.agent, prompt: text, model: opts.model, account: opts.account }, lead, true); } catch (e) { this.emit(at, 'error', (e as Error).message); }
   }
 
   private armIdle(w: Warm) {
@@ -392,7 +548,7 @@ export class ChatRunner {
       const built = adapter.build({ prompt: fullPrompt, mcp, mcpConfigFile, model, sessionId, extraServers: Object.keys(extra), skills, images });
       const child = spawn(cli.bin, [...cli.pre, ...built.args], {
         cwd: cfgDir, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...login.env, ARCHA_RUN_ID: runId, ARCHA_DOC_ID: docId, NO_COLOR: '1' },
+        env: { ...process.env, ...login.env, ARCHA_RUN_ID: runId, ARCHA_DOC_ID: docId, NO_COLOR: '1', MCP_TOOL_TIMEOUT: MCP_TIMEOUT_MS },
       });
       run.child = child;
       // Always close stdin: a CLI left with an open pipe waits for more input before it starts.
@@ -440,10 +596,19 @@ export class ChatRunner {
     else if (ev.kind === 'final' && !run.replied && ev.text.trim()) { run.replied = true; this.emit(run, 'agent', ev.text.trim()); }
   }
 
-  stop(runId: string) {
+  /** cascade: stopping a lead also stops the workers it has running (Send now does not). */
+  stop(runId: string, cascade = true) {
     const run = this.runs.get(runId);
     if (!run) return;
     run.stopped = true;
+    if (cascade && this.isLead(run.docId, run.threadId)) {
+      this.halted.add(run.threadId);
+      for (const id of this.workersOf(run.docId, run.threadId)) {
+        this.queue.delete(id);
+        const r = [...this.runs.values()].find((x) => x.threadId === id);
+        if (r) this.stop(r.id, false);
+      }
+    }
     const w = [...this.warm.values()].find((x) => x.turn === run);
     const interrupt = w ? ADAPTERS.find((a) => a.id === w.agent)?.warm?.interrupt : undefined;
     if (w && interrupt) {

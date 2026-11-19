@@ -60,6 +60,10 @@ export interface CoreMethods {
   'agent.say': { params: { docId?: string; text: string; nodeId?: string }; result: void };
   /** Drive the in-app browser (blueprint BROWSER). */
   'agent.browser': { params: BrowserCommand; result: BrowserReply };
+  /** Orchestrate mode (blueprint AGENT_BRIDGE/06): a lead thread starts worker threads and collects their reports. */
+  'orchestra.delegate': { params: { tasks: OrchestraTask[] }; result: { workers: OrchestraWorker[] } };
+  'orchestra.wait': { params: { workers?: string[]; timeoutSec?: number }; result: { workers: OrchestraReport[]; timedOut: boolean } };
+  'orchestra.tell': { params: { worker: string; message: string }; result: { queued: boolean } };
   // App
   'app.info': { params: void; result: AppInfo };
   /** html / tailwind also write a CSS file and image assets next to `path`; png / jpg arrive rendered by the renderer as base64. */
@@ -72,7 +76,7 @@ export interface CoreMethods {
    * `now` stops the thread's running turn and runs this message next; otherwise a busy thread queues it.
    * `focus` = node ids the request is about (the composer's selection chip).
    */
-  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string; now?: boolean; focus?: string[]; images?: ChatImage[] }; result: { runId: string; threadId: string; persona: string; queued?: boolean } };
+  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string; now?: boolean; focus?: string[]; images?: ChatImage[]; mode?: ChatMode }; result: { runId: string; threadId: string; persona: string; queued?: boolean } };
   /** Start (or keep) the agent process for a thread before the person sends, so the first turn starts at once. No threadId = a fresh thread id is reserved and returned. */
   'chat.warm': { params: { docId: string; agent: string; model?: string; account?: string; threadId?: string }; result: { threadId: string; warm: boolean } };
   'chat.stop': { params: { runId: string }; result: void };
@@ -161,10 +165,18 @@ export type ChatMessage = {
   text: string;
   /** Thumbnails (data URLs) of the images a user message carried. */
   images?: string[];
+  /** Orchestrate mode: set on every message of a lead thread and of its worker threads. */
+  orchestra?: OrchestraMeta;
   ts: number;
 };
+export type ChatMode = 'chat' | 'orchestrate';
+/** lead: the thread that plans and delegates. Worker threads carry their lead's thread id, task title and prompt. */
+export type OrchestraMeta = { lead: true } | { parent: string; title: string; kind?: string; prompt: string };
+export type OrchestraTask = { title: string; prompt: string; kind?: string; agent?: string; model?: string; frame?: string };
+export type OrchestraWorker = { threadId: string; persona: string; title: string; agent: string };
+export type OrchestraReport = OrchestraWorker & { status: 'working' | 'finished' | 'failed' | 'stopped'; reply: string };
 export type LibraryItem = { library: string; id: string; ref: string; name: string; description: string; width: number; height: number; publishedAt: number; thumb?: string };
-export type ChatThread = { id: string; title: string; agent: string; persona?: string; startedAt: number; updatedAt: number; messages: number };
+export type ChatThread = { id: string; title: string; agent: string; persona?: string; startedAt: number; updatedAt: number; messages: number; orchestra?: OrchestraMeta };
 /** Group a document's messages into conversations, newest first (History tab). */
 export function chatThreads(messages: ChatMessage[]): ChatThread[] {
   const by = new Map<string, ChatThread>();
@@ -173,11 +185,13 @@ export function chatThreads(messages: ChatMessage[]): ChatThread[] {
     const t: ChatThread = by.get(id) ?? { id, title: '', agent: m.agent, startedAt: m.ts, updatedAt: m.ts, messages: 0 };
     if (!t.title && m.role === 'user') t.title = m.text.slice(0, 120);
     if (!t.persona && m.persona) t.persona = m.persona;
+    if (!t.orchestra && m.orchestra) t.orchestra = m.orchestra;
     t.updatedAt = Math.max(t.updatedAt, m.ts);
     t.messages++;
     by.set(id, t);
   }
-  return [...by.values()].map((t) => ({ ...t, title: t.title || 'Untitled conversation' })).sort((a, b) => b.updatedAt - a.updatedAt);
+  // A worker's first message is its whole brief; its task title reads better.
+  return [...by.values()].map((t) => ({ ...t, title: (t.orchestra && 'parent' in t.orchestra ? t.orchestra.title : t.title) || 'Untitled conversation' })).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 export const threadOf = (m: ChatMessage) => m.threadId ?? m.runId;
 export const PERSONA_COLORS = 8;
