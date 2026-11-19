@@ -1,10 +1,10 @@
 import { getQuickJS, shouldInterruptAfterDeadline, type QuickJSContext, type QuickJSWASMModule } from 'quickjs-emscripten';
 import {
-  applyOps, DocumentError, findEmptySpace, insertOpsFor, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, syncInstanceOps,
+  applyOps, DocumentError, findEmptySpace, insertOpsFor, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, subtreeInput, syncInstanceOps,
   type ArchaDocument, type DocumentSession,
 } from '@archa/core';
 import { colorToHex, hexToColor, isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
-import type { ExecuteResult } from '@archa/protocol';
+import type { ExecuteResult, TrailAction, TrailStep } from '@archa/protocol';
 import type { Connection, Workspace } from './workspace';
 
 /*
@@ -30,6 +30,7 @@ var components = () => __call('components', []);
 var makeComponent = (ref, description) => __call('makeComponent', [ref, description || '']);
 var instance = (component, parent, opts) => __call('instance', [component, parent, opts || {}]);
 var syncInstances = (component) => __call('syncInstances', [component]);
+var copy = (ref, parent, opts) => __call('copy', [ref, parent, opts || {}]);
 var fromLibrary = (ref, parent, opts) => __call('fromLibrary', [ref, parent, opts || {}]);
 var variables = () => __call('variables', []);
 var setVariable = (name, value) => __call('setVariable', [name, value]);
@@ -48,7 +49,7 @@ type Pending = { code: string; createdAt: number };
 export class AgentExecutor {
   private ctx: QuickJSContext | null = null;
   private failed = new Map<string, Pending>();
-  private state = { working: null as ArchaDocument | null, ops: [] as Op[], created: [] as Array<{ name: string; id: string }>, changed: new Map<string, string>(), output: [] as string[], shots: [] as Array<{ id: string; scale: number }>, pageRoot: '', selection: [] as string[] };
+  private state = { working: null as ArchaDocument | null, ops: [] as Op[], created: [] as Array<{ name: string; id: string }>, changed: new Map<string, string>(), output: [] as string[], shots: [] as Array<{ id: string; scale: number }>, pageRoot: '', selection: [] as string[], steps: [] as TrailStep[] };
 
   constructor(private ws: Workspace, private conn: Connection) {}
 
@@ -91,7 +92,7 @@ export class AgentExecutor {
 
     const ctx = await this.context();
     const page = session.doc.pages[0]!;
-    this.state = { working: session.doc.clone(), ops: [], created: [], changed: new Map(), output: [], shots: [], pageRoot: page.rootId, selection: this.ws.selection.get(session.id) ?? [] };
+    this.state = { working: session.doc.clone(), ops: [], created: [], changed: new Map(), output: [], shots: [], pageRoot: page.rootId, selection: this.ws.selection.get(session.id) ?? [], steps: [] };
     ctx.runtime.setInterruptHandler(shouldInterruptAfterDeadline(Date.now() + 5000));
     const result = ctx.evalCode(code, 'snippet.js');
 
@@ -122,8 +123,9 @@ export class AgentExecutor {
         this.failed.set(id, { code, createdAt: Date.now() });
         return { ok: false, revision: session.revision, reason: (e as Error).message, editId: id };
       }
-      this.ws.log(session.id, this.conn.author, 'execute', summarise(this.state.created, this.state.changed), [...touched].filter((id) => session.doc.get(id)));
+      this.ws.log(session.id, this.conn.author, 'execute', summarise(this.state.created, this.state.changed), [...touched].filter((id) => session.doc.get(id)), this.conn.client.runId);
     }
+    this.ws.trail(this.conn, session.id, finishTrail(session.doc, this.state.steps));
 
     const screenshots: Extract<ExecuteResult, { ok: true }>['screenshots'] = [];
     for (const s of this.state.shots) {
@@ -152,6 +154,14 @@ export class AgentExecutor {
     const doc = st.working!;
     const ref = (r: unknown) => resolveIn(doc, String(r));
     const commit = (ops: Op[]) => { applyOps(doc, ops); st.ops.push(...ops); };
+    // Trail (AGENT_BRIDGE/03 → Sessions): where this call worked, in order, for the session cursor.
+    const step = (action: TrailAction, id: string) => {
+      if (id === st.pageRoot || st.steps.length >= 400) return;
+      const last = st.steps.at(-1);
+      if (last?.nodeId === id && last.action === action) return;
+      const n = doc.get(id);
+      if (n) st.steps.push({ action, nodeId: id, name: n.name, bounds: doc.worldBounds(id) });
+    };
     switch (name) {
       case 'insert': {
         const [parent, input, index] = args as [string | undefined, NodeInput, number | undefined];
@@ -160,6 +170,7 @@ export class AgentExecutor {
         const { ops, rootId, created } = insertOpsFor(input, parentId, index ?? undefined);
         commit(ops);
         st.created.push(...created);
+        step('create', rootId);
         return rootId;
       }
       case 'update': {
@@ -170,6 +181,7 @@ export class AgentExecutor {
         if (!('name' in patch)) delete norm.name;
         commit([{ op: 'update', id, patch: norm }]);
         st.changed.set(id, doc.require(id).name);
+        step('edit', id);
         return null;
       }
       case 'move': {
@@ -177,11 +189,13 @@ export class AgentExecutor {
         const id = ref(r);
         commit([{ op: 'move', id, parentId: ref(parent), ...(index === undefined || index === null ? {} : { index }) }]);
         st.changed.set(id, doc.require(id).name);
+        step('move', id);
         return null;
       }
       case 'remove': {
         const id = ref(args[0]);
         const n = doc.require(id).name;
+        step('delete', id);
         commit([{ op: 'delete', id }]);
         st.changed.set(id, n);
         return null;
@@ -189,18 +203,27 @@ export class AgentExecutor {
       case 'get': {
         const id = ref(args[0]);
         const depth = (args[1] as { depth?: number }).depth ?? 0;
+        step('read', id);
         return view(doc, doc.require(id), depth);
       }
-      case 'children':
-        return doc.children(ref(args[0])).map((n) => view(doc, n, 0));
+      case 'children': {
+        const id = ref(args[0]);
+        step('read', id);
+        return doc.children(id).map((n) => view(doc, n, 0));
+      }
       case 'page':
         return view(doc, doc.require(st.pageRoot), 0);
-      case 'selection':
-        return st.selection.filter((id) => doc.get(id));
+      case 'selection': {
+        const ids = st.selection.filter((id) => doc.get(id));
+        for (const id of ids.slice(0, 5)) step('focus', id);
+        return ids;
+      }
       case 'space':
         return findEmptySpace(doc, st.pageRoot, Number(args[0]) || 400, Number(args[1]) || 400);
       case 'screenshot': {
-        st.shots.push({ id: ref(args[0]), scale: (args[1] as { scale?: number }).scale ?? 1 });
+        const id = ref(args[0]);
+        st.shots.push({ id, scale: (args[1] as { scale?: number }).scale ?? 1 });
+        step('look', id);
         return null;
       }
       case 'components':
@@ -209,13 +232,39 @@ export class AgentExecutor {
         const id = ref(args[0]);
         commit(makeComponentOps(doc, id, String(args[1] ?? '')));
         st.changed.set(id, doc.require(id).name);
+        step('edit', id);
         return id;
       }
       case 'instance': {
         const [c, parent, opts] = args as [string, string | null | undefined, { x?: number; y?: number; index?: number; name?: string }];
-        const { ops, rootId, created } = instanceOps(doc, ref(c), parent ? ref(parent) : st.pageRoot, opts ?? {});
+        const main = ref(c);
+        const { ops, rootId, created } = instanceOps(doc, main, parent ? ref(parent) : st.pageRoot, opts ?? {});
+        step('focus', main);
         commit(ops);
         st.created.push(...created.slice(0, 1));
+        step('copy', rootId);
+        return rootId;
+      }
+      case 'copy': {
+        // Unlinked copy of any subtree; by default next to the source, after it in the same parent.
+        const [r, parent, opts] = args as [string, string | null | undefined, { x?: number; y?: number; index?: number; name?: string }];
+        const id = ref(r);
+        const src = doc.require(id);
+        const parentId = parent ? ref(parent) : src.parentId!;
+        const target = doc.require(parentId);
+        const input = subtreeInput(doc, id) as NodeInput & { x: number; y: number; name: string };
+        if (opts?.name) input.name = opts.name;
+        const inLayout = target.type === 'frame' && target.layout !== 'none';
+        if (opts?.x !== undefined) input.x = opts.x;
+        else if (!parent && !inLayout) input.x = src.x + (target.type === 'page' ? src.width + 40 : 16);
+        if (opts?.y !== undefined) input.y = opts.y;
+        else if (!parent && !inLayout) input.y = src.y + (target.type === 'page' ? 0 : 16);
+        const index = opts?.index ?? (parentId === src.parentId && isContainer(target) ? target.children.indexOf(id) + 1 : undefined);
+        const { ops, rootId, created } = insertOpsFor(input, parentId, index);
+        step('focus', id);
+        commit(ops);
+        st.created.push(...created.slice(0, 1));
+        step('copy', rootId);
         return rootId;
       }
       case 'fromLibrary': {
@@ -228,12 +277,13 @@ export class AgentExecutor {
         const res = libraryInsertOps(doc, `${library}:${id}`, item, parentId, at);
         commit(res.ops);
         st.created.push(...res.created.slice(0, 1));
+        step('create', res.rootId);
         return res.rootId;
       }
       case 'syncInstances': {
         const id = ref(args[0]);
         const list = instancesOf(doc, id);
-        for (const inst of list) { commit(syncInstanceOps(doc, inst.id)); st.changed.set(inst.id, inst.name); }
+        for (const inst of list) { commit(syncInstanceOps(doc, inst.id)); st.changed.set(inst.id, inst.name); step('edit', inst.id); }
         return list.length;
       }
       case 'variables':
@@ -264,6 +314,19 @@ export class AgentExecutor {
         throw new Error(`Unknown API ${name}`);
     }
   }
+}
+
+/**
+ * Final positions after layout ran (a node inserted into an auto-layout frame moves when its siblings
+ * arrive); deleted nodes keep where they were. Long snippets are thinned so the cursor stays readable.
+ */
+function finishTrail(doc: ArchaDocument, steps: TrailStep[]): TrailStep[] {
+  const out = steps.map((s) => (doc.get(s.nodeId) ? { ...s, bounds: doc.worldBounds(s.nodeId) } : s));
+  const MAX = 40;
+  if (out.length <= MAX) return out;
+  const keep = out.filter((s) => s.action !== 'read');
+  const list = keep.length ? keep : out;
+  return list.length <= MAX ? list : Array.from({ length: MAX }, (_, i) => list[Math.round((i * (list.length - 1)) / (MAX - 1))]!);
 }
 
 function resolveIn(doc: ArchaDocument, r: string): string {

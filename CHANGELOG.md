@@ -16,6 +16,11 @@ All notable changes to this project are documented in this file, following [Keep
 
 ### Documents
 - `.archa` format 2: polygon, vector path, image, sticky note and web page nodes, plus document variables and comments. Older files open and upgrade automatically.
+### Agent sessions
+- Every chat works under its own random name (for example "Swift Heron") instead of "claude" or "agy". The name stays with the conversation and shows in the chat header, the History list, the activity feed and undo history.
+- Chats on the same document run in parallel: start a New chat while another is working and both design on the canvas at once. Only a second message to a conversation that is still working is refused.
+- Each agent session has a live cursor on the canvas. It follows the agent's work step by step (creating, editing, copying, moving, deleting, reading, checking), outlines the node it is on, shows "<name> · <action> <node>", and leaves a dashed path behind. Each session has its own colour.
+- Agents can copy any part of the design with the new `copy()` in `execute`.
 
 ## [0.2.4] - 2026-11-19
 

@@ -10,7 +10,6 @@ export function CommentsPanel() {
   const doc = useStore((s) => s.doc);
   useStore((s) => s.rev);
   const show = useStore((s) => s.showComments);
-  const running = useStore((s) => !!s.runningRun);
   const [tab, setTab] = useState<'open' | 'resolved'>('open');
   const all = doc ? [...doc.comments.values()] : [];
   const open = all.filter((c) => !c.resolved);
@@ -44,8 +43,7 @@ export function CommentsPanel() {
       </div>
       {tab === 'open' && open.length > 0 && (
         <div className="shrink-0 border-t border-line p-3">
-          <button disabled={running} onClick={() => void applyComments(open)}
-            title={running ? 'The agent is working' : 'Send every open comment to the chat agent'}
+          <button onClick={() => void applyComments(open)} title="Send every open comment to the chat agent in a new conversation"
             className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-accent text-[12.5px] font-semibold text-white hover:brightness-110 disabled:opacity-40">
             <Sparkles size={14} />Apply all ({open.length})
           </button>

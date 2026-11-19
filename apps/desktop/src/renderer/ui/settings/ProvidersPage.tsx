@@ -291,37 +291,38 @@ function SignInPanel({ account: a, starting, onRetry }: { account: AgentAccount;
       </div>
     );
   } else {
+    const vendor = a.agent === 'claude' ? 'Claude' : 'ChatGPT';
     body = (
       <div className="space-y-3">
         <ol className="space-y-2.5">
-          <Step n={1} title={a.agent === 'claude' ? 'Open the sign-in page' : 'Finish signing in in your browser'}>
-            {l.url ? (
-              <div className="flex flex-wrap gap-1.5">
-                <Button variant="primary" onClick={() => window.open(l.url, '_blank')}><ExternalLink size={13} />Open sign-in page</Button>
-                <Button variant="ghost" onClick={() => { void navigator.clipboard.writeText(l.url); toast('Link copied'); }}><Copy size={13} />Copy link</Button>
-              </div>
-            ) : (
-              <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded-lg bg-app/60 p-2 font-mono text-[10.5px] text-fg-subtle">{l.output || 'Waiting for the sign-in link…'}</pre>
+          <Step n={1} title={`Sign in with the ${vendor} account for "${a.name}" in the browser tab that just opened`}>
+            {!l.url && (
+              <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded-lg bg-app/60 p-2 font-mono text-[10.5px] text-fg-subtle">{l.output || 'Opening the sign-in page…'}</pre>
             )}
           </Step>
-          {l.needsCode ? (
-            <>
-              <Step n={2} title={`Sign in with the Claude account for "${a.name}"`} />
-              <Step n={3} title="Paste the code the page shows">
-                <div className="flex gap-1.5">
-                  <TextInput value={code} onChange={setCode} placeholder="Paste the code here" mono autoFocus ariaLabel="Sign-in code" onEnter={() => { if (code.trim() && !sending) submit(); }} />
-                  <Button variant="primary" disabled={!code.trim() || sending} onClick={submit}>
-                    {sending ? <Loader2 size={13} className="animate-spin" /> : <LogIn size={13} />}Sign in
-                  </Button>
-                </div>
-              </Step>
-            </>
-          ) : (
-            <Step n={2} title="Come back here — this closes on its own once the browser says you're signed in">
-              <div className="flex items-center gap-2 text-[11.5px] text-fg-muted"><Loader2 size={12} className="animate-spin" />Waiting for Codex…</div>
-            </Step>
-          )}
+          <Step n={2} title="Come back here — this closes on its own once the browser says you're signed in">
+            <div className="flex items-center gap-2 text-[11.5px] text-fg-muted"><Loader2 size={12} className="animate-spin" />Waiting for {a.agent === 'claude' ? 'Claude Code' : 'Codex'}…</div>
+          </Step>
         </ol>
+        {l.url && (
+          <div className="space-y-2 rounded-lg bg-app/40 p-3">
+            <div className="text-[11.5px] text-fg-muted">
+              No browser tab? Open the sign-in page yourself{l.needsCode ? ', then paste the code it shows' : ''}.
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <Button variant="secondary" onClick={() => window.open(l.url, '_blank')}><ExternalLink size={13} />Open sign-in page</Button>
+              <Button variant="ghost" onClick={() => { void navigator.clipboard.writeText(l.url); toast('Link copied'); }}><Copy size={13} />Copy link</Button>
+            </div>
+            {l.needsCode && (
+              <div className="flex gap-1.5">
+                <TextInput value={code} onChange={setCode} placeholder="Paste the code here" mono ariaLabel="Sign-in code" onEnter={() => { if (code.trim() && !sending) submit(); }} />
+                <Button variant="primary" disabled={!code.trim() || sending} onClick={submit}>
+                  {sending ? <Loader2 size={13} className="animate-spin" /> : <LogIn size={13} />}Sign in
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex justify-end"><Button variant="ghost" onClick={cancel}>Cancel sign-in</Button></div>
       </div>
     );

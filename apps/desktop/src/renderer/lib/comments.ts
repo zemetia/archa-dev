@@ -38,11 +38,10 @@ function remembered(key: string) {
   try { return localStorage.getItem(key) ?? ''; } catch { return ''; }
 }
 
-/** Sends comments to the agent picked in the chat composer, in the current conversation. */
+/** Sends comments to the agent picked in the chat composer as a new conversation, so it runs alongside any busy chat. */
 export async function applyComments(comments: Comment[]) {
-  const { client, activeDocId, doc, chatThread, runningRun, info } = useStore.getState();
+  const { client, activeDocId, doc, info } = useStore.getState();
   if (!client || !activeDocId || !doc || !comments.length) return;
-  if (runningRun) { toast('The agent is still working — apply when it finishes', 'error'); return; }
   const agent = remembered('archa.chatAgent') || info?.agents.find((a) => a.available)?.id || 'claude';
   const model = remembered(`archa.chatModel.${agent}`) || undefined;
   const lines = comments.map((c, i) => {
@@ -53,7 +52,7 @@ export async function applyComments(comments: Comment[]) {
   });
   const prompt = `Apply these review comments to the design. Change only what they ask for, check each result with a screenshot, then reply with one line per comment saying what you changed.\n\n${lines.join('\n\n')}`;
   try {
-    const r = await client.call('chat.send', { docId: activeDocId, agent, model, prompt, threadId: chatThread ?? undefined });
+    const r = await client.call('chat.send', { docId: activeDocId, agent, model, prompt });
     applying.set(r.runId, comments.map((c) => c.id));
     useStore.setState({ chatThread: r.threadId, leftTab: 'chat' });
     togglePanel('left', true);

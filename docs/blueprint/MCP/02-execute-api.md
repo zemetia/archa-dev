@@ -23,7 +23,7 @@
 ```ts
 // Mutations
 insert(parent: NodeRef, node: NodeInput, index?: number): NodeId
-copy(id: NodeRef, parent?: NodeRef): NodeId
+copy(id: NodeRef, parent?: NodeRef, opts?: { x?, y?, index?, name? }): NodeId   // built 0.2.5: unlinked subtree copy, default next to the source
 update(id: NodeRef, patch: Partial<Props>): void
 replace(id: NodeRef, node: NodeInput): NodeId
 move(id: NodeRef, parent: NodeRef, index?: number): void

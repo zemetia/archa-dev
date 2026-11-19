@@ -20,6 +20,15 @@ export type AppliedEvent = { docId: string; revision: number; txnId: string; aut
 export type ActivityEntry = { id: string; ts: number; docId: string; author: Author; tool: string; text: string; nodeIds: string[]; runId?: string };
 export type AgentClient = { id: string; name: string; kind: ClientKind; connectedAt: number };
 
+/*
+ * Agent trail (blueprint AGENT_BRIDGE/03 → Sessions): each tool call an agent makes is a list of steps,
+ * so the canvas can move that session's cursor along the path the agent worked. Bounds are world
+ * coordinates taken when the step ran, so a deleted node still has a place to point at.
+ */
+export type TrailAction = 'focus' | 'read' | 'create' | 'edit' | 'copy' | 'move' | 'delete' | 'look';
+export type TrailStep = { action: TrailAction; nodeId: string; name: string; bounds: { x: number; y: number; width: number; height: number } };
+export type AgentTrail = { docId: string; author: Author; runId?: string; threadId?: string; steps: TrailStep[] };
+
 export type ExecuteResult =
   | { ok: true; revision: number; created: Array<{ name: string; id: string }>; changed: Array<{ name: string; id: string }>; output: string[]; screenshots: Array<{ nodeId: string; name: string; png?: string; unchanged?: boolean; error?: string }>; issues: Issue[] }
   | { ok: false; revision: number; statement?: string; reason: string; editId: string };
@@ -52,8 +61,10 @@ export interface CoreMethods {
   'export.save': { params: { docId: string; nodeId: string; format: 'svg' | 'png'; path: string; png?: string }; result: { path: string } };
   // Chat: launch a local agent CLI on this document (blueprint AGENT_BRIDGE/03)
   /** No threadId = start a new conversation. */
-  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string }; result: { runId: string; threadId: string } };
+  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string }; result: { runId: string; threadId: string; persona: string } };
   'chat.stop': { params: { runId: string }; result: void };
+  /** Runs still working, so a reloaded window shows every parallel session. */
+  'chat.runs': { params: void; result: ChatRunEvent[] };
   'chat.list': { params: { docId: string }; result: ChatMessage[] };
   'chat.deleteThread': { params: { docId: string; threadId: string }; result: void };
   /** Models the installed agent CLI offers (agy asks the network; cached). */
@@ -129,18 +140,21 @@ export type ChatMessage = {
   threadId?: string;
   role: 'user' | 'agent' | 'tool' | 'status' | 'error';
   agent: string;
+  /** Random session name the run works under on the canvas (e.g. "Swift Heron"); one per thread. */
+  persona?: string;
   text: string;
   ts: number;
 };
 export type LibraryItem = { library: string; id: string; ref: string; name: string; description: string; width: number; height: number; publishedAt: number; thumb?: string };
-export type ChatThread = { id: string; title: string; agent: string; startedAt: number; updatedAt: number; messages: number };
+export type ChatThread = { id: string; title: string; agent: string; persona?: string; startedAt: number; updatedAt: number; messages: number };
 /** Group a document's messages into conversations, newest first (History tab). */
 export function chatThreads(messages: ChatMessage[]): ChatThread[] {
   const by = new Map<string, ChatThread>();
   for (const m of messages) {
     const id = m.threadId ?? m.runId;
-    const t = by.get(id) ?? { id, title: '', agent: m.agent, startedAt: m.ts, updatedAt: m.ts, messages: 0 };
+    const t: ChatThread = by.get(id) ?? { id, title: '', agent: m.agent, startedAt: m.ts, updatedAt: m.ts, messages: 0 };
     if (!t.title && m.role === 'user') t.title = m.text.slice(0, 120);
+    if (!t.persona && m.persona) t.persona = m.persona;
     t.updatedAt = Math.max(t.updatedAt, m.ts);
     t.messages++;
     by.set(id, t);
@@ -148,6 +162,14 @@ export function chatThreads(messages: ChatMessage[]): ChatThread[] {
   return [...by.values()].map((t) => ({ ...t, title: t.title || 'Untitled conversation' })).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 export const threadOf = (m: ChatMessage) => m.threadId ?? m.runId;
+export const PERSONA_COLORS = 8;
+/** Colour slot (0..7) of a session name, so its cursor and its chat label match everywhere. */
+export function personaColor(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  return Math.abs(h) % PERSONA_COLORS;
+}
+export type ChatRunEvent = { runId: string; docId: string; threadId: string; agent: string; persona: string; status: 'running' | 'finished' | 'failed' | 'stopped' };
 export type MethodName = keyof CoreMethods;
 export type Params<M extends MethodName> = CoreMethods[M]['params'];
 export type Result<M extends MethodName> = CoreMethods[M]['result'];
@@ -162,7 +184,9 @@ export interface CoreEvents {
   'chat.message': ChatMessage;
   /** Text the agent is still writing (whole text so far); '' clears it. */
   'chat.delta': { docId: string; runId: string; threadId: string; agent: string; text: string };
-  'chat.run': { runId: string; docId: string; threadId: string; status: 'running' | 'finished' | 'failed' | 'stopped' };
+  'chat.run': ChatRunEvent;
+  /** Where an agent session just worked; the canvas moves its cursor along the steps. */
+  'agent.trail': AgentTrail;
   /** Accounts or a sign-in changed; clients re-read `accounts.overview`. */
   'accounts.changed': { accountId?: string };
   /** Skills or MCP servers changed; clients re-read `skills.list` / `mcp.list`. */

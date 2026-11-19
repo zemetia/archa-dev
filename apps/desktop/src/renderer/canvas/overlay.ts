@@ -12,12 +12,11 @@ export type OverlayExtras = {
   pen?: { d: string; points: Array<{ x: number; y: number; in?: { x: number; y: number }; out?: { x: number; y: number } }>; cursor: { x: number; y: number } | null };
 };
 
-type View = { camera: Camera; selection: string[]; hover: string | null; agentFocus: { name: string; nodeIds: string[]; ts: number } | null; editingText: string | null };
+type View = { camera: Camera; selection: string[]; hover: string | null; editingText: string | null };
 
 const ACCENT = '#8b5cf6';
-const AGENT = '#f97316';
 
-/** Selection, hover, labels, guides and agent presence, drawn in screen space (blueprint RENDERING/02). */
+/** Selection, hover, labels and guides, drawn in screen space (blueprint RENDERING/02). Agent cursors: cursors.ts. */
 export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v: View, x: OverlayExtras) {
   const cam = v.camera;
   const box = (r: { x: number; y: number; width: number; height: number }) => {
@@ -62,19 +61,6 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
     ctx.setLineDash([4, 3]);
     ctx.strokeRect(b.x, b.y, b.w, b.h);
     ctx.setLineDash([]);
-  }
-
-  // Agent presence: outline what the agent just touched, with a name tag.
-  if (v.agentFocus && Date.now() - v.agentFocus.ts < 5000) {
-    const ids = v.agentFocus.nodeIds.filter((id) => doc.get(id));
-    const r = selectionBounds(doc, ids.slice(0, 50));
-    if (r) {
-      const b = box(r);
-      ctx.strokeStyle = AGENT;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(b.x, b.y, b.w, b.h);
-      tag(ctx, v.agentFocus.name, b.x + b.w, b.y + b.h + 6, AGENT, true);
-    }
   }
 
   // Selection.
