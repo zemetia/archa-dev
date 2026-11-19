@@ -122,6 +122,7 @@ function layoutFrame(doc: ArchaDocument, frame: FrameNode) {
   if (frame.justify === 'center') cursor += free / 2;
   else if (frame.justify === 'end') cursor += free;
   else if (frame.justify === 'space-between' && kids.length > 1) gap += free / (kids.length - 1);
+  else if (frame.justify === 'space-around' && kids.length) { cursor += free / kids.length / 2; gap += free / kids.length; }
 
   for (const k of kids) {
     const m = k as Mutable;

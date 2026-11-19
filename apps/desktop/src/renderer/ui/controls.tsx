@@ -4,21 +4,22 @@ import { colorToHex, hexToColor, type Color } from '@archa/schema';
 export const cn = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ');
 
 export function Section({ title, action, children }: { title: string; action?: ReactNode; children?: ReactNode }) {
+  const body = children !== undefined && children !== null && children !== false;
   return (
     <div className="border-b border-line px-4 py-3">
-      <div className="mb-2 flex h-5 items-center justify-between">
+      <div className={cn('flex h-6 items-center justify-between gap-1', body && 'mb-2')}>
         <span className="text-[12px] font-semibold text-fg">{title}</span>
-        {action}
+        {action && <div className="-mr-1.5 flex items-center gap-0.5">{action}</div>}
       </div>
       {children}
     </div>
   );
 }
 
-export function IconButton({ title, active, onClick, children, className }: { title: string; active?: boolean; onClick?: () => void; children: ReactNode; className?: string }) {
+export function IconButton({ title, active, onClick, children, className, disabled }: { title: string; active?: boolean; onClick?: () => void; children: ReactNode; className?: string; disabled?: boolean }) {
   return (
-    <button title={title} onClick={onClick}
-      className={cn('no-drag flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-panel-3 hover:text-fg', active && 'bg-accent-soft text-accent-fg hover:bg-accent-soft hover:text-accent-fg', className)}>
+    <button title={title} aria-label={title} aria-pressed={active} onClick={onClick} disabled={disabled}
+      className={cn('no-drag flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-panel-3 hover:text-fg disabled:pointer-events-none disabled:opacity-35', active && 'bg-accent-soft text-accent-fg hover:bg-accent-soft hover:text-accent-fg', className)}>
       {children}
     </button>
   );
@@ -79,27 +80,88 @@ const fmt = (v: number) => String(Math.round(v * 100) / 100);
 
 export function ColorField({ color, onCommit }: { color: Color; onCommit: (c: Color) => void }) {
   const hex = colorToHex(color);
+  const alpha = Math.round(color.a * 100);
   const [text, setText] = useState(hex.slice(1).toUpperCase());
+  const [alphaText, setAlphaText] = useState(String(alpha));
   useEffect(() => { setText(hex.slice(1).toUpperCase()); }, [hex]);
+  useEffect(() => { setAlphaText(String(alpha)); }, [alpha]);
   const commitHex = (h: string) => {
     try {
-      const c = hexToColor(h);
-      onCommit({ ...c, a: color.a });
+      const c = hexToColor(h.startsWith('#') ? h : `#${h}`);
+      // An 8-digit hex carries its own alpha; otherwise the current one is kept.
+      onCommit({ ...c, a: /^#?[0-9a-f]{8}$/i.test(h) ? c.a : color.a });
     } catch {
       setText(hex.slice(1).toUpperCase());
     }
   };
+  const commitAlpha = () => {
+    const v = Number(alphaText);
+    if (alphaText.trim() === '' || !Number.isFinite(v)) { setAlphaText(String(alpha)); return; }
+    const a = Math.min(100, Math.max(0, v)) / 100;
+    if (a !== color.a) onCommit({ ...color, a });
+    else setAlphaText(String(alpha));
+  };
+  const blur = (e: React.KeyboardEvent) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); };
+  const css = colorToHex(color, true);
   return (
-    <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-panel-2 px-2">
-      <input type="color" value={hex} onChange={(e) => commitHex(e.target.value)} className="h-4 w-4 shrink-0 cursor-pointer" />
-      <input value={text} onChange={(e) => setText(e.target.value)} onBlur={() => commitHex(text)}
-        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-        className="w-full min-w-0 bg-transparent font-mono text-[12px] uppercase" />
-      <input value={Math.round(color.a * 100)} onChange={() => undefined}
-        onBlur={(e) => onCommit({ ...color, a: Math.min(1, Math.max(0, Number(e.target.value) / 100 || 0)) })}
-        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-        className="w-8 bg-transparent text-right text-[12px]" title="Opacity %" />
-      <span className="text-[11px] text-fg-subtle">%</span>
+    <div className="flex h-8 min-w-0 flex-1 items-center rounded-lg bg-panel-2 ring-1 ring-transparent focus-within:ring-accent">
+      <label className="relative ml-1.5 h-[18px] w-[18px] shrink-0 cursor-pointer overflow-hidden rounded-[5px] ring-1 ring-line"
+        style={{ background: `linear-gradient(${css}, ${css}), repeating-conic-gradient(var(--color-panel-3) 0 25%, var(--color-fg-subtle) 0 50%) 0 0 / 8px 8px` }}>
+        <input type="color" value={hex} onChange={(e) => commitHex(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Pick colour" />
+      </label>
+      <input value={text} spellCheck={false} onChange={(e) => setText(e.target.value)} onBlur={() => commitHex(text)} onKeyDown={blur}
+        onFocus={(e) => e.target.select()} aria-label="Hex colour"
+        className="h-full w-full min-w-0 bg-transparent pl-2 font-mono text-[12px] uppercase" />
+      <span className="h-4 w-px shrink-0 bg-line" />
+      <input value={alphaText} onChange={(e) => setAlphaText(e.target.value)} onBlur={commitAlpha} onKeyDown={blur}
+        onFocus={(e) => e.target.select()} title="Opacity" aria-label="Colour opacity"
+        className="h-full w-9 shrink-0 bg-transparent text-right text-[12px]" />
+      <span className="pl-0.5 pr-2 text-[11px] text-fg-subtle">%</span>
+    </div>
+  );
+}
+
+/** Compact checkbox row with the app's tokens. */
+export function Check({ label, checked, onChange, disabled, title }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; title?: string }) {
+  return (
+    <label title={title} className={cn('flex h-7 min-w-0 cursor-pointer select-none items-center gap-2 text-[12px] text-fg-muted hover:text-fg', disabled && 'pointer-events-none opacity-40')}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="peer sr-only" />
+      <span className={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] ring-1 ring-inset transition-colors peer-focus-visible:ring-accent', checked ? 'bg-accent ring-accent' : 'bg-panel-2 ring-line')}>
+        {checked && <svg viewBox="0 0 12 12" className="h-3 w-3 fill-none stroke-white stroke-[1.8]"><path d="M2.5 6.2 5 8.5l4.5-5" /></svg>}
+      </span>
+      <span className="truncate">{label}</span>
+    </label>
+  );
+}
+
+/** Icon button that opens a small menu of actions below it. */
+export function MenuButton({ title, children, items, className }: {
+  title: string; children: ReactNode; className?: string;
+  items: Array<{ label: string; icon?: ReactNode; onSelect: () => void; disabled?: boolean }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => { if (!root.current?.contains(e.target as globalThis.Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('keydown', esc, true);
+    return () => { window.removeEventListener('pointerdown', close, true); window.removeEventListener('keydown', esc, true); };
+  }, [open]);
+  return (
+    <div ref={root} className="relative">
+      <IconButton title={title} active={open} onClick={() => setOpen((o) => !o)} className={className}>{children}</IconButton>
+      {open && (
+        <div role="menu" className="absolute right-0 top-full z-30 mt-1 min-w-[180px] rounded-xl border border-line bg-panel p-1 shadow-2xl">
+          {items.map((it) => (
+            <button key={it.label} role="menuitem" disabled={it.disabled} onClick={() => { setOpen(false); it.onSelect(); }}
+              className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[12.5px] text-fg-muted hover:bg-panel-3 hover:text-fg disabled:opacity-40">
+              {it.icon && <span className="flex w-4 justify-center text-fg-subtle">{it.icon}</span>}{it.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

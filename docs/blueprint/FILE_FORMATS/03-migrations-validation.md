@@ -25,6 +25,7 @@ packages/formats/src/migrations/
 ├── archa/
 │   ├── index.ts          ordered list; runMigrations(raw, from, to)
 │   ├── v1-to-v2.ts       pure function (raw JSON) → raw JSON
+│   ├── v2-to-v3.ts       identity: v3 only adds effect types and justify "space-around"
 │   └── ...
 └── project/
     └── ...

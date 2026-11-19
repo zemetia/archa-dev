@@ -16,7 +16,7 @@ A narrow layout vocabulary is a quality mechanism: it removes whole classes of b
 | `gap` | number \| var |
 | `padding` | `{ top, right, bottom, left }` numbers \| vars |
 | `align` (cross axis) | `start` \| `center` \| `end` |
-| `justify` (main axis) | `start` \| `center` \| `end` \| `space-between` |
+| `justify` (main axis) | `start` \| `center` \| `end` \| `space-between` \| `space-around` (half gaps at the ends; format 3) |
 | `wrap` | boolean (row only) |
 | `clip` | boolean |
 
@@ -53,6 +53,19 @@ Layout runs **only** for auto-layout frames whose `subtreeHash` changed, bottom-
 | Soft issue (applied, reported) | x/y set on a child inside layout (ignored), hug/fill cycle collapsing to 0, text without fill, text overflowing fixed box, child clipped by parent | Returned in `issues[]` → [MCP/03](../MCP/03-response-contract-lint.md) |
 
 Each issue has a stable `rule` id (e.g. `layout/xy-ignored`) so projects can disable rules.
+
+---
+
+## Arrange (built 0.5, `@archa/core` `arrange.ts`)
+
+| Command | Behaviour |
+|---|---|
+| `alignOps(ids, edge, to?)` | One free layer → its parent frame; several → their bounds. Layers placed by auto layout change the parent's `align`/`justify` (`axisKey`). A lone top-level layer returns a note, no ops |
+| `distributeOps(ids, axis, gap?)` | Equal spacing (3+), or packed with `gap`; auto-layout children set the parent's gap |
+| `wrapOps(ids, frame)` | Siblings into a new frame at their place; `layout: row/column/auto` makes it hug auto layout in reading order |
+| `placementOf` / `placementPatch` | 9-dot screen placement ↔ align/justify for the frame's direction |
+
+Ops only; the panel, CLI and `execute` commit them.
 
 ---
 

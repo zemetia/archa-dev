@@ -8,6 +8,8 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-19] - Design panel "Align" did nothing for a layer inside auto layout or a lone top-level layer, and the fill opacity % field was read-only (controlled input with a no-op onChange); the align logic also lived only in the renderer - Moved arrange logic to `@archa/core` `arrange.ts` (auto-layout children change the parent's align/justify; no-op cases return a note shown as a toast) and gave every ColorField input local state - Panel controls must be exercised with real DOM events in the running app; a control that silently does nothing is a bug, so return a reason when an action is a no-op.
+
 [2026-11-19] - A dev app started with its own ARCHA_HOME still listened on `\\.\pipe\archadev-core-<USERNAME>`, the installed app's pipe; dev and installed cores could collide - `socketPath()` adds a hash of a custom ARCHA_HOME to the pipe name - Anything "isolated by ARCHA_HOME" must derive every path, pipe and lock from it; check names that come from the user or machine.
 
 [2026-11-19] - The dev window sat on "Connecting to core…" after a Vite HMR update, so agent screenshots failed during a live benchmark - Reloaded the window (the core port is only sent on page load) - After HMR in a dev run, reload the window before trusting agent screenshots; check `document.body.innerText` for "Connecting to core".
