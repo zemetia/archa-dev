@@ -48,9 +48,9 @@ Code: `apps/desktop/src/core-host/accounts.ts` (+ `keyring.ts`); moves to `packa
 
 | Item | Contract |
 |---|---|
-| Store | `~/.archadev/profiles/accounts.json` (0600): `{ accounts[], defaults{agent→id} }`. Managed folders `profiles/<agent>/<id>/`; a **linked** existing folder (e.g. Orca's) is never deleted |
+| Store | `~/.archadev/profiles/accounts.json` (0600): `{ accounts[], defaults{agent→id} }`. Managed folders `profiles/<agent>/<id>/`. New accounts are always managed; a **linked** folder saved by an older version keeps working and is never deleted |
 | Identity | Read from files only, tokens never cross the protocol: Claude `.credentials.json` + `.claude.json`; Codex `auth.json` (id_token email/plan, or API key); agy keyring blob `id_token_email` |
-| Sign-in | Claude: `claude auth login [--email]` with `CLAUDE_CONFIG_DIR`, the CLI opens the browser itself and finishes on its own; its printed fallback link's code can be pasted on stdin. Codex: `codex login` with `CODEX_HOME` (browser callback) or API key written to `auth.json`. agy: "Save current agy login" / "Use on this computer" (current login saved first) |
+| Sign-in | Claude: `claude auth login` with `CLAUDE_CONFIG_DIR`, the CLI opens the browser itself and finishes on its own; its printed fallback link's code can be pasted on stdin. Codex: `codex login` with `CODEX_HOME` (browser callback) or API key written to `auth.json`. agy: "Save current agy login" / "Use on this computer" (current login saved first) |
 | Keyring | Windows Credential Manager via PowerShell P/Invoke (script constant, data in env); macOS `security`; Linux `secret-tool` |
 | Protocol | `accounts.overview/create/update/delete/captureHost/useOnHost/login.start/login.code/login.cancel`, event `accounts.changed`; params zod-validated in the core host |
 | Isolation | ArchaDev stands alone: main drops inherited `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ORCA_*` before forking the core host, and the host login is always `~/.claude` / `~/.codex`. Launching from another tool's terminal (e.g. Orca) never picks up that tool's profile |
@@ -90,7 +90,7 @@ Opened from the title bar gear, `Ctrl+,`, or "Accounts" under the chat composer.
 | This computer | Host login (email, plan, saved?), whether runs use it; agy: "Save as account" | ✓ |
 | Accounts | Row: avatar, name, email, plan, status chip, default ★, enable switch, sign in / use on this computer, open folder, remove (inline confirm) | ✓ |
 | Sign-in panel | Claude: open link → sign in → paste code. Codex: browser finishes, panel closes itself. Errors stay with "Try again" | ✓ |
-| Add account | Claude: e-mail/name → sign in. Codex: ChatGPT or API key. Both: link an existing folder. agy: 3-step save flow | ✓ |
+| Add account | No name field: an account is named after its login e-mail (API key → "OpenAI API key"; before sign-in "<CLI> account"). Claude: Add account starts the sign-in at once. Codex: ChatGPT or API key. agy: 3-step save flow | ✓ |
 | Chat picker | Default · <account> / This computer's login / each enabled account | ✓ |
 | Defaults | Default model, max parallel runs, per-turn timeout | — |
 | Check | **Test connection** = `archa status <agent>`: binary runs → profile valid → MCP reachable from the agent → round-trip `say` | — |

@@ -77,7 +77,7 @@ export interface CoreMethods {
   'library.insert': { params: { docId: string; library: string; id: string; parentId?: string; x?: number; y?: number }; result: { nodeId: string; placed: 'main' | 'instance' } };
   // Agent login profiles (blueprint AGENT_BRIDGE/02)
   'accounts.overview': { params: void; result: AccountsOverview };
-  'accounts.create': { params: { agent: AccountAgent; name: string; dir?: string; apiKey?: string }; result: AgentAccount };
+  'accounts.create': { params: { agent: AccountAgent; name?: string; apiKey?: string }; result: AgentAccount };
   'accounts.update': { params: { id: string; name?: string; enabled?: boolean; isDefault?: boolean }; result: AgentAccount };
   'accounts.delete': { params: { id: string }; result: void };
   'accounts.captureHost': { params: { agent: 'agy' }; result: AgentAccount };

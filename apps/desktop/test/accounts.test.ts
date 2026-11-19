@@ -49,8 +49,9 @@ describe('login identity', () => {
 describe('AccountManager', () => {
   it('creates managed profiles under ARCHA_HOME and persists them', () => {
     const m = manager();
-    const a = m.create({ agent: 'claude', name: 'work@co.com' });
+    const a = m.create({ agent: 'claude' });
     expect(a.managed).toBe(true);
+    expect(a.name).toBe('Claude Code account');
     expect(a.dir.startsWith(profilesDir())).toBe(true);
     expect(existsSync(a.dir)).toBe(true);
     expect(notified).toContain(a.id);
@@ -65,9 +66,7 @@ describe('AccountManager', () => {
   it('validates params at the boundary', () => {
     const m = manager();
     expect(() => m.create({ agent: 'hermes', name: 'x' })).toThrow();
-    expect(() => m.create({ agent: 'claude', name: '' })).toThrow();
     expect(() => m.create({ agent: 'agy', name: 'x' })).toThrow(/Save current agy login/);
-    expect(() => m.create({ agent: 'claude', name: 'x', dir: 'relative/path' })).toThrow(/absolute/);
     expect(() => m.create({ agent: 'claude', name: 'x', apiKey: 'k' })).toThrow(/Codex/);
   });
 
@@ -84,6 +83,16 @@ describe('AccountManager', () => {
     expect(m.runEnv('codex', a.id).env.CODEX_HOME).toBe(a.dir);
   });
 
+  it('names an account after the login it signed in with', () => {
+    const m = manager();
+    const a = m.create({ agent: 'claude' });
+    writeFileSync(join(a.dir, '.credentials.json'), JSON.stringify({ claudeAiOauth: { refreshToken: 'r', subscriptionType: 'pro' } }));
+    writeFileSync(join(a.dir, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'me@co.com' } }));
+    expect(m.dto({ ...a, name: '' } as never).name).toBe('me@co.com');
+    expect(m.runEnv('claude', a.id).label).toBe('me@co.com');
+    expect(manager().create({ agent: 'codex', apiKey: 'k' }).name).toBe('OpenAI API key');
+  });
+
   it('refuses runs under a signed-out or disabled account', () => {
     const m = manager();
     const a = m.create({ agent: 'claude', name: 'new@co.com' });
@@ -96,14 +105,17 @@ describe('AccountManager', () => {
     const m = manager();
     const linked = join(home, 'existing-claude');
     mkdirSync(linked);
-    const a = m.create({ agent: 'claude', name: 'managed' });
-    const b = m.create({ agent: 'claude', name: 'linked', dir: linked });
-    expect(b.managed).toBe(false);
-    m.update({ id: a.id, isDefault: true });
-    m.delete({ id: a.id });
-    m.delete({ id: b.id });
+    // Linked folders can no longer be added, but ones saved by older versions still load and must survive removal.
+    mkdirSync(profilesDir(), { recursive: true });
+    writeFileSync(join(profilesDir(), 'accounts.json'), JSON.stringify({ accounts: [{ id: 'old', agent: 'claude', name: 'linked', dir: linked, managed: false, enabled: true, createdAt: 1 }], defaults: {} }));
+    const m2 = manager();
+    const a = m2.create({ agent: 'claude' });
+    m2.update({ id: a.id, isDefault: true });
+    m2.delete({ id: a.id });
+    m2.delete({ id: 'old' });
     expect(existsSync(a.dir)).toBe(false);
     expect(existsSync(linked)).toBe(true);
+    expect(m2.runEnv('claude')).toEqual({ env: {}, label: null });
     expect(m.runEnv('claude')).toEqual({ env: {}, label: null });
   });
 });

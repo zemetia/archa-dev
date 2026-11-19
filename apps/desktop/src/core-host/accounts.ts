@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { DocumentError } from '@archa/core';
 import { newId } from '@archa/schema';
@@ -40,7 +40,8 @@ type LoginSession = { child: ChildProcess; out: string; url: string; needsCode: 
 const agentId = z.enum(['claude', 'agy', 'codex']);
 const id = z.string().min(1).max(64);
 export const accountParams = {
-  create: z.object({ agent: agentId, name: z.string().trim().min(1).max(80), dir: z.string().trim().max(1024).optional(), apiKey: z.string().trim().max(512).optional() }),
+  /** No name: the account is named after the login it signs in with. */
+  create: z.object({ agent: agentId, name: z.string().trim().max(80).optional(), apiKey: z.string().trim().max(512).optional() }),
   update: z.object({ id, name: z.string().trim().min(1).max(80).optional(), enabled: z.boolean().optional(), isDefault: z.boolean().optional() }),
   byId: z.object({ id }),
   captureHost: z.object({ agent: z.literal('agy') }),
@@ -199,10 +200,18 @@ export class AccountManager {
     return { active: !l.done, url: l.url, output: l.out.replace(ANSI, '').trim().slice(-2000), needsCode: l.needsCode, error: l.error };
   }
 
+  /** What the UI and run status call an account: its login e-mail, else a saved name, else what it is. */
+  private displayName(a: Stored, ident = this.identity(a)): string {
+    if (ident.email) return ident.email;
+    if (a.name) return a.name;
+    if (ident.plan === 'API key') return 'OpenAI API key';
+    return `${CLIS.find((c) => c.id === a.agent)?.label ?? a.agent} account`;
+  }
+
   dto(a: Stored): AgentAccount {
     const ident = this.identity(a);
     return {
-      id: a.id, agent: a.agent, name: a.name, email: ident.email, plan: ident.plan, signedIn: ident.signedIn,
+      id: a.id, agent: a.agent, name: this.displayName(a, ident), email: ident.email, plan: ident.plan, signedIn: ident.signedIn,
       enabled: a.enabled, isDefault: this.data.defaults[a.agent] === a.id, managed: a.managed, dir: a.dir, createdAt: a.createdAt,
       login: this.loginState(a.id),
     };
@@ -257,22 +266,15 @@ export class AccountManager {
     const p = parse(accountParams.create, params);
     if (p.agent === 'agy') throw new DocumentError('VALIDATION', 'agy accounts are saved from this computer\'s agy login — use "Save current agy login"');
     const accountId = newId();
-    let dir = join(profilesDir(), p.agent, accountId);
-    let managed = true;
-    if (p.dir) {
-      if (!isAbsolute(p.dir)) throw new DocumentError('VALIDATION', 'The config folder must be an absolute path');
-      dir = resolve(p.dir);
-      if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new DocumentError('VALIDATION', `Folder not found: ${dir}`);
-      if (this.data.accounts.some((a) => resolve(a.dir) === dir)) throw new DocumentError('CONFLICT', 'Another account already uses that folder');
-      managed = false;
-    }
+    // ArchaDev always owns the folder; accounts linked to an outside folder by older versions keep working.
+    const dir = join(profilesDir(), p.agent, accountId);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     if (p.apiKey) {
       if (p.agent !== 'codex') throw new DocumentError('VALIDATION', 'An API key can only be saved for Codex');
       // The same file `codex login --with-api-key` writes.
       writePrivate(join(dir, 'auth.json'), JSON.stringify({ OPENAI_API_KEY: p.apiKey }, null, 2));
     }
-    const a: Stored = { id: accountId, agent: p.agent, name: p.name, dir, managed, enabled: true, createdAt: Date.now() };
+    const a: Stored = { id: accountId, agent: p.agent, name: p.name ?? '', dir, managed: true, enabled: true, createdAt: Date.now() };
     this.data.accounts.push(a);
     this.save();
     this.notify(a.id);
@@ -357,8 +359,7 @@ export class AccountManager {
     if (a.agent === 'codex') for (const [other] of this.logins) if (this.data.accounts.find((x) => x.id === other)?.agent === 'codex') this.cancelLogin({ id: other });
     mkdirSync(a.dir, { recursive: true, mode: 0o700 });
 
-    const email = a.agent === 'claude' && /^[^\s@]+@[^\s@]+$/.test(a.name) ? a.name : '';
-    const args = a.agent === 'claude' ? ['auth', 'login', ...(email ? ['--email', email] : [])] : ['login'];
+    const args = a.agent === 'claude' ? ['auth', 'login'] : ['login'];
     const env = a.agent === 'claude' ? { CLAUDE_CONFIG_DIR: a.dir } : { CODEX_HOME: a.dir };
     const child = spawn(cli.bin, [...cli.pre, ...args], { shell: false, windowsHide: true, env: { ...process.env, ...env, NO_COLOR: '1' } });
 
@@ -427,10 +428,11 @@ export class AccountManager {
     if (!chosen) return { env: {}, label: null };
     const a = this.data.accounts.find((x) => x.id === chosen && x.agent === agent);
     if (!a) throw new DocumentError('NOT_FOUND', 'The selected account no longer exists');
-    if (!a.enabled) throw new DocumentError('VALIDATION', `Account "${a.name}" is disabled in Settings`);
-    if (!this.identity(a).signedIn) throw new DocumentError('VALIDATION', `Account "${a.name}" is not signed in — sign in from Settings → Agents`);
-    if (a.agent === 'claude') return { env: { CLAUDE_CONFIG_DIR: a.dir }, label: a.name };
-    if (a.agent === 'codex') return { env: { CODEX_HOME: a.dir }, label: a.name };
+    const label = this.displayName(a);
+    if (!a.enabled) throw new DocumentError('VALIDATION', `Account "${label}" is disabled in Settings`);
+    if (!this.identity(a).signedIn) throw new DocumentError('VALIDATION', `Account "${label}" is not signed in — sign in from Settings → AI providers`);
+    if (a.agent === 'claude') return { env: { CLAUDE_CONFIG_DIR: a.dir }, label };
+    if (a.agent === 'codex') return { env: { CODEX_HOME: a.dir }, label };
     throw new DocumentError('VALIDATION', 'agy runs under a saved account are not supported yet — use "Use on this computer"');
   }
 

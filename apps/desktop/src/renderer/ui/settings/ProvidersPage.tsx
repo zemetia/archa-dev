@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import {
-  Check, CircleAlert, Copy, ExternalLink, FolderOpen, KeyRound, Loader2, Lock, LogIn, Monitor, MonitorCheck, Plus, RefreshCw, Save, Star, Trash2,
+  Check, CircleAlert, Copy, ExternalLink, KeyRound, Loader2, Lock, LogIn, Monitor, MonitorCheck, Plus, RefreshCw, Save, Star, Trash2,
 } from 'lucide-react';
 import type { AccountAgent, AgentAccount, AgentCli } from '@archa/protocol';
 import { loadAccounts, toast, useStore } from '../../lib/store';
@@ -114,7 +114,19 @@ function ProviderSection({ cli, accounts }: { cli: AgentCli; accounts: AgentAcco
 
 function AgentPage({ agent, cli, accounts }: { agent: AccountAgent; cli: AgentCli; accounts: AgentAccount[] }) {
   const [adding, setAdding] = useState(false);
+  const [creating, setCreating] = useState(false);
   const defaultAccount = accounts.find((a) => a.isDefault);
+  // Claude has only one way in, so Add account goes straight to the browser sign-in; the account takes the login's e-mail.
+  const startAdd = () => {
+    if (agent !== 'claude') { setAdding(true); return; }
+    void call(setCreating, async (c) => {
+      const a = await c.call('accounts.create', { agent });
+      if (cli.bin) void startLogin(a.id);
+    });
+  };
+  const addButton = (variant: 'primary' | 'secondary') => (
+    <Button variant={variant} disabled={creating} onClick={startAdd}>{creating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}Add account</Button>
+  );
 
   return (
     <>
@@ -131,7 +143,7 @@ function AgentPage({ agent, cli, accounts }: { agent: AccountAgent; cli: AgentCl
 
       <div>
         <SectionTitle action={!adding && (
-          <Button variant="secondary" onClick={() => setAdding(true)}><Plus size={13} />Add account</Button>
+          addButton('secondary')
         )}>
           Accounts {accounts.length > 0 && <span className="ml-1 font-normal text-fg-subtle">{accounts.length}</span>}
         </SectionTitle>
@@ -140,7 +152,7 @@ function AgentPage({ agent, cli, accounts }: { agent: AccountAgent; cli: AgentCl
           {accounts.map((a) => <AccountRow key={a.id} account={a} />)}
           {!adding && accounts.length === 0 && (
             <Empty icon={<BrandTile brand={AGENT_COPY[agent].brand} size="md" muted />} title={`No saved ${cli.label} accounts`}
-              action={<Button variant="primary" onClick={() => setAdding(true)}><Plus size={13} />Add account</Button>}>
+              action={addButton('primary')}>
               Runs use this computer's own login.
             </Empty>
           )}
@@ -295,7 +307,7 @@ function SignInPanel({ account: a, starting, onRetry }: { account: AgentAccount;
     body = (
       <div className="space-y-3">
         <ol className="space-y-2.5">
-          <Step n={1} title={`Sign in with the ${vendor} account for "${a.name}" in the browser tab that just opened`}>
+          <Step n={1} title={`Sign in with your ${vendor} account in the browser tab that just opened — the account is named after it`}>
             {!l.url && (
               <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded-lg bg-app/60 p-2 font-mono text-[10.5px] text-fg-subtle">{l.output || 'Opening the sign-in page…'}</pre>
             )}
@@ -331,11 +343,8 @@ function SignInPanel({ account: a, starting, onRetry }: { account: AgentAccount;
 }
 
 function AddAccount({ agent, cli, onDone }: { agent: AccountAgent; cli: AgentCli; onDone: () => void }) {
-  const [name, setName] = useState('');
   const [method, setMethod] = useState<'oauth' | 'key'>('oauth');
   const [apiKey, setApiKey] = useState('');
-  const [dir, setDir] = useState('');
-  const [advanced, setAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
 
   if (agent === 'agy') {
@@ -365,48 +374,27 @@ function AddAccount({ agent, cli, onDone }: { agent: AccountAgent; cli: AgentCli
     );
   }
 
-  const claude = agent === 'claude';
-  const useKey = !claude && method === 'key';
-  const canSave = !!name.trim() && (!useKey || !!apiKey.trim()) && (!advanced || !!dir.trim());
+  // Codex: sign in with ChatGPT or save an API key. The account takes the login's e-mail as its name.
+  const useKey = method === 'key';
+  const canSave = !useKey || !!apiKey.trim();
 
   const add = () => call(setSaving, async (c) => {
-    const a = await c.call('accounts.create', { agent, name: name.trim(), dir: advanced ? dir.trim() : undefined, apiKey: useKey ? apiKey.trim() : undefined });
+    const a = await c.call('accounts.create', { agent, apiKey: useKey ? apiKey.trim() : undefined });
     onDone();
     if (a.signedIn) toast(`Added ${a.name}`);
     else if (cli.bin) void startLogin(a.id);
   });
 
-  const browse = async () => {
-    const p = await window.archa.pickFolder(claude ? 'Choose a Claude config folder' : 'Choose a CODEX_HOME folder');
-    if (p) setDir(p);
-  };
-
   return (
     <FormCard title={`Add a ${cli.label} account`} onCancel={onDone}>
       <div className="space-y-3">
-        {!claude && (
-          <Segmented value={method} onChange={setMethod} options={[
-            { value: 'oauth', label: 'Sign in with ChatGPT', title: 'Opens the ChatGPT sign-in in your browser' },
-            { value: 'key', label: 'OpenAI API key', title: 'Bill usage to an API key' },
-          ]} />
-        )}
-        <Field label={claude ? 'Account e-mail or name' : 'Name'} hint={claude ? 'An e-mail is pre-filled on the sign-in page.' : undefined}>
-          <TextInput value={name} onChange={setName} autoFocus placeholder={claude ? 'e.g. work@company.com' : 'e.g. Work, Personal'} onEnter={() => { if (canSave && !saving) add(); }} />
-        </Field>
+        <Segmented value={method} onChange={setMethod} options={[
+          { value: 'oauth', label: 'Sign in with ChatGPT', title: 'Opens the ChatGPT sign-in in your browser' },
+          { value: 'key', label: 'OpenAI API key', title: 'Bill usage to an API key' },
+        ]} />
         {useKey && (
           <Field label="API key" hint="Saved to this account's auth.json on this computer only.">
-            <TextInput value={apiKey} onChange={setApiKey} type="password" mono placeholder="sk-…" onEnter={() => { if (canSave && !saving) add(); }} />
-          </Field>
-        )}
-        <button onClick={() => setAdvanced(!advanced)} className="text-[11.5px] text-fg-subtle hover:text-fg-muted">
-          {advanced ? '− ' : '+ '}Use an existing config folder (e.g. one from Orca)
-        </button>
-        {advanced && (
-          <Field label={claude ? 'Claude config folder' : 'CODEX_HOME folder'} hint="ArchaDev links to it and never deletes it.">
-            <div className="flex gap-1.5">
-              <TextInput value={dir} onChange={setDir} mono placeholder={claude ? 'C:\\Users\\you\\.claude-work' : 'C:\\Users\\you\\.codex-work'} />
-              <Button onClick={() => void browse()}><FolderOpen size={13} />Browse</Button>
-            </div>
+            <TextInput value={apiKey} onChange={setApiKey} type="password" mono autoFocus placeholder="sk-…" onEnter={() => { if (canSave && !saving) add(); }} />
           </Field>
         )}
         {!cli.bin && !useKey && <p className="text-[11.5px] text-warn">Install the {cli.label} CLI to sign this account in.</p>}
@@ -415,7 +403,7 @@ function AddAccount({ agent, cli, onDone }: { agent: AccountAgent; cli: AgentCli
         <Button variant="ghost" onClick={onDone}>Cancel</Button>
         <Button variant="primary" disabled={!canSave || saving} onClick={add}>
           {saving ? <Loader2 size={13} className="animate-spin" /> : useKey ? <KeyRound size={13} /> : <LogIn size={13} />}
-          {useKey ? 'Save key' : advanced ? 'Link folder' : 'Add and sign in'}
+          {useKey ? 'Save key' : 'Sign in'}
         </Button>
       </div>
     </FormCard>
