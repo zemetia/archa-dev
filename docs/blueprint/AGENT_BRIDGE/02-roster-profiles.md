@@ -35,7 +35,7 @@ Stored in `~/.archadev/profiles/<agent>/<profileId>/` — never in a project, ne
 
 | Agent | Profile is | Sign-in flow |
 |---|---|---|
-| Claude | A separate config dir (`CLAUDE_CONFIG_DIR`) | App runs `claude auth login` with that dir, shows the link, user pastes the code back |
+| Claude | A separate config dir (`CLAUDE_CONFIG_DIR`) | App runs `claude auth login` with that dir; the CLI opens the Claude sign-in page and finishes via its localhost callback (fallback: link + pasted code) |
 | agy | A saved copy of the keyring credential | "Save current host login as profile"; swapped in for a run under a **lease**, refreshed token saved back, host login restored after — also after a crash (backup file checked on startup) |
 | Codex | Separate `CODEX_HOME` | `codex login` in that home |
 | Hermes | Separate home dir | Hermes login command |
@@ -50,7 +50,7 @@ Code: `apps/desktop/src/core-host/accounts.ts` (+ `keyring.ts`); moves to `packa
 |---|---|
 | Store | `~/.archadev/profiles/accounts.json` (0600): `{ accounts[], defaults{agent→id} }`. Managed folders `profiles/<agent>/<id>/`; a **linked** existing folder (e.g. Orca's) is never deleted |
 | Identity | Read from files only, tokens never cross the protocol: Claude `.credentials.json` + `.claude.json`; Codex `auth.json` (id_token email/plan, or API key); agy keyring blob `id_token_email` |
-| Sign-in | Claude: `claude auth login [--email]` with `CLAUDE_CONFIG_DIR`, `BROWSER=none` → link + pasted code on stdin. Codex: `codex login` with `CODEX_HOME` (browser callback) or API key written to `auth.json`. agy: "Save current agy login" / "Use on this computer" (current login saved first) |
+| Sign-in | Claude: `claude auth login [--email]` with `CLAUDE_CONFIG_DIR`, the CLI opens the browser itself and finishes on its own; its printed fallback link's code can be pasted on stdin. Codex: `codex login` with `CODEX_HOME` (browser callback) or API key written to `auth.json`. agy: "Save current agy login" / "Use on this computer" (current login saved first) |
 | Keyring | Windows Credential Manager via PowerShell P/Invoke (script constant, data in env); macOS `security`; Linux `secret-tool` |
 | Protocol | `accounts.overview/create/update/delete/captureHost/useOnHost/login.start/login.code/login.cancel`, event `accounts.changed`; params zod-validated in the core host |
 | Isolation | ArchaDev stands alone: main drops inherited `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ORCA_*` before forking the core host, and the host login is always `~/.claude` / `~/.codex`. Launching from another tool's terminal (e.g. Orca) never picks up that tool's profile |
