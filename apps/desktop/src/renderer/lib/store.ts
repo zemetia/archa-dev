@@ -5,6 +5,7 @@ import type { Op } from '@archa/schema';
 import { renderNodeImage, renderNodePng } from '@archa/render';
 import { onChatRun } from './comments';
 import { pushTrail, type AgentCursor } from '../canvas/cursors';
+import * as changes from '../canvas/changes';
 
 export type LeftTab = 'chat' | 'history' | 'layers' | 'components' | 'slides' | 'library';
 export type Tool = 'select' | 'scale' | 'hand' | 'frame' | 'rect' | 'ellipse' | 'polygon' | 'pen' | 'text' | 'sticky' | 'embed' | 'comment';
@@ -137,8 +138,11 @@ export async function init() {
     if (!doc || e.docId !== activeDocId) return;
     if (e.revision === doc.revision + 1) {
       try {
+        // Snapshot what is about to change so the change can play (canvas/changes.ts).
+        const fx = changes.animates(e.author, e.label) ? changes.before(doc, e.ops, get().camera.zoom * (window.devicePixelRatio || 1)) : null;
         applyOps(doc, e.ops);
         doc.revision = e.revision;
+        if (fx) changes.after(doc, fx, performance.now());
       } catch {
         void resync();
         return;
@@ -258,6 +262,7 @@ export async function activate(docId: string | null) {
   if (!client || !docId) { set({ activeDocId: null, doc: null }); return; }
   const snap = await client.call('doc.snapshot', { docId });
   const chat = await client.call('chat.list', { docId });
+  changes.reset();
   // Reopen the most recent conversation of this document.
   const last = chat.at(-1);
   set((s) => ({ activeDocId: docId, doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1, selection: [], chat, chatThread: last ? threadOf(last) : null, cursors: {}, editingText: null, fitRequest: s.fitRequest + 1 }));
@@ -277,6 +282,7 @@ export async function resync() {
   const { client, activeDocId } = get();
   if (!client || !activeDocId) return;
   const snap = await client.call('doc.snapshot', { docId: activeDocId });
+  changes.reset();
   set((s) => ({ doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1 }));
 }
 

@@ -4,15 +4,29 @@ import { imageFor } from './images';
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
+/** Transient per-node animation (canvas change animations): offset in parent space, fade, scale about the centre. */
+export type NodeAnim = { dx?: number; dy?: number; alpha?: number; scale?: number };
+export type AnimMap = ReadonlyMap<string, NodeAnim>;
+
 /**
  * Draws a node and its subtree in the node's parent coordinate space.
  * Pure: reads the document, never resolves variables or mutates (blueprint RENDERING/01).
  */
-export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
+export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node, anim?: AnimMap): void {
   if (!node.visible || node.type === 'page') return;
   ctx.save();
   ctx.translate(node.x, node.y);
   if (node.opacity < 1) ctx.globalAlpha *= node.opacity;
+  const a = anim?.get(node.id);
+  if (a) {
+    if (a.dx || a.dy) ctx.translate(a.dx ?? 0, a.dy ?? 0);
+    if (a.alpha !== undefined) ctx.globalAlpha *= a.alpha;
+    if (a.scale !== undefined && a.scale !== 1) {
+      ctx.translate(node.width / 2, node.height / 2);
+      ctx.scale(a.scale, a.scale);
+      ctx.translate(-node.width / 2, -node.height / 2);
+    }
+  }
 
   switch (node.type) {
     case 'frame':
@@ -24,7 +38,7 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
           roundRect(ctx, 0, 0, node.width, node.height, r);
           ctx.clip();
         }
-        drawChildren(ctx, doc, node);
+        drawChildren(ctx, doc, node, anim);
       }
       break;
     }
@@ -35,7 +49,7 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
       });
       break;
     case 'group':
-      drawChildren(ctx, doc, node);
+      drawChildren(ctx, doc, node, anim);
       break;
     case 'text':
       drawText(ctx, node);
@@ -67,11 +81,11 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
   ctx.restore();
 }
 
-function drawChildren(ctx: Ctx, doc: ArchaDocument, node: Node) {
+function drawChildren(ctx: Ctx, doc: ArchaDocument, node: Node, anim?: AnimMap) {
   if (!isContainer(node)) return;
   for (const id of node.children) {
     const c = doc.get(id);
-    if (c) drawNode(ctx, doc, c);
+    if (c) drawNode(ctx, doc, c, anim);
   }
 }
 

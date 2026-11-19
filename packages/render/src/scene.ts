@@ -1,13 +1,16 @@
 import type { ArchaDocument } from '@archa/core';
 import { FrameBitmapCache, zoomBucket } from './cache';
-import { drawNode } from './draw';
+import { drawNode, type AnimMap } from './draw';
 import { preloadImages } from './images';
 
 export type Camera = { x: number; y: number; zoom: number };
 
+/** Change animations for one frame: `live` = top-level ids whose subtree animates (drawn directly, not cached). */
+export type PageFx = { anim: AnimMap; live: ReadonlySet<string> };
+
 /**
  * Draws a page: top-level nodes from the bitmap cache when possible.
- * `live` ids (being dragged) are drawn directly with an offset so the cache stays valid.
+ * Top-level nodes with an animating subtree (`fx.live`) are drawn directly so the cache stays valid.
  */
 export function drawPage(
   ctx: CanvasRenderingContext2D,
@@ -17,6 +20,7 @@ export function drawPage(
   cache: FrameBitmapCache,
   dpr: number,
   viewport: { width: number; height: number },
+  fx?: PageFx | null,
 ): void {
   const bucket = zoomBucket(cam.zoom, dpr);
   const view = { x: -cam.x / cam.zoom, y: -cam.y / cam.zoom, w: viewport.width / cam.zoom, h: viewport.height / cam.zoom };
@@ -26,6 +30,7 @@ export function drawPage(
   for (const node of doc.children(pageRootId)) {
     if (!node.visible) continue;
     if (node.x > view.x + view.w || node.y > view.y + view.h || node.x + node.width < view.x || node.y + node.height < view.y) continue;
+    if (fx?.live.has(node.id)) { drawNode(ctx, doc, node, fx.anim); continue; }
     const bmp = node.type === 'frame' || node.type === 'group' ? cache.get(doc, node.id, bucket) : null;
     if (bmp) ctx.drawImage(bmp, node.x, node.y, bmp.width / bucket, bmp.height / bucket);
     else drawNode(ctx, doc, node);

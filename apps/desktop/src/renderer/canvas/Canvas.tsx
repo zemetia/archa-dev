@@ -6,6 +6,7 @@ import { commit, select, setTool, useStore, type Camera, type Tool } from '../li
 import { containerAt, fitCamera, handleCursor, handlePoint, HANDLES, hitPath, originOf, pageRoot, pickFromPath, selectionBounds, toWorld, type Handle } from '../lib/geometry';
 import { drawOverlay, type OverlayExtras } from './overlay';
 import { cursorAlive, drawCursors } from './cursors';
+import * as changes from './changes';
 import { TextEditor } from './TextEditor';
 import { EmbedLayer } from './EmbedLayer';
 import { CommentsLayer } from './CommentsLayer';
@@ -68,11 +69,15 @@ export function Canvas() {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-canvas') || '#1b1b1e';
       ctx.fillRect(0, 0, c.width, c.height);
-      if (st.doc) drawPage(ctx, st.doc, pageRoot(st.doc), st.camera, cache, dpr, size);
+      const now = performance.now();
+      if (st.doc) drawPage(ctx, st.doc, pageRoot(st.doc), st.camera, cache, dpr, size, changes.frame(st.doc, now));
+      changes.drawGhosts(ctx, st.camera, dpr, now);
       const octx = o.getContext('2d')!;
       octx.setTransform(dpr, 0, 0, dpr, 0, 0);
       octx.clearRect(0, 0, size.width, size.height);
       if (st.doc) drawOverlay(octx, st.doc, st, extras.current);
+      // Change animations keep painting until they settle.
+      if (changes.playing()) redraw();
     });
   };
 

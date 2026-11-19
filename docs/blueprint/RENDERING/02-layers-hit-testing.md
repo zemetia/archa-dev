@@ -21,6 +21,19 @@ Each layer is its own element stacked with CSS; a change in one never repaints t
 
 ---
 
+## Change Animations
+
+`canvas/changes.ts`. A `doc.applied` from an agent (or the person's discrete commands: Paste, Duplicate, Delete, Undo/Redo, Import, Insert, Align, Reorder, Add auto layout) plays instead of snapping; drags, resizes and panel edits never animate. `prefers-reduced-motion` turns it off.
+
+| Change | Effect | How |
+|---|---|---|
+| Insert / shown | Pop in: fade + scale 0.92 → 1 with a small overshoot, 320 ms | `NodeAnim` passed to `drawNode` |
+| Position change, incl. siblings pushed by auto-layout | Glide from the old place, 340 ms (FLIP on parent-relative x/y) | `NodeAnim.dx/dy` |
+| Delete / hidden | Old pixels fade and shrink, 240 ms | ghost bitmap snapshotted before apply |
+| Restyle (fills, text, size …) | Old look dissolves into the new, 260 ms | ghost bitmap, outermost changed node only |
+
+Top-level nodes with an animating subtree skip the frame bitmap cache while they play (`PageFx.live`); the cache path returns once they settle.
+
 ## Layer Tree (Layers panel)
 
 | Feature | Rule |
