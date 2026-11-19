@@ -3,9 +3,12 @@ import { applyOps, ArchaDocument } from '@archa/core';
 import { RpcClient, threadOf, type AccountsOverview, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodePng } from '@archa/render';
+import { onChatRun } from './comments';
 
 export type LeftTab = 'chat' | 'history' | 'layers' | 'components' | 'slides' | 'library';
-export type Tool = 'select' | 'frame' | 'rect' | 'ellipse' | 'text' | 'hand';
+export type Tool = 'select' | 'scale' | 'hand' | 'frame' | 'rect' | 'ellipse' | 'polygon' | 'pen' | 'text' | 'sticky' | 'embed' | 'comment';
+/** Floating panels opened from the tool rail. */
+export type RailPanel = 'variables' | 'find' | 'icons' | null;
 export type Camera = { x: number; y: number; zoom: number };
 type Toast = { id: number; text: string; kind: 'info' | 'error' };
 
@@ -52,6 +55,15 @@ type State = {
   browserOpen: boolean;
   browserWidth: number;
   browser: BrowserState;
+  railPanel: RailPanel;
+  /** Comment pins on the canvas; the eye in the Comments panel toggles them. */
+  showComments: boolean;
+  /** Comment whose thread popover is open (or 'new' while composing one). */
+  openComment: string | null;
+  /** Where a new comment goes (set by the comment tool click). */
+  commentDraft: { nodeId: string | null; x: number; y: number } | null;
+  /** Embed node whose page takes pointer input (double-click it; Esc leaves). */
+  interactEmbed: string | null;
 };
 
 export const useStore = create<State>(() => ({
@@ -61,7 +73,17 @@ export const useStore = create<State>(() => ({
   agents: [], activity: [], chat: [], runningRun: null, chatLive: null, agentFocus: null, editingText: null, toasts: [], fitRequest: 0,
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
   browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
+  railPanel: null, showComments: true, openComment: null, commentDraft: null, interactEmbed: null,
 }));
+
+/** Switches tool and closes per-tool UI that no longer applies. */
+export function setTool(tool: Tool) {
+  set((s) => ({ tool, openComment: tool === 'comment' ? s.openComment : null, interactEmbed: null }));
+}
+
+export function toggleRailPanel(p: Exclude<RailPanel, null>) {
+  set((s) => ({ railPanel: s.railPanel === p ? null : p }));
+}
 
 function readFlag(key: string) {
   try { return localStorage.getItem(key) !== '0'; } catch { return true; }
@@ -144,6 +166,7 @@ export async function init() {
     set({ chatLive: d.text ? { runId: d.runId, threadId: d.threadId, agent: d.agent, text: d.text } : null });
   });
   client.on('chat.run', (r) => {
+    onChatRun(r.runId, r.status);
     // A run started elsewhere (another window, the CLI) opens its conversation when none is shown.
     if (r.status === 'running') set((s) => ({ runningRun: r.runId, chatThread: s.chatThread === null && r.docId === s.activeDocId ? r.threadId : s.chatThread }));
     else if (get().runningRun === r.runId) set({ runningRun: null });

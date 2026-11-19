@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
 import { PanelRightOpen } from 'lucide-react';
-import { init, newDoc, openFile, redo, save, togglePanel, undo, useStore } from './lib/store';
+import { init, newDoc, openFile, redo, save, setTool, togglePanel, toggleRailPanel, undo, useStore } from './lib/store';
+import { importImageOrSvg } from './lib/importers';
 import { copy, deleteSelection, duplicate, nudge, paste, reorder, selectAll, selectChildren, selectParent, wrapInFrame } from './lib/commands';
 import { Canvas } from './canvas/Canvas';
 import { TitleBar } from './ui/TitleBar';
 import { LeftPanel } from './ui/LeftPanel';
 import { RightPanel } from './ui/RightPanel';
-import { ToolRail, TOOLS } from './ui/ToolRail';
+import { ToolRail, TOOL_KEYS } from './ui/ToolRail';
+import { RailPanels } from './ui/RailPanels';
 import { ZoomBar } from './ui/ZoomBar';
 import { cn } from './ui/controls';
 import { SettingsDialog } from './ui/SettingsDialog';
@@ -33,7 +35,8 @@ export function App() {
         <LeftPanel />
         <main data-canvas-host className="relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-line">
           {ready ? <Canvas /> : <div className="flex h-full items-center justify-center text-fg-subtle">Connecting to core…</div>}
-          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><ToolRail /></div>
+          <div className="pointer-events-none absolute left-3 top-1/2 z-30 -translate-y-1/2"><ToolRail /></div>
+          <RailPanels />
           <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2"><ZoomBar /></div>
           {!rightOpen && (
             <button title="Show design panel (Ctrl+Shift+\)" onClick={() => togglePanel('right', true)}
@@ -70,6 +73,8 @@ function onKey(e: KeyboardEvent) {
   if (mod && e.code === 'Backslash') return run(() => togglePanel(e.shiftKey ? 'right' : 'left'));
 
   if (mod) {
+    if (k === 'f') return run(() => toggleRailPanel('find'));
+    if (k === 'k' && e.shiftKey) return run(importImageOrSvg);
     if (k === 'z' && e.shiftKey) return run(redo);
     if (k === 'z') return run(undo);
     if (k === 'y') return run(redo);
@@ -87,7 +92,16 @@ function onKey(e: KeyboardEvent) {
     return;
   }
   if (k === 'delete' || k === 'backspace') return run(deleteSelection);
-  if (k === 'escape') { e.preventDefault(); if (useStore.getState().tool !== 'select') useStore.setState({ tool: 'select' }); else selectParent(); return; }
+  if (k === 'escape') {
+    e.preventDefault();
+    const st = useStore.getState();
+    if (st.interactEmbed) useStore.setState({ interactEmbed: null });
+    else if (st.openComment) useStore.setState({ openComment: null, commentDraft: null });
+    else if (st.railPanel) useStore.setState({ railPanel: null });
+    else if (st.tool !== 'select') setTool('select');
+    else selectParent();
+    return;
+  }
   if (k === 'enter') return run(selectChildren);
   if (e.shiftKey && e.code === 'Digit1') return run(() => useStore.setState((s) => ({ fitRequest: s.fitRequest + 1 })));
   if (e.shiftKey && e.code === 'Digit0') return run(() => zoomTo(1));
@@ -99,8 +113,8 @@ function onKey(e: KeyboardEvent) {
   if (k === 'arrowright') return run(() => nudge(step, 0));
   if (k === 'arrowup') return run(() => nudge(0, -step));
   if (k === 'arrowdown') return run(() => nudge(0, step));
-  const tool = TOOLS.find((x) => x.key.toLowerCase() === k);
-  if (tool && !e.altKey) { e.preventDefault(); useStore.setState({ tool: tool.id }); }
+  const tool = TOOL_KEYS[k];
+  if (tool && !e.altKey && !e.shiftKey) { e.preventDefault(); setTool(tool); }
 }
 
 function zoomTo(z: number) {

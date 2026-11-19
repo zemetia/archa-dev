@@ -2,10 +2,15 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { insertOpsFor, runLayout } from '@archa/core';
 import { drawPage, FrameBitmapCache } from '@archa/render';
 import { isContainer, type Node, type NodeInput, type Op } from '@archa/schema';
-import { commit, select, useStore, type Camera } from '../lib/store';
+import { commit, select, setTool, useStore, type Camera, type Tool } from '../lib/store';
 import { containerAt, fitCamera, handleCursor, handlePoint, HANDLES, hitPath, originOf, pageRoot, pickFromPath, selectionBounds, toWorld, type Handle } from '../lib/geometry';
 import { drawOverlay, type OverlayExtras } from './overlay';
 import { TextEditor } from './TextEditor';
+import { EmbedLayer } from './EmbedLayer';
+import { CommentsLayer } from './CommentsLayer';
+import { onImageLoaded } from '@archa/render';
+import { penBounds, penPath, type PenPoint } from './pen';
+import { scaleOps } from './scale';
 
 type Pt = { x: number; y: number };
 type Gesture =
@@ -13,10 +18,18 @@ type Gesture =
   | { kind: 'move'; start: Pt; ids: string[]; orig: Map<string, Pt>; moved: boolean; reorder: { parentId: string; index: number } | null; drop: string | null }
   | { kind: 'resize'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt }
   | { kind: 'marquee'; start: Pt; cur: Pt }
-  | { kind: 'create'; tool: 'frame' | 'rect' | 'ellipse'; start: Pt; cur: Pt; parentId: string };
+  | { kind: 'create'; tool: CreateTool; start: Pt; cur: Pt; parentId: string }
+  | { kind: 'scale'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt; cur: { x: number; y: number; width: number; height: number } }
+  | { kind: 'pen'; index: number };
+
+type CreateTool = 'frame' | 'rect' | 'ellipse' | 'polygon' | 'sticky' | 'embed';
+const CREATE_TOOLS: ReadonlySet<Tool> = new Set<Tool>(['frame', 'rect', 'ellipse', 'polygon', 'sticky', 'embed']);
+/** Size used when the person clicks instead of dragging (shapes centre on the click, the rest start there). */
+const CLICK_SIZE: Record<CreateTool, [number, number]> = { frame: [400, 300], rect: [100, 100], ellipse: [100, 100], polygon: [100, 100], sticky: [200, 200], embed: [1280, 800] };
+const NAMES: Record<CreateTool, string> = { frame: 'Frame', rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', sticky: 'Sticky note', embed: 'Web page' };
 
 const cache = new FrameBitmapCache();
-const DEFAULT_FILL: Record<string, string> = { frame: '#ffffff', rect: '#d4d4d8', ellipse: '#d4d4d8' };
+const DEFAULT_FILL: Record<string, string> = { frame: '#ffffff', rect: '#d4d4d8', ellipse: '#d4d4d8', polygon: '#d4d4d8', sticky: '#fde68a' };
 let frameCounter = 1;
 
 export function Canvas() {
@@ -26,6 +39,8 @@ export function Canvas() {
   const gesture = useRef<Gesture | null>(null);
   const extras = useRef<OverlayExtras>({});
   const spaceDown = useRef(false);
+  /** Points of the path being drawn with the pen (page coordinates). */
+  const pen = useRef<PenPoint[]>([]);
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [cursor, setCursor] = useState('default');
   const frame = useRef(0);
@@ -91,6 +106,13 @@ export function Canvas() {
   });
 
   useEffect(redraw, [doc, rev, camera, selection, hover, agentFocus, editingText, size]);
+  useEffect(() => onImageLoaded(() => { cache.invalidate(); redraw(); }));
+
+  // Leaving the pen tool finishes the path in progress.
+  useEffect(() => {
+    if (tool !== 'pen' && pen.current.length) void finishPen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool]);
 
   const pointer = (e: React.PointerEvent | React.WheelEvent) => {
     const r = wrap.current!.getBoundingClientRect();
@@ -116,6 +138,8 @@ export function Canvas() {
   const onPointerDown = (e: React.PointerEvent) => {
     const st = useStore.getState();
     if (!st.doc || st.editingText) return;
+    if (st.interactEmbed) useStore.setState({ interactEmbed: null });
+    if (st.openComment && st.tool !== 'comment') useStore.setState({ openComment: null, commentDraft: null });
     (e.target as Element).setPointerCapture(e.pointerId);
     const { sx, sy } = pointer(e);
     const w = toWorld(st.camera, sx, sy);
@@ -126,9 +150,28 @@ export function Canvas() {
       setCursor('grabbing');
       return;
     }
-    if (st.tool === 'frame' || st.tool === 'rect' || st.tool === 'ellipse') {
-      const parent = containerAt(d, w.x, w.y);
-      gesture.current = { kind: 'create', tool: st.tool, start: w, cur: w, parentId: parent.id };
+    if (CREATE_TOOLS.has(st.tool)) {
+      // Web pages and sticky notes sit on the page; shapes and frames go into the frame under the pointer.
+      const parent = st.tool === 'embed' || st.tool === 'sticky' ? d.require(pageRoot(d)) : containerAt(d, w.x, w.y);
+      gesture.current = { kind: 'create', tool: st.tool as CreateTool, start: w, cur: w, parentId: parent.id };
+      return;
+    }
+    if (st.tool === 'pen') {
+      const pts = pen.current;
+      const first = pts[0];
+      // Clicking the first point closes the shape.
+      if (first && pts.length > 2 && Math.hypot(first.x - w.x, first.y - w.y) * st.camera.zoom < 8) { void finishPen(true); return; }
+      pts.push({ x: w.x, y: w.y });
+      gesture.current = { kind: 'pen', index: pts.length - 1 };
+      showPen(w);
+      return;
+    }
+    if (st.tool === 'comment') {
+      const target = hitPath(d, w.x, w.y).at(-1);
+      if (target) {
+        const b = d.worldBounds(target.id);
+        useStore.setState({ openComment: 'new', commentDraft: { nodeId: target.id, x: w.x - b.x, y: w.y - b.y } });
+      } else useStore.setState({ openComment: 'new', commentDraft: { nodeId: null, x: w.x, y: w.y } });
       return;
     }
     if (st.tool === 'text') {
@@ -144,7 +187,10 @@ export function Canvas() {
         const p = handlePoint(r, h);
         if (Math.abs(p.x - w.x) <= tol && Math.abs(p.y - w.y) <= tol) {
           const n = d.require(st.selection[0]!);
-          gesture.current = { kind: 'resize', id: n.id, handle: h, orig: { x: n.x, y: n.y, width: n.width, height: n.height }, start: w };
+          const orig = { x: n.x, y: n.y, width: n.width, height: n.height };
+          gesture.current = st.tool === 'scale'
+            ? { kind: 'scale', id: n.id, handle: h, orig, start: w, cur: d.worldBounds(n.id) }
+            : { kind: 'resize', id: n.id, handle: h, orig, start: w };
           return;
         }
       }
@@ -180,7 +226,8 @@ export function Canvas() {
     const g = gesture.current;
 
     if (!g) {
-      if (st.tool !== 'select' || spaceDown.current) { setCursor(st.tool === 'hand' || spaceDown.current ? 'grab' : 'crosshair'); return; }
+      if (st.tool === 'pen' && pen.current.length) showPen(w);
+      if ((st.tool !== 'select' && st.tool !== 'scale') || spaceDown.current) { setCursor(st.tool === 'hand' || spaceDown.current ? 'grab' : 'crosshair'); return; }
       if (st.selection.length === 1) {
         const r = selectionBounds(d, st.selection)!;
         const tol = 6 / st.camera.zoom;
@@ -194,11 +241,36 @@ export function Canvas() {
       return;
     }
 
-    if (g.kind === 'pan') {
+    if (g.kind === 'pen') {
+      // Dragging after placing a point pulls out symmetric curve handles.
+      const p = pen.current[g.index];
+      if (p && Math.hypot(w.x - p.x, w.y - p.y) * st.camera.zoom > 2) { p.out = { x: w.x, y: w.y }; p.in = { x: 2 * p.x - w.x, y: 2 * p.y - w.y }; }
+      showPen(w);
+    } else if (g.kind === 'scale') {
+      const wb = d.worldBounds(g.id);
+      const dx = w.x - g.start.x, dy = w.y - g.start.y;
+      let { x, y } = wb;
+      let width = g.orig.width, height = g.orig.height;
+      if (g.handle.includes('e')) width += dx;
+      if (g.handle.includes('s')) height += dy;
+      if (g.handle.includes('w')) { width -= dx; x += dx; }
+      if (g.handle.includes('n')) { height -= dy; y += dy; }
+      // Scale keeps proportions; Shift on a side handle stretches one axis.
+      if (!(e.shiftKey && g.handle.length === 1) && g.orig.width && g.orig.height) {
+        const k = g.handle === 'n' || g.handle === 's' ? height / g.orig.height : width / g.orig.width;
+        const nw = g.orig.width * k, nh = g.orig.height * k;
+        x = g.handle.includes('w') ? wb.x + g.orig.width - nw : wb.x;
+        y = g.handle.includes('n') ? wb.y + g.orig.height - nh : wb.y;
+        width = nw; height = nh;
+      }
+      g.cur = { x, y, width: Math.max(1, width), height: Math.max(1, height) };
+      extras.current = { create: g.cur };
+      redraw();
+    } else if (g.kind === 'pan') {
       useStore.setState({ camera: { ...g.cam, x: g.cam.x + sx - g.sx, y: g.cam.y + sy - g.sy } });
     } else if (g.kind === 'marquee' || g.kind === 'create') {
       g.cur = w;
-      extras.current = g.kind === 'marquee' ? { marquee: rectOf(g.start, w) } : { create: rectOf(g.start, w, e.shiftKey) };
+      extras.current = g.kind === 'marquee' ? { marquee: rectOf(g.start, w) } : { create: rectOf(g.start, w, e.shiftKey || g.tool === 'sticky') };
       redraw();
     } else if (g.kind === 'move') {
       const dx = w.x - g.start.x, dy = w.y - g.start.y;
@@ -265,6 +337,13 @@ export function Canvas() {
     const d = st.doc;
     if (!g || !d) return;
     if (g.kind === 'pan') { setCursor(st.tool === 'hand' || spaceDown.current ? 'grab' : 'default'); return; }
+    if (g.kind === 'pen') return;
+    if (g.kind === 'scale') {
+      redraw();
+      const ops = scaleOps(d, g.id, g.cur);
+      if (ops.length) await commit('Scale', ops);
+      return;
+    }
 
     if (g.kind === 'marquee') {
       const r = rectOf(g.start, g.cur);
@@ -277,14 +356,25 @@ export function Canvas() {
     }
 
     if (g.kind === 'create') {
-      let r = rectOf(g.start, g.cur, e.shiftKey);
-      if (r.width < 3 && r.height < 3) r = g.tool === 'frame' ? { x: g.start.x, y: g.start.y, width: 400, height: 300 } : { x: g.start.x - 50, y: g.start.y - 50, width: 100, height: 100 };
+      let r = rectOf(g.start, g.cur, e.shiftKey || g.tool === 'sticky');
+      if (r.width < 3 && r.height < 3) {
+        const [cw, ch] = CLICK_SIZE[g.tool];
+        const centred = g.tool === 'rect' || g.tool === 'ellipse' || g.tool === 'polygon';
+        r = { x: g.start.x - (centred ? cw / 2 : 0), y: g.start.y - (centred ? ch / 2 : 0), width: cw, height: ch };
+      }
       const origin = originOf(d, g.parentId);
-      const name = g.tool === 'frame' ? `Frame ${frameCounter++}` : g.tool === 'rect' ? 'Rectangle' : 'Ellipse';
-      const input = { type: g.tool, name, x: Math.round(r.x - origin.x), y: Math.round(r.y - origin.y), width: Math.round(r.width), height: Math.round(r.height), fills: [DEFAULT_FILL[g.tool]] } as unknown as NodeInput;
+      const name = g.tool === 'frame' ? `Frame ${frameCounter++}` : NAMES[g.tool];
+      const extra: Record<string, unknown> = g.tool === 'sticky'
+        ? { effects: [{ color: '#00000026', x: 0, y: 2, blur: 8 }] }
+        : g.tool === 'embed' ? { url: 'https://example.com' } : {};
+      const fills = DEFAULT_FILL[g.tool] ? { fills: [DEFAULT_FILL[g.tool]] } : {};
+      const input = { type: g.tool, name, x: Math.round(r.x - origin.x), y: Math.round(r.y - origin.y), width: Math.round(r.width), height: Math.round(r.height), ...fills, ...extra } as unknown as NodeInput;
       const { ops, rootId } = insertOpsFor(input, g.parentId);
-      if (await commit(`Create ${name}`, ops)) select([rootId]);
-      useStore.setState({ tool: 'select' });
+      if (await commit(`Create ${name}`, ops)) {
+        select([rootId]);
+        if (g.tool === 'sticky') useStore.setState({ editingText: rootId });
+      }
+      setTool('select');
       setCursor('default');
       return;
     }
@@ -325,17 +415,58 @@ export function Canvas() {
     const st = useStore.getState();
     const d = st.doc;
     if (!d) return;
+    if (st.tool === 'pen') { void finishPen(false); return; }
     const r = wrap.current!.getBoundingClientRect();
     const w = toWorld(st.camera, e.clientX - r.left, e.clientY - r.top);
     const path = hitPath(d, w.x, w.y);
     const sel = st.selection[0] ? d.get(st.selection[0]) : undefined;
-    if (sel?.type === 'text' && path.some((p) => p.id === sel.id)) { useStore.setState({ editingText: sel.id }); return; }
+    if ((sel?.type === 'text' || sel?.type === 'sticky') && path.some((p) => p.id === sel.id)) { useStore.setState({ editingText: sel.id }); return; }
+    const embed = path.find((p) => p.type === 'embed');
+    if (embed) { select([embed.id]); useStore.setState({ interactEmbed: embed.id }); return; }
     // Enter the selected container: pick the next level down under the pointer.
     const i = sel ? path.findIndex((p) => p.id === sel.id) : -1;
     const next = i >= 0 ? path[i + 1] : path.at(-1);
-    if (next?.type === 'text') { select([next.id]); useStore.setState({ editingText: next.id }); }
+    if (next?.type === 'text' || next?.type === 'sticky') { select([next.id]); useStore.setState({ editingText: next.id }); }
     else if (next) select([next.id]);
   };
+
+  function showPen(cursorAt: Pt | null) {
+    extras.current = { pen: { points: pen.current, d: penPath(pen.current, false), cursor: cursorAt } };
+    redraw();
+  }
+
+  /** Turns the pen points into a vector node; a single point is discarded. */
+  async function finishPen(closed: boolean) {
+    const pts = pen.current;
+    pen.current = [];
+    gesture.current = null;
+    extras.current = {};
+    redraw();
+    const d = useStore.getState().doc;
+    if (!d || pts.length < 2) return;
+    const b = penBounds(pts, closed);
+    const parent = containerAt(d, pts[0]!.x, pts[0]!.y);
+    const o = originOf(d, parent.id);
+    const input = {
+      type: 'path', name: 'Vector', d: penPath(pts, closed), viewBox: b,
+      x: round2(b.x - o.x), y: round2(b.y - o.y), width: Math.max(1, round2(b.width)), height: Math.max(1, round2(b.height)),
+      fills: closed ? ['#d4d4d8'] : [], strokes: [{ color: '#18181b', width: 2, align: 'center' }],
+    } as unknown as NodeInput;
+    const { ops, rootId } = insertOpsFor(input, parent.id);
+    if (await commit('Draw vector', ops)) select([rootId]);
+  }
+
+  // Enter or Escape finishes the open path; Backspace removes the last point.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (useStore.getState().tool !== 'pen' || !pen.current.length || isTyping(e)) return;
+      if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); void finishPen(false); }
+      if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); e.stopImmediatePropagation(); pen.current.pop(); showPen(null); }
+    };
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function createText(w: Pt) {
     const d = useStore.getState().doc!;
@@ -344,7 +475,8 @@ export function Canvas() {
     const { ops, rootId } = insertOpsFor({ type: 'text', name: 'Text', text: 'Text', x: Math.round(w.x - origin.x), y: Math.round(w.y - origin.y - 10), fills: ['#111111'] } as unknown as NodeInput, parent.id);
     if (await commit('Create text', ops)) {
       select([rootId]);
-      useStore.setState({ editingText: rootId, tool: 'select' });
+      useStore.setState({ editingText: rootId });
+      setTool('select');
     }
   }
 
@@ -367,6 +499,8 @@ export function Canvas() {
       onPointerLeave={() => useStore.setState({ hover: null })} onDoubleClick={onDoubleClick}>
       <canvas ref={content} className="absolute inset-0" />
       <canvas ref={overlay} className="absolute inset-0" />
+      <EmbedLayer />
+      <CommentsLayer />
       {doc && editingText && doc.get(editingText) && <TextEditor nodeId={editingText} camera={camera} />}
       {tool !== 'select' && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-panel-2 px-3 py-1 text-xs text-fg-muted">{toolHint(tool)}</div>}
     </div>
@@ -411,4 +545,11 @@ function labelHit(d: NonNullable<ReturnType<typeof useStore.getState>['doc']>, c
   return null;
 }
 
-const toolHint = (t: string) => ({ frame: 'Drag to draw a frame · click for 400×300', rect: 'Drag to draw a rectangle · Shift for square', ellipse: 'Drag to draw an ellipse · Shift for circle', text: 'Click to place text', hand: 'Drag to pan' }[t] ?? '');
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+const toolHint = (t: string) => ({
+  frame: 'Drag to draw a frame · click for 400×300', rect: 'Drag to draw a rectangle · Shift for square', ellipse: 'Drag to draw an ellipse · Shift for circle',
+  polygon: 'Drag to draw a polygon · Shift keeps it even', text: 'Click to place text', hand: 'Drag to pan', scale: 'Drag a handle to scale everything inside, text and strokes too',
+  pen: 'Click to add points · drag for curves · click the first point to close · Enter to finish', sticky: 'Click to add a sticky note',
+  embed: 'Drag to place a web page · double-click it to scroll and click inside', comment: 'Click anywhere to leave a comment',
+}[t] ?? '');
