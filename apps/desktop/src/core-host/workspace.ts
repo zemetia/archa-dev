@@ -323,7 +323,7 @@ export class Workspace {
     'app.info': () => {
       const m = mcpCommand();
       return {
-        version: '0.4.0',
+        version: '1.0.1',
         user: userName(),
         cliPath: cliPath(),
         mcpCommand: [m.command, ...m.args],

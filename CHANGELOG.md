@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-20
+
 ### Design panel
 - **Rebuilt right sidebar.** Layer name with type icon, then Create component, Context, Alignment, Position, Auto layout, Dimensions, Appearance, Text, Fill, Stroke, Effects, Code and Export.
 - **Alignment works everywhere.** One layer aligns inside its frame; several align to their bounds; distribute evens out 3+ layers. A layer inside auto layout now changes the parent's alignment instead of doing nothing, and a lone top-level layer says why it can't be aligned.
