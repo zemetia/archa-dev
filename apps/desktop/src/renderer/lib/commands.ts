@@ -1,12 +1,15 @@
 import { insertOpsFor, subtreeInput } from '@archa/core';
 import { isContainer, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, toast, useStore } from './store';
-import { originOf, pageRoot, selectionBounds } from './geometry';
+import { originOf, pageRoot, selectionBounds, toWorld } from './geometry';
 import type { ArchaDocument } from '@archa/core';
+import { importFile, place, svgToNodes } from './importers';
 
 /* Editing commands shared by shortcuts and menus. Every change is one transaction. */
 
 let clipboard: NodeInput[] = [];
+/** Put on the system clipboard by Copy: a paste that still finds it pastes the copied layers, not text. */
+const LAYERS_MARK = 'archadev:layers';
 
 /** Friendly input from a subtree, for copy and duplicate (shared with the agent `copy()`). */
 export const toInput = subtreeInput;
@@ -46,6 +49,8 @@ export function copy() {
   const { doc, ids } = ctx();
   if (!doc || !ids.length) return;
   clipboard = ids.map((id) => toInput(doc, id));
+  // Replaces whatever the system clipboard held, so a later Ctrl+V knows the layers are the newest copy.
+  void navigator.clipboard.writeText(`${LAYERS_MARK}:${ids.length}`).catch(() => { /* layers still paste */ });
   toast(`Copied ${ids.length} layer${ids.length > 1 ? 's' : ''}`);
 }
 
@@ -64,6 +69,36 @@ export async function paste() {
     created.push(r.rootId);
   }
   if (await commit('Paste', ops)) select(created);
+}
+
+/**
+ * Ctrl+V on the canvas: images (screenshots, copied pictures) and SVG markup from the system clipboard
+ * are imported; otherwise the layers copied in ArchaDev are pasted.
+ */
+export async function pasteFrom(data: DataTransfer | null) {
+  const text = data?.getData('text/plain') ?? '';
+  if (text.startsWith(LAYERS_MARK)) return paste();
+  const images = [...(data?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+  if (images.length) {
+    const st = useStore.getState();
+    const host = document.querySelector('[data-canvas-host]');
+    const c = toWorld(st.camera, (host?.clientWidth ?? 800) / 2, (host?.clientHeight ?? 600) / 2);
+    try {
+      for (const [i, f] of images.entries()) {
+        const named = /^image\.\w+$/i.test(f.name) ? new File([f], `Pasted image.${f.name.split('.').pop()}`, { type: f.type }) : f;
+        await importFile(named, { x: c.x + i * 32, y: c.y + i * 32 });
+      }
+    } catch (e) {
+      toast(`Paste failed: ${(e as Error).message}`, 'error');
+    }
+    return;
+  }
+  const svg = text.trim();
+  if (/^(<\?xml[^>]*>\s*)?<svg[\s>]/i.test(svg)) {
+    const vector = svgToNodes(svg, 'Pasted SVG');
+    if (vector) return place(vector, undefined, 'Paste SVG');
+  }
+  return paste();
 }
 
 export async function nudge(dx: number, dy: number) {

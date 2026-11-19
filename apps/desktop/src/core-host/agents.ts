@@ -2,11 +2,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { newId } from '@archa/schema';
-import { guidesFor, guideText, type ChatMessage, type ChatRunEvent, type ModelOption } from '@archa/protocol';
+import { guidesFor, guideText, type ChatImage, type ChatMessage, type ChatRunEvent, type ModelOption } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import type { Workspace } from './workspace';
 import { describeState } from './execute';
-import { ADAPTERS, type Adapter, type AgentEvent, type McpCommand, type StreamParser } from './agent-adapters';
+import { ADAPTERS, type Adapter, type AgentEvent, type Attachment, type McpCommand, type StreamParser } from './agent-adapters';
 import { resolveCli, type AccountManager } from './accounts';
 import { randomPersona } from './personas';
 
@@ -19,8 +19,8 @@ import { randomPersona } from './personas';
 export { ADAPTERS, findBin, type McpCommand } from './agent-adapters';
 
 type Run = { id: string; docId: string; threadId: string; agent: string; persona: string; prompt: string; child: ChildProcess | null; stopped: boolean; replied: boolean; failed: boolean; startedAt: number };
-type SendOptions = { now?: boolean; focus?: string[] };
-type Queued = { docId: string; agentId: string; prompt: string; model?: string; account?: string; focus?: string[] };
+type SendOptions = { now?: boolean; focus?: string[]; images?: ChatImage[] };
+type Queued = { docId: string; agentId: string; prompt: string; model?: string; account?: string; focus?: string[]; images?: ChatImage[] };
 /** A thread's agent process kept alive between turns (plan CHAT_AGENT, D-11 A). */
 type Warm = {
   id: string; threadId: string; docId: string; agent: string; key: string; persona: string;
@@ -46,6 +46,19 @@ function killTree(child: ChildProcess | null) {
 const chatsDir = () => join(archaHome(), 'chats');
 const safeName = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80) || 'doc';
 const threadDir = (threadId: string) => join(archaHome(), 'runtime', 'threads', safeName(threadId));
+const IMAGE_EXT: Record<ChatImage['mime'], string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+
+/** Pasted chat images go to the thread folder (removed with the thread), so file-reading agents can open them. */
+function saveImages(threadId: string, images: ChatImage[]): Attachment[] {
+  if (!images.length) return [];
+  const dir = join(threadDir(threadId), 'attachments');
+  mkdirSync(dir, { recursive: true });
+  return images.map((img) => {
+    const path = join(dir, `${newId()}.${IMAGE_EXT[img.mime]}`);
+    writeFileSync(path, Buffer.from(img.data, 'base64'));
+    return { path, mime: img.mime, data: img.data };
+  });
+}
 
 export class ChatRunner {
   private runs = new Map<string, Run>();
@@ -127,8 +140,9 @@ export class ChatRunner {
     } catch { /* resume is best-effort */ }
   }
 
-  private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent' | 'persona'>, role: ChatMessage['role'], text: string) {
+  private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent' | 'persona'>, role: ChatMessage['role'], text: string, images?: ChatImage[]) {
     const m: ChatMessage = { id: newId(), docId: run.docId, runId: run.id, threadId: run.threadId, role, agent: run.agent, persona: run.persona, text, ts: Date.now() };
+    if (images?.length) m.images = images.map((i) => i.thumb);
     this.list(run.docId).push(m);
     try {
       mkdirSync(chatsDir(), { recursive: true });
@@ -145,16 +159,16 @@ export class ChatRunner {
     const busy = [...this.runs.values()].find((r) => r.threadId === threadId);
     if (busy) {
       const q = this.queue.get(threadId) ?? [];
-      const item: Queued = { docId, agentId, prompt, model, account, focus: opts.focus };
+      const item: Queued = { docId, agentId, prompt, model, account, focus: opts.focus, images: opts.images };
       if (opts.now) q.unshift(item); else q.push(item);
       this.queue.set(threadId, q);
       const echo = { docId, id: newId(), threadId, agent: agentId, persona: busy.persona };
-      this.emit(echo, 'user', prompt);
+      this.emit(echo, 'user', prompt, opts.images);
       this.emit(echo, 'status', opts.now ? `Stopping ${busy.persona} — this runs next` : 'Queued — runs when the current turn ends');
       if (opts.now) this.stop(busy.id);
       return { runId: '', threadId, persona: busy.persona, queued: true };
     }
-    return this.start({ docId, agentId, prompt, model, account, focus: opts.focus }, threadId, false);
+    return this.start({ docId, agentId, prompt, model, account, focus: opts.focus, images: opts.images }, threadId, false);
   }
 
   private start(q: Queued, threadId: string, echoed: boolean): { runId: string; threadId: string; persona: string } {
@@ -175,12 +189,16 @@ export class ChatRunner {
     const request = interrupted ? `Earlier request (stopped before you answered it):\n${interrupted}\n\nNow:\n${prompt}` : prompt;
     const focus = (q.focus ?? []).map((id) => session.doc.get(id)).filter((n) => !!n).slice(0, 12);
     const focusLine = focus.length ? `\nFocus — this request is about: ${focus.map((n) => `${n.name} "${n.id}" (${n.type})`).join(', ')}` : '';
+    const images = saveImages(threadId, q.images ?? []);
+    const imageLine = images.length && !adapter.inlineImages
+      ? `\nThe person attached ${images.length === 1 ? 'an image' : `${images.length} images`} — open ${images.length === 1 ? 'it' : 'them'} to see what they mean:\n${images.map((i) => `- ${i.path}`).join('\n')}`
+      : '';
     // The internal skill: guides that fit the request ride along on the first turn (saves a guide call).
     const guides = firstTurn ? guidesFor(request).map((t) => guideText(t)).join('\n\n') : '';
-    const fullPrompt = `${request}${focusLine}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}${guides ? `\n\n---\nGuides for this task:\n${guides}` : ''}`;
+    const fullPrompt = `${request}${focusLine}${imageLine}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}${guides ? `\n\n---\nGuides for this task:\n${guides}` : ''}`;
     const run: Run = { id: runId, docId, threadId, agent: agentId, persona: this.personaFor(docId, threadId), prompt: request, child: null, stopped: false, replied: false, failed: false, startedAt: Date.now() };
     this.runs.set(runId, run);
-    if (!echoed) this.emit(run, 'user', prompt);
+    if (!echoed) this.emit(run, 'user', prompt, q.images);
     if (login.label) this.emit(run, 'status', `Running as ${login.label}`);
     this.ws.broadcast('chat.run', this.runEvent(run, 'running'));
 
@@ -192,10 +210,10 @@ export class ChatRunner {
         w.turn = run;
         w.lastUsed = Date.now();
         run.child = w.child;
-        w.child.stdin?.write(`${adapter.warm!.message(fullPrompt, { first: w.turns === 0, resumed: w.resumed })}\n`);
+        w.child.stdin?.write(`${adapter.warm!.message(fullPrompt, { first: w.turns === 0, resumed: w.resumed, images })}\n`);
         w.turns++;
       }, (e: Error) => { run.failed = true; this.emit(run, 'error', e.message); this.finishRun(run, 'failed'); });
-    } else this.startCold(run, adapter, cli, login, fullPrompt, model, account);
+    } else this.startCold(run, adapter, cli, login, fullPrompt, model, account, images);
     return { runId, threadId, persona: run.persona };
   }
 
@@ -349,7 +367,7 @@ export class ChatRunner {
     killTree(w.child);
   }
 
-  private startCold(run: Run, adapter: Adapter, cli: NonNullable<ReturnType<typeof resolveCli>>, login: ReturnType<AccountManager['runEnv']>, fullPrompt: string, model?: string, account?: string) {
+  private startCold(run: Run, adapter: Adapter, cli: NonNullable<ReturnType<typeof resolveCli>>, login: ReturnType<AccountManager['runEnv']>, fullPrompt: string, model?: string, account?: string, images: Attachment[] = []) {
     const { id: runId, docId, threadId } = run;
     const base = this.mcpCommand();
     const mcp: McpCommand = { ...base, args: [...base.args, '--doc', docId, '--agent', adapter.id] };
@@ -371,7 +389,7 @@ export class ChatRunner {
         this.finishRun(run, 'stopped');
         return;
       }
-      const built = adapter.build({ prompt: fullPrompt, mcp, mcpConfigFile, model, sessionId, extraServers: Object.keys(extra), skills });
+      const built = adapter.build({ prompt: fullPrompt, mcp, mcpConfigFile, model, sessionId, extraServers: Object.keys(extra), skills, images });
       const child = spawn(cli.bin, [...cli.pre, ...built.args], {
         cwd: cfgDir, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, ...login.env, ARCHA_RUN_ID: runId, ARCHA_DOC_ID: docId, NO_COLOR: '1' },

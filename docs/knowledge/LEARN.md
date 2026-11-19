@@ -8,6 +8,8 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-19] - Live-checked agent cursors over CDP; the cursor layer stayed empty and screenshots hung, which looked like a cursor bug - The dev window was minimized (`document.visibilityState === 'hidden'`), so requestAnimationFrame never ran - Before reading anything drawn by rAF (cursors, animations) over CDP, check `document.visibilityState`; a hidden window draws nothing.
+
 [2026-11-19] - A dev app started with its own ARCHA_HOME still listened on `\\.\pipe\archadev-core-<USERNAME>`, the installed app's pipe; dev and installed cores could collide - `socketPath()` adds a hash of a custom ARCHA_HOME to the pipe name - Anything "isolated by ARCHA_HOME" must derive every path, pipe and lock from it; check names that come from the user or machine.
 
 [2026-11-19] - The dev window sat on "Connecting to core…" after a Vite HMR update, so agent screenshots failed during a live benchmark - Reloaded the window (the core port is only sent on page load) - After HMR in a dev run, reload the window before trusting agent screenshots; check `document.body.innerText` for "Connecting to core".

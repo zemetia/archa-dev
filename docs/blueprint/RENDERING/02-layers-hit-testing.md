@@ -14,7 +14,7 @@
 | 2 | Content | CanvasKit WebGL, tiled | `cache.invalidated` |
 | 3 | Code frames | Snapshot images; one live `<webview>` when focused | Snapshot change, focus |
 | 4 | Overlays: selection, hover, guides, measure, layout handles | Canvas 2D | Pointer, selection |
-| 5 | Presence: agent session cursors, dashed trail, name + action tags (`canvas/cursors.ts`, own Canvas 2D layer + rAF loop while a cursor is visible); comment pins, review markup | Canvas 2D / DOM | `agent.trail`, comments |
+| 5 | Presence: agent session cursors (human-like strokes, clicks, idle fidgets; `pose()` is tested for no frame jumps), name + action tags (`canvas/cursors.ts`, own Canvas 2D layer + rAF loop while a cursor is visible); comment pins, review markup | Canvas 2D / DOM | `agent.trail`, comments |
 | 6 | Editing UI: text caret, inline inputs, context menus | DOM | Editing |
 
 Each layer is its own element stacked with CSS; a change in one never repaints the others.

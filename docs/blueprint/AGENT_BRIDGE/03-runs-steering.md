@@ -71,7 +71,7 @@ Per agent, up to `maxParallel` (default 3) concurrent runs. Paused runs free the
 | Identity | The run's `archa mcp` sends `runId`; the core makes its author `{ kind: 'agent', id: '<agent>:<threadId>', name: <persona> }`. A terminal (listen-mode) agent gets its own name per connection |
 | Colour | `personaColor(name)` → slot 0-7 → `--color-persona-N`. A new name prefers a slot no active session uses. Same colour for the cursor, chat label and History row |
 | Trail | Every tool call that touches nodes broadcasts `agent.trail` `{ author, runId?, threadId?, steps: [{ action, nodeId, name, bounds }] }`. `execute` records each API call in order (`create`, `edit`, `move`, `delete`, `copy`, `read`, `focus`, `look`), bounds from the final layout, ≤ 40 steps |
-| Cursor | The canvas plays each session's trail: the cursor glides step to step, outlines the target, tags "<name> · <Verb> <node>", and leaves a dashed path → [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
+| Cursor | The canvas plays each session's trail: the cursor glides step to step, outlines the target, tags "<name> · <Verb> <node>", moves like a person's hand (curved strokes with a small overshoot, a click ripple on create/edit/copy/move/delete, fidgets over the target, wider wander while Thinking, long still pauses; no trail line). Hidden ~1 s after the session finishes. Goal: it should read as a human teammate → [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
 | UI | Chat header shows the thread's session; other sessions working on the doc appear as chips that open their thread; History rows show name + "working" |
 
 ---
@@ -95,6 +95,7 @@ No session id seen yet → new session with the original task + previous output.
 |---|---|
 | Process | An adapter with `warm` (Claude, agy) keeps **one CLI process per thread**, fed one NDJSON message per turn (`--input-format stream-json`). Codex stays one process per turn (`exec resume`) |
 | Turn end | Parser emits `{ kind: 'turn', ok, costUsd? }` (Claude `result`, agy `event: result`) → status `Done in N s · $x` |
+| Images | Pasted into the composer (max 6, long side ≤ 1568 px). Saved to `runtime/threads/<id>/attachments/`; Claude gets them as inline image blocks (no file tools), agy/codex get the paths (codex also `--image=`). History keeps 160 px thumbnails |
 | Pre-warm | `chat.warm` on composer focus spawns the process (no thread yet → a thread id is reserved and returned) |
 | Identity | `ARCHA_RUN_ID` = the process id, so its `archa mcp` keeps the thread's session name across turns |
 | Queue | A message to a working thread is queued (`queued: true`); `now: true` stops the turn first. The queue drains in order when a turn ends |

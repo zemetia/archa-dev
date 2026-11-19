@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, Copy, Crosshair, FileText, Hexagon, History, Loader2, Settings, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
-import { chatThreads, threadOf, type ModelOption } from '@archa/protocol';
+import { chatThreads, threadOf, type ChatImage, type ModelOption } from '@archa/protocol';
 import { runOfThread, select, toast, useStore } from '../lib/store';
+import { imageFiles, MAX_CHAT_IMAGES, toChatImage } from '../lib/chatImages';
 import { personaBg } from './persona';
 import { cn } from './controls';
 import { Dropdown, type DropdownOption } from './Dropdown';
@@ -115,7 +116,16 @@ export function ChatThread() {
         )}
         {items.map((m) => (
           <div key={m.id}>
-            {m.role === 'user' && <div className="ml-6 rounded-xl rounded-br-sm bg-accent-soft px-3 py-2 text-[12.5px] leading-relaxed text-fg">{m.text}</div>}
+            {m.role === 'user' && (
+              <div className="ml-6 rounded-xl rounded-br-sm bg-accent-soft px-3 py-2 text-[12.5px] leading-relaxed text-fg">
+                {m.images?.length ? (
+                  <div className="mb-1.5 flex flex-wrap gap-1.5">
+                    {m.images.map((src, i) => <img key={i} src={src} alt="" className="h-16 max-w-[120px] rounded-md border border-line object-cover" />)}
+                  </div>
+                ) : null}
+                {m.text}
+              </div>
+            )}
             {m.role === 'agent' && <AgentText agent={m.agent} persona={m.persona} label={agentLabel(m.agent)} text={m.text} />}
             {m.role === 'tool' && (
               <button onClick={() => m.nodeIds.length && select(m.nodeIds.filter((id) => useStore.getState().doc?.get(id)).slice(0, 50))}
@@ -189,6 +199,8 @@ export function ChatComposer() {
   const [models, setModels] = useState<{ agent: string; list: ModelOption[]; source: string } | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
   const [sending, setSending] = useState(false);
+  // Images pasted into the composer, sent with the next message.
+  const [images, setImages] = useState<ChatImage[]>([]);
   const accounts = useStore((s) => s.accounts?.accounts);
   const input = useRef<HTMLTextAreaElement>(null);
   // Selection chip: what is selected when sending is what the request is about (unless dismissed).
@@ -267,13 +279,29 @@ export function ChatComposer() {
   };
   useEffect(() => { reserved.current = null; }, [docId, agent, model, account]);
 
+  const onPaste = (e: React.ClipboardEvent) => {
+    const files = imageFiles(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    const room = MAX_CHAT_IMAGES - images.length;
+    if (room <= 0) { toast(`Up to ${MAX_CHAT_IMAGES} images per message`, 'error'); return; }
+    Promise.all(files.slice(0, room).map(toChatImage))
+      .then((added) => setImages((list) => [...list, ...added].slice(0, MAX_CHAT_IMAGES)))
+      .catch((err: Error) => toast(`Could not read the image: ${err.message}`, 'error'));
+  };
+
   const send = async (now = false) => {
-    if (!client || !docId || !prompt.trim() || sending || !available?.available) return;
+    if (!client || !docId || (!prompt.trim() && !images.length) || sending || !available?.available) return;
     setSending(true);
     try {
       const threadId = thread ?? reserved.current ?? undefined;
-      const r = await client.call('chat.send', { docId, agent, model: model || undefined, account: account || undefined, prompt: prompt.trim(), threadId, now: running ? now : undefined, focus: focusNodes.map((n) => n.id) });
+      const text = prompt.trim() || (images.length > 1 ? 'Use the attached images.' : 'Use the attached image.');
+      const r = await client.call('chat.send', {
+        docId, agent, model: model || undefined, account: account || undefined, prompt: text, threadId, now: running ? now : undefined,
+        focus: focusNodes.map((n) => n.id), images: images.length ? images : undefined,
+      });
       reserved.current = null;
+      setImages([]);
       useStore.setState({ chatDraft: '', chatThread: r.threadId });
     } catch (e) {
       toast((e as Error).message, 'error');
@@ -281,7 +309,7 @@ export function ChatComposer() {
       setSending(false);
     }
   };
-  const canSend = !!prompt.trim() && !!available?.available && !sending;
+  const canSend = (!!prompt.trim() || images.length > 0) && !!available?.available && !sending;
 
   return (
     <div className="shrink-0 rounded-2xl border border-line bg-panel p-2 transition-colors focus-within:border-accent/60">
@@ -297,14 +325,29 @@ export function ChatComposer() {
           </span>
         )}
       </div>
-      <textarea ref={input} value={prompt} onChange={(e) => setPrompt(e.target.value)} onFocus={warm} rows={3}
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-1 pb-1">
+          {images.map((img, i) => (
+            <span key={i} className="group relative">
+              <img src={img.thumb} alt={`Pasted image ${i + 1}`} className="h-12 w-12 rounded-md border border-line object-cover" />
+              <button title="Remove image" onClick={() => setImages((list) => list.filter((_, j) => j !== i))}
+                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-line bg-panel-3 text-fg-muted opacity-0 transition-opacity hover:text-fg group-hover:opacity-100"><X size={9} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      <textarea ref={input} value={prompt} onChange={(e) => setPrompt(e.target.value)} onFocus={warm} onPaste={onPaste} rows={3}
         placeholder={running ? `${running.persona} is working — Enter queues a follow-up, Ctrl+Enter sends it now` : 'Describe what to design…'}
-        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(e.ctrlKey || e.metaKey); } }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(e.ctrlKey || e.metaKey); }
+          else if (e.key === 'Backspace' && !prompt && images.length) setImages((list) => list.slice(0, -1));
+        }}
         className="block w-full resize-none bg-transparent px-1.5 py-1 text-[12.5px] leading-relaxed placeholder:text-fg-subtle" />
       <div className="flex items-center gap-0.5">
         <Dropdown className="max-w-[45%] shrink-0" value={agent} options={agentOptions} onChange={setAgent} header="Agent" title="Agent that runs this prompt" menuWidth={250} />
         <Dropdown className="flex-1" value={model} options={modelOptions} onChange={setModel} header={models?.source ?? 'Model'} loading={loadingModels} title="Model" menuWidth={260} />
-        {running && prompt.trim() ? (
+        {running && (prompt.trim() || images.length > 0) ? (
           <button title={`Send now — stops ${running.persona}'s current turn (Ctrl+Enter). Enter queues instead.`} disabled={!canSend} onClick={() => void send(true)}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-agent text-fg shadow-lg shadow-agent/30"><Zap size={14} /></button>
         ) : running ? (

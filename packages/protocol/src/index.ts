@@ -72,7 +72,7 @@ export interface CoreMethods {
    * `now` stops the thread's running turn and runs this message next; otherwise a busy thread queues it.
    * `focus` = node ids the request is about (the composer's selection chip).
    */
-  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string; now?: boolean; focus?: string[] }; result: { runId: string; threadId: string; persona: string; queued?: boolean } };
+  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string; now?: boolean; focus?: string[]; images?: ChatImage[] }; result: { runId: string; threadId: string; persona: string; queued?: boolean } };
   /** Start (or keep) the agent process for a thread before the person sends, so the first turn starts at once. No threadId = a fresh thread id is reserved and returned. */
   'chat.warm': { params: { docId: string; agent: string; model?: string; account?: string; threadId?: string }; result: { threadId: string; warm: boolean } };
   'chat.stop': { params: { runId: string }; result: void };
@@ -145,6 +145,9 @@ export type ModelOption = { id: string; label: string; description?: string };
 /** user: display name for comments (git user.name, else the OS account). */
 export type AppInfo = { version: string; user: string; cliPath: string; mcpCommand: string[]; agents: Array<{ id: string; label: string; available: boolean }> };
 
+/** An image pasted into the chat composer: base64 pixels for the agent, a small data-URL thumbnail for the history. */
+export type ChatImage = { mime: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'; data: string; thumb: string };
+
 export type ChatMessage = {
   id: string;
   docId: string;
@@ -156,6 +159,8 @@ export type ChatMessage = {
   /** Random session name the run works under on the canvas (e.g. "Swift Heron"); one per thread. */
   persona?: string;
   text: string;
+  /** Thumbnails (data URLs) of the images a user message carried. */
+  images?: string[];
   ts: number;
 };
 export type LibraryItem = { library: string; id: string; ref: string; name: string; description: string; width: number; height: number; publishedAt: number; thumb?: string };

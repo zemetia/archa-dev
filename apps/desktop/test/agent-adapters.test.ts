@@ -27,6 +27,16 @@ describe('agent adapters: build', () => {
     expect(adapter('agy').build({ prompt: 'again', mcp, mcpConfigFile: 'c', sessionId: 'conv-1' }).args).toEqual(expect.arrayContaining(['--conversation', 'conv-1']));
   });
 
+  it('pasted chat images: inline blocks for Claude, file paths for codex', () => {
+    const img = { path: 'C:\\t\\a.png', mime: 'image/png', data: 'iVBORw0K' };
+    const msg = JSON.parse(adapter('claude').warm!.message('match this', { first: true, resumed: false, images: [img] })) as { message: { content: unknown[] } };
+    expect(msg.message.content).toEqual([{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0K' } }, { type: 'text', text: 'match this' }]);
+    expect(adapter('claude').inlineImages).toBe(true);
+    const b = adapter('codex').build({ prompt: 'p', mcp, mcpConfigFile: 'c', sessionId: 's1', images: [img, { ...img, path: 'C:\\t\\b.png' }] });
+    expect(b.args).toContain('--image=C:\\t\\a.png,C:\\t\\b.png');
+    expect(b.args.indexOf('--image=C:\\t\\a.png,C:\\t\\b.png')).toBeLessThan(b.args.indexOf('resume'));
+  });
+
   it('codex gets the MCP server through -c overrides and the prompt on stdin', () => {
     const b = adapter('codex').build({ prompt: 'hello', mcp, mcpConfigFile: 'c', sessionId: 't1' });
     expect(b.args[0]).toBe('exec');

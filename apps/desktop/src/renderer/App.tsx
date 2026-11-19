@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { init, newDoc, openFile, redo, save, setTool, togglePanel, toggleRailPanel, undo, useStore } from './lib/store';
 import { importImageOrSvg } from './lib/importers';
-import { copy, deleteSelection, duplicate, nudge, paste, reorder, selectAll, selectChildren, selectParent, wrapInFrame } from './lib/commands';
+import { copy, deleteSelection, duplicate, nudge, pasteFrom, reorder, selectAll, selectChildren, selectParent, wrapInFrame } from './lib/commands';
 import { Canvas } from './canvas/Canvas';
 import { TitleBar } from './ui/TitleBar';
 import { LeftPanel } from './ui/LeftPanel';
@@ -24,7 +24,8 @@ export function App() {
   useEffect(() => { void init(); }, []);
   useEffect(() => {
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('paste', onPaste);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('paste', onPaste); };
   }, []);
 
   return (
@@ -58,6 +59,14 @@ export function App() {
   );
 }
 
+function onPaste(e: ClipboardEvent) {
+  const t = e.target as HTMLElement | null;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+  if (useStore.getState().settingsOpen) return;
+  e.preventDefault();
+  void pasteFrom(e.clipboardData);
+}
+
 function onKey(e: KeyboardEvent) {
   // The browser toggle works from the address bar too.
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'b') { e.preventDefault(); toggleBrowser(); return; }
@@ -83,7 +92,8 @@ function onKey(e: KeyboardEvent) {
     if (k === 'n') return run(newDoc);
     if (k === 'd') return run(duplicate);
     if (k === 'c') return run(copy);
-    if (k === 'v') return run(paste);
+    // Ctrl+V is left to the browser: the paste event (onPaste) carries images from other apps.
+    if (k === 'v') return;
     if (k === 'a') return run(selectAll);
     if (k === 'g' && e.altKey) return run(() => wrapInFrame(false));
     if (k === '0') return run(() => zoomTo(1));

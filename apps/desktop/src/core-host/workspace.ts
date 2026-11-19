@@ -20,6 +20,11 @@ const chatSendSchema = z.object({
   docId: z.string().min(1), agent: z.string().min(1), prompt: z.string().min(1).max(100_000),
   model: z.string().max(100).optional(), account: z.string().max(100).optional(), threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
   now: z.boolean().optional(), focus: z.array(z.string().min(1).max(100)).max(50).optional(),
+  images: z.array(z.object({
+    mime: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
+    data: z.string().min(1).max(15_000_000).regex(/^[A-Za-z0-9+/]+=*$/),
+    thumb: z.string().max(300_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/),
+  })).max(6).optional(),
 });
 const chatWarmSchema = z.object({
   docId: z.string().min(1), agent: z.string().min(1), model: z.string().max(100).optional(), account: z.string().max(100).optional(),
@@ -337,7 +342,7 @@ export class Workspace {
     },
     'chat.send': (params) => {
       const p = parse(chatSendSchema, params);
-      return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId, { now: p.now, focus: p.focus });
+      return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId, { now: p.now, focus: p.focus, images: p.images });
     },
     'chat.warm': (params) => {
       const p = parse(chatWarmSchema, params);

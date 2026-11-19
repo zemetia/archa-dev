@@ -47,7 +47,7 @@ Built today (`ui/ToolRail.tsx`, keys in `TOOL_KEYS`): a family button shows its 
 | Rail item | Key | Family / behaviour | Code |
 |---|---|---|---|
 | Pointer | V · K · H (Space) | Move, Scale (resize scales the whole subtree: text, strokes, radii, gap, padding), Hand | `canvas/Canvas.tsx`, `canvas/scale.ts` |
-| Shapes | R · O | Rectangle, Ellipse, Polygon, Icon (lucide picker → vector), Script (soon), Import image or SVG (Ctrl+Shift+K), Import Figma (soon) | `lib/importers.ts` |
+| Shapes | R · O | Rectangle, Ellipse, Polygon, Icon (lucide picker → vector), Script (soon), Import image or SVG (Ctrl+Shift+K), Import Figma (soon). Ctrl+V on the canvas imports a clipboard image / SVG markup; layers copied in-app win while the `archadev:layers` mark is still on the clipboard | `lib/importers.ts`, `lib/commands.ts` |
 | Pen | P | Click points, drag for curves, click first point to close, Enter/Esc finish, Backspace undoes a point | `canvas/pen.ts` |
 | Text · Frame | T · F | | |
 | Sticky note | S | Click/drag on the page; edits in place | |

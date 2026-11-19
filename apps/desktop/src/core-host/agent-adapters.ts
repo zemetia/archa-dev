@@ -23,7 +23,11 @@ export type BuildInput = {
   extraServers?: string[];
   /** Settings → Skills were mirrored into the run cwd (needs the Skill tool). */
   skills?: boolean;
+  images?: Attachment[];
 };
+/** A chat image saved in the thread folder; `data` is its base64 for CLIs that take images inline. */
+export type Attachment = { path: string; mime: string; data: string };
+
 export type Built = { args: string[]; stdin?: string };
 
 /**
@@ -33,7 +37,7 @@ export type Built = { args: string[]; stdin?: string };
 export type WarmMode = {
   args: (o: Omit<BuildInput, 'prompt'>) => string[];
   /** `first` = first message this process gets; `resumed` = it continues an earlier CLI session. */
-  message: (text: string, ctx: { first: boolean; resumed: boolean }) => string;
+  message: (text: string, ctx: { first: boolean; resumed: boolean; images?: Attachment[] }) => string;
   /** Stops the running turn but keeps the process (and its session) alive. */
   interrupt?: () => string;
 };
@@ -55,6 +59,8 @@ export type Adapter = {
   id: 'claude' | 'agy' | 'codex';
   label: string;
   bin: string;
+  /** The CLI gets chat images inside the message; others are told the files' paths to open. */
+  inlineImages?: boolean;
   /**
    * Called before a run with the base `archa mcp` command (no --doc/--agent): agy has no per-run
    * MCP flag, so the server is registered in its global config and finds the doc via ARCHA_DOC_ID.
@@ -358,6 +364,8 @@ export const ADAPTERS: Adapter[] = [
     id: 'claude',
     label: 'Claude Code',
     bin: 'claude',
+    // Design runs have no file tools, so pasted images ride in the message as image blocks.
+    inlineImages: true,
     // Prompt on stdin (no argv limit, and stdin is closed so the CLI never waits for more).
     // setting-sources without "user": the person's own hooks and plugins stay out of design runs.
     build: ({ prompt, ...o }) => ({
@@ -366,7 +374,10 @@ export const ADAPTERS: Adapter[] = [
     }),
     warm: {
       args: (o) => ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', ...claudeArgs(o)],
-      message: (text) => JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }),
+      message: (text, { images = [] }) => JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: [...images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: i.data } })), { type: 'text', text }] },
+      }),
       interrupt: () => JSON.stringify({ type: 'control_request', request_id: `int-${Date.now()}`, request: { subtype: 'interrupt' } }),
     },
     parser: claudeParser,
@@ -410,13 +421,15 @@ export const ADAPTERS: Adapter[] = [
     id: 'codex',
     label: 'Codex',
     bin: 'codex',
-    build: ({ prompt, mcp, model, sessionId }) => {
+    build: ({ prompt, mcp, model, sessionId, images = [] }) => {
       const flags = [
         '--json', '--full-auto', '--skip-git-repo-check',
         '-c', `mcp_servers.archadev.command=${toml(mcp.command)}`,
         '-c', `mcp_servers.archadev.args=${toml([...mcp.args])}`,
         ...Object.entries(mcp.env).flatMap(([k, v]) => ['-c', `mcp_servers.archadev.env.${k}=${toml(v)}`]),
         ...(model ? ['--model', model] : []),
+        // `=` form: the flag takes several values and must not swallow the `resume` subcommand.
+        ...(images.length ? [`--image=${images.map((i) => i.path).join(',')}`] : []),
       ];
       return {
         args: ['exec', ...flags, ...(sessionId ? ['resume', sessionId] : []), '-'],
