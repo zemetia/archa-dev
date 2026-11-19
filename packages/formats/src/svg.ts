@@ -1,5 +1,5 @@
 import { colorToCss, isContainer, type Node } from '@archa/schema';
-import type { ArchaDocument } from '@archa/core';
+import { polygonPoints, viewBoxMatrix, type ArchaDocument } from '@archa/core';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -10,6 +10,8 @@ export function exportSvg(doc: ArchaDocument, nodeId: string): string {
   const body = draw(doc, root, true, defs);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${root.width}" height="${root.height}" viewBox="0 0 ${root.width} ${root.height}">${defs.length ? `<defs>${defs.join('')}</defs>` : ''}${body}</svg>`;
 }
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
 
 function draw(doc: ArchaDocument, n: Node, isRoot: boolean, defs: string[]): string {
   if (!n.visible || n.type === 'page') return '';
@@ -41,5 +43,24 @@ function draw(doc: ArchaDocument, n: Node, isRoot: boolean, defs: string[]): str
       const lines = n.text.split('\n').map((l, i) => `<tspan x="${tx + ax}" y="${ty + lh * i + (lh + n.fontSize * 0.7) / 2}">${esc(l)}</tspan>`).join('');
       return `<text font-family="${esc(n.fontFamily)}" font-size="${n.fontSize}" font-weight="${n.fontWeight}" text-anchor="${anchor}" ${paint}${attrs}>${lines}</text>`;
     }
+    case 'polygon':
+      return `<polygon transform="translate(${tx} ${ty})" points="${polygonPoints(n.sides, n.width, n.height).map((p) => `${r2(p.x)},${r2(p.y)}`).join(' ')}" ${paint}${attrs}/>`;
+    case 'path': {
+      const [a, , , d, e, f] = viewBoxMatrix(n.viewBox, n.width, n.height);
+      // Scale the geometry, not the stroke: vector-effect keeps the stroke width in node units.
+      return `<path transform="translate(${tx} ${ty}) matrix(${a} 0 0 ${d} ${e} ${f})" vector-effect="non-scaling-stroke" d="${esc(n.d)}" fill-rule="${n.fillRule}" stroke-linecap="${n.lineCap}" stroke-linejoin="${n.lineJoin}" ${paint}${attrs}/>`;
+    }
+    case 'image': {
+      const ratio = n.fit === 'fill' ? 'none' : n.fit === 'fit' ? 'xMidYMid meet' : 'xMidYMid slice';
+      defs.push(`<clipPath id="c-${n.id}"><rect width="${n.width}" height="${n.height}" rx="${n.cornerRadius}"/></clipPath>`);
+      return `<g transform="translate(${tx} ${ty})"${attrs}><image href="${esc(n.src)}" width="${n.width}" height="${n.height}" preserveAspectRatio="${ratio}" clip-path="url(#c-${n.id})"/></g>`;
+    }
+    case 'sticky': {
+      const lh = n.fontSize * 1.35;
+      const lines = n.text.split('\n').map((l, i) => `<tspan x="16" y="${16 + lh * i + (lh + n.fontSize * 0.7) / 2}">${esc(l)}</tspan>`).join('');
+      return `<g transform="translate(${tx} ${ty})"${attrs}><rect width="${n.width}" height="${n.height}" rx="4" ${paint}/><text font-family="Inter" font-size="${n.fontSize}" font-weight="500" fill="#1f1f23">${lines}</text></g>`;
+    }
+    case 'embed':
+      return `<g transform="translate(${tx} ${ty})"${attrs}><rect width="${n.width}" height="${n.height}" rx="${n.cornerRadius}" fill="#ffffff" stroke="#e4e4e7"/><text x="14" y="22" font-family="Inter" font-size="13" fill="#52525b">${esc(n.url)}</text></g>`;
   }
 }

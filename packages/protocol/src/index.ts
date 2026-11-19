@@ -129,7 +129,8 @@ export type AgentCli = { id: AccountAgent; label: string; bin: string | null; ve
 export type AccountsOverview = { clis: AgentCli[]; accounts: AgentAccount[]; profilesDir: string };
 
 export type ModelOption = { id: string; label: string; description?: string };
-export type AppInfo = { version: string; cliPath: string; mcpCommand: string[]; agents: Array<{ id: string; label: string; available: boolean }> };
+/** user: display name for comments (git user.name, else the OS account). */
+export type AppInfo = { version: string; user: string; cliPath: string; mcpCommand: string[]; agents: Array<{ id: string; label: string; available: boolean }> };
 
 export type ChatMessage = {
   id: string;

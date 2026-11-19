@@ -8,6 +8,8 @@ export type OverlayExtras = {
   create?: { x: number; y: number; width: number; height: number };
   insertLine?: { x1: number; y1: number; x2: number; y2: number };
   dropTarget?: string | null;
+  /** Pen tool in progress: committed path, its points, and the rubber-band line to the pointer. */
+  pen?: { d: string; points: Array<{ x: number; y: number; in?: { x: number; y: number }; out?: { x: number; y: number } }>; cursor: { x: number; y: number } | null };
 };
 
 type View = { camera: Camera; selection: string[]; hover: string | null; editingText: string | null };
@@ -99,6 +101,47 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
     ctx.lineWidth = 1.5;
     ctx.strokeRect(b.x, b.y, b.w, b.h);
     tag(ctx, `${fmt(x.create.width)} × ${fmt(x.create.height)}`, b.x + b.w / 2, b.y + b.h + 8, ACCENT, false, true);
+  }
+  if (x.pen && x.pen.points.length) {
+    const pts = x.pen.points;
+    ctx.save();
+    ctx.translate(cam.x, cam.y);
+    ctx.scale(cam.zoom, cam.zoom);
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 1.5 / cam.zoom;
+    if (x.pen.d) ctx.stroke(new Path2D(x.pen.d));
+    const last = pts.at(-1)!;
+    if (x.pen.cursor) {
+      ctx.setLineDash([4 / cam.zoom, 4 / cam.zoom]);
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(x.pen.cursor.x, x.pen.cursor.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+    for (const p of pts) {
+      for (const h of [p.in, p.out]) {
+        if (!h) continue;
+        const a = toScreen(cam, p.x, p.y), b = toScreen(cam, h.x, h.y);
+        ctx.strokeStyle = ACCENT;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.fillStyle = ACCENT;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const s = toScreen(cam, p.x, p.y);
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(s.x - 3.5, s.y - 3.5, 7, 7);
+      ctx.strokeRect(s.x - 3.5, s.y - 3.5, 7, 7);
+    }
   }
   if (x.insertLine) {
     const a = toScreen(cam, x.insertLine.x1, x.insertLine.y1);

@@ -8,6 +8,7 @@ import type { Op } from '@archa/schema';
 import { commit, exportNode, togglePanel, useStore } from '../lib/store';
 import { originOf, selectionBounds } from '../lib/geometry';
 import { cn, ColorField, IconButton, NumberField, Section, Segmented, Select } from './controls';
+import { CommentsPanel } from './CommentsPanel';
 
 const patchAll = (ids: string[], patch: Record<string, unknown>, label: string) =>
   commit(label, ids.map((id) => ({ op: 'update' as const, id, patch })));
@@ -17,11 +18,12 @@ export const RIGHT_WIDTH = 280;
 /* Right sidebar: collapses to zero width (Ctrl+Shift+\ or its header button); content keeps its width while animating. */
 export function RightPanel() {
   const open = useStore((s) => s.rightOpen);
+  const commenting = useStore((s) => s.tool === 'comment');
   return (
     <div aria-hidden={!open} style={{ width: open ? RIGHT_WIDTH + 8 : 0 }}
       className="flex shrink-0 justify-end overflow-hidden transition-[width] duration-200 ease-out">
       <aside style={{ width: RIGHT_WIDTH }} className={cn('flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-panel transition-opacity duration-150', !open && 'opacity-0')}>
-        <DesignPanel />
+        {commenting ? <CommentsPanel /> : <DesignPanel />}
       </aside>
     </div>
   );
@@ -60,7 +62,7 @@ function DesignPanel() {
             </Section>
             <Section title="Shortcuts">
               <dl className="grid grid-cols-[1fr_auto] gap-y-1.5 text-[11.5px] text-fg-muted">
-                {[['Frame / Rect / Ellipse / Text', 'F R O T'], ['Wrap selection in auto-layout', 'Shift+A'], ['Group into frame', 'Ctrl+Alt+G'], ['Duplicate', 'Ctrl+D'], ['Undo / Redo', 'Ctrl+Z / Ctrl+Shift+Z'], ['Zoom to fit', 'Shift+1'], ['Pan', 'Space + drag'], ['Deep select', 'Ctrl+click'], ['Toggle left / right sidebar', 'Ctrl+\\ / Ctrl+Shift+\\']].map(([a, b]) => (
+                {[['Frame / Rect / Ellipse / Text', 'F R O T'], ['Pen / Sticky / Web page / Comment', 'P S B C'], ['Move / Scale / Hand', 'V K H'], ['Find layer', 'Ctrl+F'], ['Wrap selection in auto-layout', 'Shift+A'], ['Group into frame', 'Ctrl+Alt+G'], ['Duplicate', 'Ctrl+D'], ['Undo / Redo', 'Ctrl+Z / Ctrl+Shift+Z'], ['Zoom to fit', 'Shift+1'], ['Pan', 'Space + drag'], ['Deep select', 'Ctrl+click'], ['Toggle left / right sidebar', 'Ctrl+\\ / Ctrl+Shift+\\']].map(([a, b]) => (
                   <div key={a} className="contents"><dt>{a}</dt><dd className="text-right font-mono text-[10.5px] text-fg-subtle">{b}</dd></div>
                 ))}
               </dl>
@@ -183,7 +185,9 @@ function NodeSections({ node: n }: { node: Node }) {
       <Section title="Appearance">
         <div className="grid grid-cols-2 gap-2">
           <NumberField label="Opacity" value={Math.round(n.opacity * 100)} min={0} max={100} suffix="%" onCommit={(v) => set({ opacity: v / 100 }, 'Opacity')} />
-          {(n.type === 'frame' || n.type === 'rect') && <NumberField label="Radius" value={n.cornerRadius} min={0} onCommit={(cornerRadius) => set({ cornerRadius }, 'Corner radius')} />}
+          {'cornerRadius' in n && <NumberField label="Radius" value={n.cornerRadius} min={0} onCommit={(cornerRadius) => set({ cornerRadius }, 'Corner radius')} />}
+          {n.type === 'polygon' && <NumberField label="Sides" value={n.sides} min={3} max={64} onCommit={(sides) => set({ sides: Math.round(sides) }, 'Polygon sides')} />}
+          {n.type === 'sticky' && <NumberField label="Text" value={n.fontSize} min={6} suffix="px" onCommit={(fontSize) => set({ fontSize }, 'Font size')} />}
         </div>
         {n.type === 'frame' && (
           <label className="mt-2 flex items-center gap-2 text-[12px] text-fg-muted">
@@ -193,7 +197,37 @@ function NodeSections({ node: n }: { node: Node }) {
       </Section>
 
       {n.type === 'text' && <TextSection node={n} set={set} />}
-      {'fills' in n && <PaintList title="Fill" items={n.fills} onChange={(fills) => set({ fills }, 'Fill')} make={(): Paint => ({ type: 'solid', color: hexToColor(n.type === 'text' ? '#111111' : '#d4d4d8'), visible: true })} />}
+      {n.type === 'embed' && (
+        <Section title="Web page">
+          <input key={n.id + n.url} defaultValue={n.url} spellCheck={false} placeholder="https://"
+            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== n.url) set({ url: /^https?:\/\//i.test(v) ? v : `https://${v}` }, 'Set web page URL'); }}
+            onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            className="h-8 w-full rounded-lg bg-panel-2 px-2 font-mono text-[11.5px]" />
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            {[['Desktop', 1440, 900], ['Tablet', 834, 1112], ['Phone', 390, 844]].map(([label, width, height]) => (
+              <button key={label} onClick={() => set({ width, height }, 'Resize web page')} className="h-7 rounded-lg bg-panel-2 text-[11.5px] text-fg-muted hover:bg-panel-3 hover:text-fg">{label}</button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-fg-subtle">Double-click the page to scroll and click inside it. Esc or a click on the canvas leaves it.</p>
+        </Section>
+      )}
+      {n.type === 'image' && (
+        <Section title="Image">
+          <Select title="Fit" value={n.fit} onChange={(fit) => set({ fit }, 'Image fit')}
+            options={[{ value: 'crop', label: 'Fill (crop)' }, { value: 'fit', label: 'Fit' }, { value: 'fill', label: 'Stretch' }]} />
+        </Section>
+      )}
+      {n.type === 'path' && (
+        <Section title="Vector">
+          <div className="grid grid-cols-2 gap-2">
+            <Select title="Line cap" value={n.lineCap} onChange={(lineCap) => set({ lineCap }, 'Line cap')}
+              options={[{ value: 'round', label: 'Round cap' }, { value: 'butt', label: 'Flat cap' }, { value: 'square', label: 'Square cap' }]} />
+            <Select title="Fill rule" value={n.fillRule} onChange={(fillRule) => set({ fillRule }, 'Fill rule')}
+              options={[{ value: 'nonzero', label: 'Non-zero' }, { value: 'evenodd', label: 'Even-odd' }]} />
+          </div>
+        </Section>
+      )}
+      {'fills' in n && <PaintList title="Fill" items={n.fills} onChange={(fills) => set({ fills }, 'Fill')} make={(): Paint => ({ type: 'solid', color: hexToColor(n.type === 'text' ? '#111111' : n.type === 'sticky' ? '#fde68a' : '#d4d4d8'), visible: true })} />}
       {'strokes' in n && <StrokeList items={n.strokes} onChange={(strokes) => set({ strokes }, 'Stroke')} />}
       {'effects' in n && <ShadowList items={n.effects} onChange={(effects) => set({ effects }, 'Effects')} />}
 

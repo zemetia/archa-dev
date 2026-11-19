@@ -3,7 +3,7 @@ import {
   applyOps, DocumentError, findEmptySpace, insertOpsFor, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, subtreeInput, syncInstanceOps,
   type ArchaDocument, type DocumentSession,
 } from '@archa/core';
-import { isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
+import { colorToHex, hexToColor, isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
 import type { ExecuteResult, TrailAction, TrailStep } from '@archa/protocol';
 import type { Connection, Workspace } from './workspace';
 
@@ -32,6 +32,9 @@ var instance = (component, parent, opts) => __call('instance', [component, paren
 var syncInstances = (component) => __call('syncInstances', [component]);
 var copy = (ref, parent, opts) => __call('copy', [ref, parent, opts || {}]);
 var fromLibrary = (ref, parent, opts) => __call('fromLibrary', [ref, parent, opts || {}]);
+var variables = () => __call('variables', []);
+var setVariable = (name, value) => __call('setVariable', [name, value]);
+var resolveComment = (id) => __call('resolveComment', [id]);
 var print = (...v) => __call('print', [v.map((x) => typeof x === 'string' ? x : JSON.stringify(x))]);
 var find = (visitor, opts) => {
   if (!opts || !opts.under) throw new Error('find() needs { under: <frame id or name> } — use get_state for the page overview');
@@ -162,7 +165,7 @@ export class AgentExecutor {
     switch (name) {
       case 'insert': {
         const [parent, input, index] = args as [string | undefined, NodeInput, number | undefined];
-        if (!input || typeof input !== 'object' || !input.type) throw new Error('insert(parent, node): node needs a type ("frame" | "rect" | "ellipse" | "text" | "group")');
+        if (!input || typeof input !== 'object' || !input.type) throw new Error('insert(parent, node): node needs a type ("frame" | "rect" | "ellipse" | "polygon" | "path" | "text" | "image" | "sticky" | "embed" | "group")');
         const parentId = parent ? ref(parent) : st.pageRoot;
         const { ops, rootId, created } = insertOpsFor(input, parentId, index ?? undefined);
         commit(ops);
@@ -283,6 +286,27 @@ export class AgentExecutor {
         for (const inst of list) { commit(syncInstanceOps(doc, inst.id)); st.changed.set(inst.id, inst.name); step('edit', inst.id); }
         return list.length;
       }
+      case 'variables':
+        return [...doc.variables.values()].map((v) => ({ name: v.name, type: v.type, value: v.type === 'color' ? colorToHex(v.value, true) : v.value }));
+      case 'setVariable': {
+        const [name, value] = args as [string, unknown];
+        if (!name) throw new Error('setVariable(name, value): name is required');
+        const prev = [...doc.variables.values()].find((v) => v.name === name);
+        const id = prev?.id ?? newId();
+        const variable = typeof value === 'number' ? { id, name, type: 'number' as const, value }
+          : typeof value === 'string' && /^#[0-9a-f]{3,8}$/i.test(value) ? { id, name, type: 'color' as const, value: hexToColor(value) }
+          : { id, name, type: 'string' as const, value: String(value) };
+        commit([{ op: 'setVariable', variable }]);
+        st.changed.set(`variable:${id}`, name);
+        return name;
+      }
+      case 'resolveComment': {
+        const c = doc.comments.get(String(args[0]));
+        if (!c) throw new Error(`No comment "${String(args[0])}" — ids are listed under "Open comments" in the state`);
+        commit([{ op: 'setComment', comment: { ...c, resolved: true } }]);
+        st.changed.set(`comment:${c.id}`, 'comment');
+        return null;
+      }
       case 'print':
         st.output.push((args[0] as string[]).join(' '));
         return null;
@@ -345,11 +369,35 @@ export function describeState(ws: Workspace, s: DocumentSession): string {
     `Top-level nodes (${top.length}):`,
     ...top.slice(0, 30).map((n) => `  - ${n.name} "${n.id}" ${n.type} at ${n.x},${n.y} size ${n.width}×${n.height}${isContainer(n) ? ` · ${n.children.length} children` : ''}`),
     ...(top.length > 30 ? [`  … +${top.length - 30} more`] : []),
+    ...describeVariables(doc),
+    ...describeComments(doc),
     ...describeComponents(doc),
     ...describeLibrary(ws),
     `Other open documents: ${ws.summaries().filter((d) => d.id !== s.id).map((d) => `${d.name} (${d.id})`).join(', ') || 'none'}`,
   ];
   return lines.join('\n');
+}
+
+function describeVariables(doc: ArchaDocument): string[] {
+  const vars = [...doc.variables.values()];
+  if (!vars.length) return [];
+  return [
+    `Variables (${vars.length}) — the document's design tokens; use these values instead of inventing new ones:`,
+    ...vars.slice(0, 60).map((v) => `  - ${v.name} (${v.type}) = ${v.type === 'color' ? colorToHex(v.value, true) : JSON.stringify(v.value)}`),
+  ];
+}
+
+/** Open review comments: what the person wants changed, and where. */
+function describeComments(doc: ArchaDocument): string[] {
+  const open = [...doc.comments.values()].filter((c) => !c.resolved);
+  if (!open.length) return [];
+  return [
+    `Open comments (${open.length}) — resolveComment(id) once you have addressed one:`,
+    ...open.slice(0, 30).map((c) => {
+      const n = c.nodeId ? doc.get(c.nodeId) : undefined;
+      return `  - ${c.id} ${n ? `on ${n.name} "${n.id}"` : `at ${Math.round(c.x)},${Math.round(c.y)}`}: ${c.messages.map((m) => `${m.author}: ${m.text}`).join(' / ').slice(0, 300)}`;
+    }),
+  ];
 }
 
 /** Components block of the state text: agents must reuse these instead of rebuilding them (DESIGN_SYSTEM/02 v1). */

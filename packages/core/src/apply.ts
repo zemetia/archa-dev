@@ -1,4 +1,4 @@
-import { isContainer, nodeSchema, type Node, type Op, type InsertOp } from '@archa/schema';
+import { commentSchema, isContainer, nodeSchema, variableSchema, type Node, type Op, type InsertOp } from '@archa/schema';
 import { ArchaDocument, DocumentError } from './document';
 import { runLayout } from './layout';
 
@@ -77,6 +77,36 @@ function applyOne(doc: ArchaDocument, op: Op, touched: Set<string>): Op[] {
       doc.nodes.set(op.id, { ...node, parentId: parent.id });
       touched.add(op.id).add(oldParent.id).add(parent.id);
       return [{ op: 'move', id: op.id, parentId: oldParent.id, index: oldIndex }];
+    }
+    case 'setVariable': {
+      const v = variableSchema.parse(op.variable);
+      const clash = [...doc.variables.values()].find((x) => x.name === v.name && x.id !== v.id);
+      if (clash) throw new DocumentError('VALIDATION', `variable "${v.name}" already exists`);
+      const prev = doc.variables.get(v.id);
+      doc.variables.set(v.id, v);
+      touched.add(`variable:${v.id}`);
+      return [prev ? { op: 'setVariable', variable: prev } : { op: 'deleteVariable', id: v.id }];
+    }
+    case 'deleteVariable': {
+      const prev = doc.variables.get(op.id);
+      if (!prev) throw new DocumentError('NOT_FOUND', `Variable "${op.id}" does not exist`);
+      doc.variables.delete(op.id);
+      touched.add(`variable:${op.id}`);
+      return [{ op: 'setVariable', variable: prev }];
+    }
+    case 'setComment': {
+      const c = commentSchema.parse(op.comment);
+      const prev = doc.comments.get(c.id);
+      doc.comments.set(c.id, c);
+      touched.add(`comment:${c.id}`);
+      return [prev ? { op: 'setComment', comment: prev } : { op: 'deleteComment', id: c.id }];
+    }
+    case 'deleteComment': {
+      const prev = doc.comments.get(op.id);
+      if (!prev) throw new DocumentError('NOT_FOUND', `Comment "${op.id}" does not exist`);
+      doc.comments.delete(op.id);
+      touched.add(`comment:${op.id}`);
+      return [{ op: 'setComment', comment: prev }];
     }
     case 'delete': {
       const node = doc.require(op.id);

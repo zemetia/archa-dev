@@ -1,6 +1,7 @@
 import type { ArchaDocument } from '@archa/core';
 import { FrameBitmapCache, zoomBucket } from './cache';
 import { drawNode } from './draw';
+import { preloadImages } from './images';
 
 export type Camera = { x: number; y: number; zoom: number };
 
@@ -35,6 +36,7 @@ export function drawPage(
 /** Renders one node to a PNG data URL (agent screenshots, export). */
 export async function renderNodePng(doc: ArchaDocument, nodeId: string, scale: number): Promise<string> {
   const node = doc.require(nodeId);
+  await preloadImages([...doc.walk(nodeId)].flatMap((n) => (n.type === 'image' ? [n.src] : [])));
   const w = Math.max(1, Math.round(node.width * scale));
   const h = Math.max(1, Math.round(node.height * scale));
   const canvas = new OffscreenCanvas(w, h);

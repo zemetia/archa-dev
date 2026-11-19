@@ -1,6 +1,6 @@
 import {
   FORMAT_VERSION, isContainer, newId, nodeSchema,
-  type DocumentData, type Node, type NodeId, type PageRef, type ContainerNode,
+  type Comment, type DocumentData, type Node, type NodeId, type PageRef, type ContainerNode, type Variable,
 } from '@archa/schema';
 
 export type Rect = { x: number; y: number; width: number; height: number };
@@ -10,12 +10,17 @@ export class ArchaDocument {
   meta: DocumentData['meta'];
   pages: PageRef[];
   readonly nodes = new Map<NodeId, Node>();
+  /** Insertion order is the display order. */
+  readonly variables = new Map<string, Variable>();
+  readonly comments = new Map<string, Comment>();
   revision = 0;
 
   constructor(data: DocumentData, revision = 0) {
     this.meta = { ...data.meta };
     this.pages = data.pages.map((p) => ({ ...p }));
     for (const [id, n] of Object.entries(data.nodes)) this.nodes.set(id, structuredClone(n));
+    for (const v of data.variables ?? []) this.variables.set(v.id, structuredClone(v));
+    for (const c of data.comments ?? []) this.comments.set(c.id, structuredClone(c));
     this.revision = revision;
   }
 
@@ -93,7 +98,13 @@ export class ArchaDocument {
   }
 
   toData(): DocumentData {
-    return { meta: { ...this.meta }, pages: this.pages.map((p) => ({ ...p })), nodes: Object.fromEntries([...this.nodes].map(([k, v]) => [k, structuredClone(v)])) };
+    return {
+      meta: { ...this.meta },
+      pages: this.pages.map((p) => ({ ...p })),
+      nodes: Object.fromEntries([...this.nodes].map(([k, v]) => [k, structuredClone(v)])),
+      variables: [...this.variables.values()].map((v) => structuredClone(v)),
+      comments: [...this.comments.values()].map((c) => structuredClone(c)),
+    };
   }
 
   clone(): ArchaDocument {

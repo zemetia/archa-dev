@@ -3,3 +3,4 @@ export * from './nodes';
 export * from './ops';
 export * from './document';
 export * from './ids';
+export * from './variables';

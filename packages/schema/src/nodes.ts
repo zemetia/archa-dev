@@ -90,8 +90,45 @@ export const textNodeSchema = z.object({
   textSizing: z.enum(['fixed', 'auto-width', 'auto-height']).default('auto-width'),
 });
 
+export const polygonNodeSchema = z.object({ ...base, ...visual, type: z.literal('polygon'), sides: z.number().int().min(3).max(64).default(3).describe('Regular polygon inscribed in the box; 3 = triangle') });
+
+const viewBoxSchema = z.object({ x: z.number(), y: z.number(), width: z.number().min(0), height: z.number().min(0) });
+
+export const pathNodeSchema = z.object({
+  ...base, ...visual,
+  type: z.literal('path'),
+  d: z.string().describe('SVG path data, in viewBox coordinates'),
+  viewBox: viewBoxSchema.describe('Box of `d` that is stretched onto the node size'),
+  fillRule: z.enum(['nonzero', 'evenodd']).default('nonzero'),
+  lineCap: z.enum(['butt', 'round', 'square']).default('round'),
+  lineJoin: z.enum(['miter', 'round', 'bevel']).default('round'),
+});
+
+export const imageNodeSchema = z.object({
+  ...base, ...visual,
+  type: z.literal('image'),
+  src: z.string().describe('data: URL (png, jpeg, webp, gif or svg)'),
+  fit: z.enum(['fill', 'fit', 'crop']).default('crop').describe('fill: stretch · fit: contain · crop: cover'),
+  cornerRadius: z.number().min(0).default(0),
+});
+
+export const stickyNodeSchema = z.object({
+  ...base, ...visual,
+  type: z.literal('sticky'),
+  text: z.string().default(''),
+  fontSize: z.number().min(1).default(16),
+});
+
+export const embedNodeSchema = z.object({
+  ...base,
+  type: z.literal('embed'),
+  url: z.string().default('').describe('Web page shown live on the canvas'),
+  cornerRadius: z.number().min(0).default(12),
+});
+
 export const nodeSchema = z.discriminatedUnion('type', [
   pageNodeSchema, frameNodeSchema, groupNodeSchema, rectNodeSchema, ellipseNodeSchema, textNodeSchema,
+  polygonNodeSchema, pathNodeSchema, imageNodeSchema, stickyNodeSchema, embedNodeSchema,
 ]);
 
 export type PageNode = z.infer<typeof pageNodeSchema>;
@@ -100,14 +137,19 @@ export type GroupNode = z.infer<typeof groupNodeSchema>;
 export type RectNode = z.infer<typeof rectNodeSchema>;
 export type EllipseNode = z.infer<typeof ellipseNodeSchema>;
 export type TextNode = z.infer<typeof textNodeSchema>;
+export type PolygonNode = z.infer<typeof polygonNodeSchema>;
+export type PathNode = z.infer<typeof pathNodeSchema>;
+export type ImageNode = z.infer<typeof imageNodeSchema>;
+export type StickyNode = z.infer<typeof stickyNodeSchema>;
+export type EmbedNode = z.infer<typeof embedNodeSchema>;
 export type Node = z.infer<typeof nodeSchema>;
 export type NodeType = Node['type'];
 export type ContainerNode = PageNode | FrameNode | GroupNode;
 
 export const CONTAINER_TYPES: ReadonlySet<NodeType> = new Set(['page', 'frame', 'group']);
 export const isContainer = (n: Node): n is ContainerNode => CONTAINER_TYPES.has(n.type);
-export const hasVisual = (n: Node): n is FrameNode | RectNode | EllipseNode | TextNode =>
-  n.type === 'frame' || n.type === 'rect' || n.type === 'ellipse' || n.type === 'text';
+export type VisualNode = Extract<Node, { fills: Paint[] }>;
+export const hasVisual = (n: Node): n is VisualNode => 'fills' in n;
 
 /** Input accepted when creating a node: everything except id/parentId is optional, children may be inline. */
 export type NodeInput = Partial<Omit<Node, 'children'>> & { type: Exclude<NodeType, 'page'>; children?: NodeInput[] } & Record<string, unknown>;

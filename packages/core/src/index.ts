@@ -7,3 +7,4 @@ export * from './session';
 export * from './lint';
 export * from './space';
 export * from './components';
+export * from './shapes';

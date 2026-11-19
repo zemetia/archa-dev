@@ -33,6 +33,9 @@ MVP built on branch `zemetia/mvp-app`. Covers phase 0 except lint/CI, phase 1, m
 | Approximate text metrics in the core | The core host has no DOM | Renderer-reported metrics or CanvasKit paragraph in Node |
 | No headless core for `archa mcp` | Needs the app open | Phase 5 follow-up |
 | No ESLint / Turbo / CI yet | Time | Phase 0 completion |
+| Images stored inline in the document (data URLs) | Ship image import before the asset store | Phase 3: `assets/<sha256>` + migration |
+| Variables: one theme, not yet bindable to properties | Owner asked for the table first | Phase 7: theme axes, aliases, bindings |
+| Embed pages are drawn above the canvas | A live `<webview>` cannot be composited into Canvas2D | Snapshot-under-overlay or CanvasKit layer |
 
 ## Suggested first milestone (MVP)
 

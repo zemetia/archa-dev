@@ -3,7 +3,7 @@
 export const EXECUTE_API_DOC = `Run a JavaScript snippet against the open ArchaDev document. The whole snippet is ONE transaction: if anything throws, nothing changes.
 
 API (ids are strings; any ref may be a node id or a unique node name):
-  insert(parentRef | null, node, index?) -> id        null = the page. node = { type: "frame"|"rect"|"ellipse"|"text"|"group", name, ...props, children?: [node...] }
+  insert(parentRef | null, node, index?) -> id        null = the page. node = { type: "frame"|"rect"|"ellipse"|"polygon"|"path"|"text"|"image"|"sticky"|"embed"|"group", name, ...props, children?: [node...] }
   update(ref, patch)                                  e.g. update(card, { fills: ["#fff"], cornerRadius: 12 })
   move(ref, parentRef, index?)   remove(ref)
   copy(ref, parentRef?, { x?, y?, index?, name? }) -> id   unlinked copy of a subtree; default: next to the source
@@ -15,13 +15,18 @@ API (ids are strings; any ref may be a node id or a unique node name):
   instance(componentRef, parentRef | null, { x?, y?, index?, name? }) -> id   linked copy of a component; restyle via the main, not the copy
   syncInstances(componentRef) -> count               after editing a main, push the change to every instance
   fromLibrary("library:id", parentRef | null, { x?, y? }) -> id   place a shared library component (first use adds a local main, then instances)
+  variables() -> [{ name, type, value }]              the document's tokens (colours as hex)
+  setVariable(name, value) -> name                   create/update a token: "#hex" = colour, number = number, else string
+  resolveComment(id)                                 mark a review comment done after you changed what it asked
   screenshot(ref, { scale? })                        attach an image of the node to the reply — end each building call with one
   print(...values)
 
 Node props: name (always set one), x, y, width, height, visible, opacity, sizing: { horizontal, vertical } each "fixed"|"hug"|"fill" (shorthand sizing: "hug"),
   fills: ["#hex" | { color: "#hex" }], strokes: ["#hex" | { color, width, align: "inside"|"center"|"outside" }], effects: [{ color, x, y, blur }],
   frame: layout "none"|"row"|"column", gap, padding (number or {top,right,bottom,left}), align "start"|"center"|"end", justify "start"|"center"|"end"|"space-between", clip, cornerRadius
-  rect: cornerRadius · text: text, fontFamily, fontSize, fontWeight (100–900), lineHeight (multiplier), letterSpacing, textAlign, textSizing "auto-width"|"auto-height"|"fixed"
+  rect: cornerRadius · polygon: sides (3+) · path: d (SVG path data), viewBox {x,y,width,height} stretched to width/height, fillRule, lineCap, lineJoin
+  image: src (data: URL), fit "crop"|"fit"|"fill", cornerRadius · sticky: text, fontSize (a note on the canvas, not part of a screen) · embed: url (live web page on the canvas, for reference)
+  text: text, fontFamily, fontSize, fontWeight (100–900), lineHeight (multiplier), letterSpacing, textAlign, textSizing "auto-width"|"auto-height"|"fixed"
 Layout rules: no percentages, no margins. Inside an auto-layout frame x/y are ignored. "fill" only works inside an auto-layout parent. Text has NO colour unless you give it fills.
 Globals you assign persist between calls (use plain assignment, not const/let, for values you want to keep).
 On failure you get an editId: fix with execute({ editId, edits: [{ find, replace }] }) instead of resending the snippet.`;

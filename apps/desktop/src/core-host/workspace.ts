@@ -1,4 +1,6 @@
 import { readFile, rename, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { userInfo } from 'node:os';
 import { basename } from 'node:path';
 import { ArchaDocument, DocumentError, DocumentSession, findEmptySpace, libraryInsertOps, subtreeHash } from '@archa/core';
 import { decodeArcha, encodeArcha, exportSvg } from '@archa/formats';
@@ -286,6 +288,7 @@ export class Workspace {
       const m = mcpCommand();
       return {
         version: '0.2.4',
+        user: userName(),
         cliPath: cliPath(),
         mcpCommand: [m.command, ...m.args],
         agents: ADAPTERS.map((a) => ({ id: a.id, label: a.label, available: !!resolveCli(a.bin) && existsSync(cliPath()) })),
@@ -368,4 +371,19 @@ export function resolveRef(s: DocumentSession, ref: string): string {
   if (byName.length === 1) return byName[0]!.id;
   if (byName.length > 1) throw new DocumentError('VALIDATION', `Name "${ref}" matches ${byName.length} nodes — use an id`);
   throw new DocumentError('NOT_FOUND', `No node with id or name "${ref}"`);
+}
+
+let cachedUser: string | null = null;
+/** Comment author name: git's user.name when set, else the OS account. */
+function userName(): string {
+  if (cachedUser !== null) return cachedUser;
+  try {
+    cachedUser = execFileSync('git', ['config', '--global', 'user.name'], { encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim();
+  } catch {
+    cachedUser = '';
+  }
+  if (!cachedUser) {
+    try { cachedUser = userInfo().username; } catch { cachedUser = 'You'; }
+  }
+  return cachedUser;
 }

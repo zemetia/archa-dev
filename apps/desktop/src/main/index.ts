@@ -80,6 +80,31 @@ function connectWindow(win: BrowserWindow) {
   win.webContents.postMessage('core-port', null, [port2]);
 }
 
+/**
+ * Canvas web pages (embed nodes) load arbitrary sites: no preload, no Node, sandboxed, their own
+ * persistent session, http(s) only. Popups open in the system browser instead of new windows.
+ */
+function guardWebviews(win: BrowserWindow) {
+  win.webContents.on('will-attach-webview', (e, prefs, params) => {
+    delete prefs.preload;
+    prefs.nodeIntegration = false;
+    prefs.nodeIntegrationInSubFrames = false;
+    prefs.contextIsolation = true;
+    prefs.sandbox = true;
+    prefs.webSecurity = true;
+    params.partition = 'persist:archa-embed';
+    const src = params.src ?? '';
+    if (!/^https?:\/\//i.test(src) && src !== 'about:blank') e.preventDefault();
+  });
+  win.webContents.on('did-attach-webview', (_e, guest) => {
+    guest.setWindowOpenHandler(({ url }) => {
+      if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+      return { action: 'deny' };
+    });
+    guest.on('will-navigate', (ev, url) => { if (!/^https?:\/\//i.test(url)) ev.preventDefault(); });
+  });
+}
+
 function createWindow(intent: OpenIntent = { kind: 'none' }) {
   const win = new BrowserWindow({
     width: 1600,
@@ -96,8 +121,11 @@ function createWindow(intent: OpenIntent = { kind: 'none' }) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Web-page nodes on the canvas are <webview> guests; will-attach-webview below locks them down.
+      webviewTag: true,
     },
   });
+  guardWebviews(win);
   windows.add(win);
   if (windows.size === 1) browser.setHost(win);
   win.on('closed', () => {
