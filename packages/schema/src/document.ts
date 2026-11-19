@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import type { Node } from './nodes';
+import type { Comment, Variable } from './variables';
 
-export const FORMAT_VERSION = 1;
+/** 2: polygon, path, image, sticky and embed nodes; document variables and comments. */
+export const FORMAT_VERSION = 2;
 
 export const pageRefSchema = z.object({ id: z.string(), name: z.string(), rootId: z.string() });
 export type PageRef = z.infer<typeof pageRefSchema>;
@@ -19,6 +21,8 @@ export type DocumentData = {
   meta: DocumentMeta;
   pages: PageRef[];
   nodes: Record<string, Node>;
+  variables?: Variable[];
+  comments?: Comment[];
 };
 
 export const archaManifestSchema = z.object({

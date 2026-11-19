@@ -1,5 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
-import { archaManifestSchema, FORMAT_VERSION, nodeSchema, type DocumentData, type Node } from '@archa/schema';
+import { archaManifestSchema, commentSchema, FORMAT_VERSION, nodeSchema, variableSchema, type DocumentData, type Node } from '@archa/schema';
+import { runMigrations, type RawArcha } from './migrations/archa';
 
 export class FormatError extends Error {
   constructor(message: string) {
@@ -15,7 +16,7 @@ export function encodeArcha(data: DocumentData): Uint8Array {
   const pages = data.pages.map((p) => ({ ...p, entry: `pages/${p.id}.json` }));
   const files: Zippable = {
     'manifest.json': [json({ format: 'archa', formatVersion: FORMAT_VERSION, id: data.meta.id, name: data.meta.name, createdWith: data.meta.createdWith, pages }), { level: 6 }],
-    'document.json': [json({ meta: data.meta }), { level: 6 }],
+    'document.json': [json({ meta: { ...data.meta, formatVersion: FORMAT_VERSION }, variables: data.variables ?? [], comments: data.comments ?? [] }), { level: 6 }],
   };
   for (const p of pages) {
     const ids = collectSubtree(data.nodes, p.rootId);
@@ -42,19 +43,29 @@ export function decodeArcha(bytes: Uint8Array): DocumentData {
   if (!manifest.success) throw new FormatError(`Invalid manifest.json: ${manifest.error.issues[0]?.message}`);
   const m = manifest.data;
   if (m.formatVersion > FORMAT_VERSION) throw new FormatError(`File format ${m.formatVersion} is newer than this app (${FORMAT_VERSION}). Update ArchaDev.`);
+  let raw: RawArcha = { manifest: m, document: (read('document.json') ?? {}) as Record<string, unknown>, pages: Object.fromEntries(m.pages.map((p) => [p.entry, read(p.entry)])) };
+  if (m.formatVersion < FORMAT_VERSION) raw = runMigrations(raw, m.formatVersion, FORMAT_VERSION);
   const nodes: Record<string, Node> = {};
   for (const p of m.pages) {
-    const page = read(p.entry) as { nodes: Record<string, unknown> };
+    const page = raw.pages[p.entry] as { nodes: Record<string, unknown> };
     for (const [id, raw] of Object.entries(page.nodes)) {
       const parsed = nodeSchema.safeParse(raw);
       if (!parsed.success) throw new FormatError(`Node ${id} in ${p.entry} is invalid: ${parsed.error.issues[0]?.path.join('.')} ${parsed.error.issues[0]?.message}`);
       nodes[id] = parsed.data;
     }
   }
+  const parseList = <T>(key: string, schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ message: string }> } } }): T[] =>
+    ((raw.document[key] ?? []) as unknown[]).map((v, i) => {
+      const r = schema.safeParse(v);
+      if (!r.success) throw new FormatError(`document.json ${key}[${i}] is invalid: ${r.error.issues[0]?.message}`);
+      return r.data;
+    });
   return {
     meta: { id: m.id, name: m.name, formatVersion: FORMAT_VERSION, createdWith: m.createdWith },
     pages: m.pages.map(({ id, name, rootId }) => ({ id, name, rootId })),
     nodes,
+    variables: parseList('variables', variableSchema),
+    comments: parseList('comments', commentSchema),
   };
 }
 

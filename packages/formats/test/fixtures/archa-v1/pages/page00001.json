@@ -1,0 +1,8 @@
+{
+  "rootId": "root000001",
+  "nodes": {
+    "root000001": { "id": "root000001", "type": "page", "name": "Page 1", "parentId": null, "children": ["frame00001"] },
+    "frame00001": { "id": "frame00001", "type": "frame", "name": "Card", "parentId": "root000001", "x": 0, "y": 0, "width": 320, "height": 200, "children": [],
+      "fills": [{ "type": "solid", "color": { "l": 1, "c": 0, "h": 0, "a": 1 }, "visible": true }] }
+  }
+}

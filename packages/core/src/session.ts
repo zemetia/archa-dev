@@ -95,7 +95,12 @@ export class DocumentSession {
   /** Rebase rule: a stale transaction is accepted when none of the nodes it touches changed since its base. */
   private assertRebaseable(txn: Omit<Transaction, 'id'>) {
     for (const op of txn.ops) {
-      const id = op.op === 'insert' ? op.parentId : op.id;
+      const id = op.op === 'insert' ? op.parentId
+        : op.op === 'setVariable' ? `variable:${op.variable.id}`
+        : op.op === 'deleteVariable' ? `variable:${op.id}`
+        : op.op === 'setComment' ? `comment:${op.comment.id}`
+        : op.op === 'deleteComment' ? `comment:${op.id}`
+        : op.id;
       const changed = this.lastChanged.get(id) ?? 0;
       if (changed > txn.baseRevision && op.op !== 'insert') {
         throw new DocumentError('STALE_REVISION', `"${id}" changed at revision ${changed}, after base ${txn.baseRevision}`);

@@ -1,5 +1,6 @@
-import { colorToCss, isContainer, type Node, type TextNode } from '@archa/schema';
-import type { ArchaDocument } from '@archa/core';
+import { colorToCss, isContainer, type EmbedNode, type ImageNode, type Node, type PathNode, type StickyNode, type TextNode, type VisualNode } from '@archa/schema';
+import { polygonPoints, viewBoxMatrix, type ArchaDocument } from '@archa/core';
+import { imageFor } from './images';
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -39,6 +40,29 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
     case 'text':
       drawText(ctx, node);
       break;
+    case 'polygon': {
+      const pts = polygonPoints(node.sides, node.width, node.height);
+      shape(ctx, node, () => {
+        ctx.beginPath();
+        pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+        ctx.closePath();
+      });
+      break;
+    }
+    case 'path': {
+      const p = pathOf(node);
+      if (p) shape(ctx, node, () => p);
+      break;
+    }
+    case 'image':
+      drawImageNode(ctx, node);
+      break;
+    case 'sticky':
+      drawSticky(ctx, node);
+      break;
+    case 'embed':
+      drawEmbed(ctx, node);
+      break;
   }
   ctx.restore();
 }
@@ -51,7 +75,41 @@ function drawChildren(ctx: Ctx, doc: ArchaDocument, node: Node) {
   }
 }
 
-function shape(ctx: Ctx, node: Extract<Node, { fills: unknown }>, path: () => void) {
+/** `path` either builds the current path or returns a Path2D. Phase lets images sit between fill and stroke. */
+function shape(ctx: Ctx, node: VisualNode, path: () => Path2D | void, phase: 'all' | 'fill' | 'stroke' = 'all') {
+  const rule = node.type === 'path' ? node.fillRule : 'nonzero';
+  const fill = (p: Path2D | void) => (p ? ctx.fill(p, rule) : ctx.fill(rule));
+  const stroke = (p: Path2D | void) => (p ? ctx.stroke(p) : ctx.stroke());
+  const clip = (p: Path2D | void) => (p ? ctx.clip(p, rule) : ctx.clip(rule));
+  if (phase !== 'stroke') paintFills(ctx, node, path, fill);
+  if (phase === 'fill') return;
+  for (const s of node.strokes) {
+    if (!s.visible || s.width <= 0) continue;
+    ctx.save();
+    const p = path();
+    ctx.strokeStyle = colorToCss(s.color);
+    if (node.type === 'path') { ctx.lineCap = node.lineCap; ctx.lineJoin = node.lineJoin; }
+    // Vector paths are often open and have no inside: their strokes are always centred.
+    if (node.type === 'path' || s.align === 'center') {
+      ctx.lineWidth = s.width;
+      stroke(p);
+    } else if (s.align === 'inside') {
+      clip(p);
+      const p2 = path();
+      ctx.lineWidth = s.width * 2;
+      stroke(p2);
+    } else {
+      ctx.lineWidth = s.width * 2;
+      stroke(p);
+      const p2 = path();
+      ctx.globalCompositeOperation = 'destination-out';
+      fill(p2);
+    }
+    ctx.restore();
+  }
+}
+
+function paintFills(ctx: Ctx, node: VisualNode, path: () => Path2D | void, fill: (p: Path2D | void) => void) {
   for (const fx of node.effects) {
     if (!fx.visible) continue;
     ctx.save();
@@ -59,39 +117,120 @@ function shape(ctx: Ctx, node: Extract<Node, { fills: unknown }>, path: () => vo
     ctx.shadowBlur = fx.blur;
     ctx.shadowOffsetX = fx.x;
     ctx.shadowOffsetY = fx.y;
-    path();
-    ctx.fillStyle = node.fills.find((f) => f.visible) ? colorToCss(node.fills.find((f) => f.visible)!.color) : 'rgba(0,0,0,1)';
-    ctx.fill();
+    const p = path();
+    const solid = node.fills.find((f) => f.visible);
+    ctx.fillStyle = solid ? colorToCss(solid.color) : 'rgba(0,0,0,1)';
+    fill(p);
     ctx.restore();
   }
   for (const f of node.fills) {
     if (!f.visible) continue;
-    path();
+    const p = path();
     ctx.fillStyle = colorToCss(f.color);
-    ctx.fill();
+    fill(p);
   }
-  for (const s of node.strokes) {
-    if (!s.visible || s.width <= 0) continue;
-    ctx.save();
-    path();
-    ctx.strokeStyle = colorToCss(s.color);
-    if (s.align === 'center') {
-      ctx.lineWidth = s.width;
-      ctx.stroke();
-    } else if (s.align === 'inside') {
-      ctx.clip();
-      path();
-      ctx.lineWidth = s.width * 2;
-      ctx.stroke();
-    } else {
-      ctx.lineWidth = s.width * 2;
-      ctx.stroke();
-      path();
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.fill();
+}
+
+const pathCache = new Map<string, Path2D>();
+
+/** Path2D of a vector node in its own box (viewBox stretched to width × height). */
+export function pathOf(n: PathNode): Path2D | null {
+  if (typeof Path2D === 'undefined' || !n.d) return null;
+  const key = `${n.d}|${n.viewBox.x},${n.viewBox.y},${n.viewBox.width},${n.viewBox.height}|${n.width}x${n.height}`;
+  let p = pathCache.get(key);
+  if (!p) {
+    p = new Path2D();
+    try {
+      p.addPath(new Path2D(n.d), new DOMMatrix(viewBoxMatrix(n.viewBox, n.width, n.height)));
+    } catch {
+      return null;
     }
-    ctx.restore();
+    if (pathCache.size > 2000) pathCache.clear();
+    pathCache.set(key, p);
   }
+  return p;
+}
+
+function drawImageNode(ctx: Ctx, n: ImageNode) {
+  const r = Math.min(n.cornerRadius, n.width / 2, n.height / 2);
+  const box = () => roundRect(ctx, 0, 0, n.width, n.height, r);
+  shape(ctx, n, box, 'fill');
+  ctx.save();
+  box();
+  ctx.clip();
+  const img = imageFor(n.src);
+  if (img && img.naturalWidth && img.naturalHeight) {
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    if (n.fit === 'fill') ctx.drawImage(img, 0, 0, n.width, n.height);
+    else {
+      const s = n.fit === 'fit' ? Math.min(n.width / iw, n.height / ih) : Math.max(n.width / iw, n.height / ih);
+      const w = iw * s, h = ih * s;
+      ctx.drawImage(img, (n.width - w) / 2, (n.height - h) / 2, w, h);
+    }
+  } else {
+    ctx.fillStyle = '#e4e4e7';
+    ctx.fillRect(0, 0, n.width, n.height);
+  }
+  ctx.restore();
+  shape(ctx, n, box, 'stroke');
+}
+
+export const STICKY_PADDING = 16;
+export const STICKY_LINE = 1.35;
+export const stickyFont = (n: StickyNode) => `500 ${n.fontSize}px Inter, "Segoe UI", system-ui, sans-serif`;
+
+function drawSticky(ctx: Ctx, n: StickyNode) {
+  shape(ctx, n, () => roundRect(ctx, 0, 0, n.width, n.height, 4));
+  ctx.save();
+  roundRect(ctx, 0, 0, n.width, n.height, 4);
+  ctx.clip();
+  ctx.font = stickyFont(n);
+  ctx.fillStyle = '#1f1f23';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  const lh = n.fontSize * STICKY_LINE;
+  wrapText(ctx, n.text, n.width - STICKY_PADDING * 2).forEach((line, i) => ctx.fillText(line, STICKY_PADDING, STICKY_PADDING + lh * i + lh / 2));
+  ctx.restore();
+}
+
+/** Placeholder card; the app shows the live page over it (embed layer). Exports and screenshots keep this card. */
+function drawEmbed(ctx: Ctx, n: EmbedNode) {
+  const r = Math.min(n.cornerRadius, n.width / 2, n.height / 2);
+  ctx.save();
+  roundRect(ctx, 0, 0, n.width, n.height, r);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.clip();
+  ctx.fillStyle = '#f4f4f5';
+  ctx.fillRect(0, 0, n.width, 36);
+  ctx.fillStyle = '#e4e4e7';
+  ctx.fillRect(0, 36, n.width, 1);
+  ctx.font = '500 13px Inter, "Segoe UI", system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#52525b';
+  ctx.fillText(n.url || 'No URL', 14, 18, Math.max(1, n.width - 28));
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#a1a1aa';
+  ctx.fillText(n.url ? 'Live web page' : 'Set a URL in the design panel', n.width / 2, 36 + (n.height - 36) / 2, Math.max(1, n.width - 28));
+  ctx.restore();
+}
+
+/** Greedy word wrap; hard line breaks are kept. */
+export function wrapText(ctx: Ctx, text: string, width: number): string[] {
+  const out: string[] = [];
+  for (const para of text.split('\n')) {
+    let line = '';
+    for (const w of para.split(/(\s+)/)) {
+      const next = line + w;
+      if (line && ctx.measureText(next).width > width) {
+        out.push(line.trimEnd());
+        line = w.trimStart();
+      } else line = next;
+    }
+    out.push(line);
+  }
+  return out;
 }
 
 export function roundRect(ctx: Ctx, x: number, y: number, w: number, h: number, r: number) {

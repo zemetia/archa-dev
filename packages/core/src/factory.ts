@@ -20,7 +20,7 @@ export function insertOpsFor(input: NodeInput, parentId: string, index?: number)
   return { ops, rootId, created };
 }
 
-const DEFAULT_NAMES: Record<string, string> = { frame: 'Frame', rect: 'Rectangle', ellipse: 'Ellipse', text: 'Text', group: 'Group' };
+const DEFAULT_NAMES: Record<string, string> = { frame: 'Frame', rect: 'Rectangle', ellipse: 'Ellipse', text: 'Text', group: 'Group', polygon: 'Polygon', path: 'Vector', image: 'Image', sticky: 'Sticky note', embed: 'Web page' };
 
 /** Colour fields accept `"#ff0000"` strings; paints accept a bare colour string. */
 export function normaliseInput(input: Record<string, unknown>): Record<string, unknown> {
