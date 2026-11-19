@@ -15,11 +15,11 @@
 | `move` | `{ id, parentId, index }` | `move` back |
 | `delete` | `{ id }` (subtree) | `insert` of the saved subtree |
 | `reorder` | `{ id, index }` | `reorder` back |
-| `setVariables` | `{ upserts, removes }` | reverse set |
+| `setVariable` / `deleteVariable` | `{ variable }` upsert by id / `{ id }`; names unique | previous variable / delete |
 | `createComponent` | `{ fromId }` | `detachComponent` |
 | `setOverride` | `{ instanceId, path, patch }` | previous override |
 | `asset.add` | `{ hash, mime }` | no-op (assets are ref-counted) |
-| `comment.*` | thread ops | reverse |
+| `setComment` / `deleteComment` | `{ comment }` whole thread, upsert by id / `{ id }` | previous thread / delete |
 
 Child order uses **fractional indexing** keys internally; `index` in ops is converted on apply.
 

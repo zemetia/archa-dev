@@ -99,7 +99,7 @@ function Group({ item, active, items, current, open, onOpen }: { item: Item; act
         <ChevronDown size={11} />
       </button>
       {open && (
-        <div role="menu" className="absolute left-full top-0 z-50 ml-3 w-[236px] rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/50">
+        <div role="menu" className="absolute left-full top-0 z-50 ml-3 w-[264px] rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/50">
           {items.map((it) => (
             <MenuRow key={it.id} checked={!!it.tool && it.tool === current} onClick={() => choose(it)} icon={<it.icon size={15} />} label={it.label}
               hint={it.soon ? 'Soon' : it.key} dim={it.soon} />

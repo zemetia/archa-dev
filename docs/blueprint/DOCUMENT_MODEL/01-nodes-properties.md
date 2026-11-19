@@ -43,6 +43,8 @@ Flat map + parent pointers: O(1) lookup, cheap moves, cache keys stable when a n
 
 Images are fills (`{ type: 'image', asset, fit }`), not a node type.
 
+**Built today (`formatVersion` 2):** `page`, `frame`, `group`, `rect`, `ellipse`, `text`, plus `polygon` (`sides`, stretched to the box), `path` (`d` + `viewBox` stretched to width × height, `fillRule`, `lineCap`, `lineJoin`; strokes always centred), `image` (`src` data URL until the asset store lands, `fit` crop/fit/fill), `sticky` (`text`, `fontSize`) and `embed` (`url`; the live page of a code frame without the code link). Document-level, not nodes: `variables` and `comments` (`packages/schema/src/variables.ts`).
+
 ---
 
 ## Base Properties (every node)

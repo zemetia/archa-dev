@@ -42,20 +42,21 @@ src/renderer/
 
 ## Tool Rail
 
-| Tool | Key | Dropdown | Code |
+Built today (`ui/ToolRail.tsx`, keys in `TOOL_KEYS`): a family button shows its last tool; the chevron under it opens the family (check = active).
+
+| Rail item | Key | Family / behaviour | Code |
 |---|---|---|---|
-| Select | V | select / scale | `canvas/tools/select.ts` |
-| Shape | R | rect, ellipse, line, arrow, polygon, star, image | `tools/shape.ts` |
-| Pen | P | pen, pencil | `tools/pen.ts` |
-| Text | T | | `tools/text.ts` |
-| Frame | F | frame, section, device presets | `tools/frame.ts` |
-| Sticky note | S | | `tools/sticky.ts` |
-| Browser / code frame | B | URL, local HTML, dev server | `tools/codeFrame.ts` |
-| Hand | H / Space | | `tools/hand.ts` |
-| Comment | C | | `tools/comment.ts` |
-| Components | Shift+I | library browser | opens `features/library` |
-| Search | Ctrl+F | canvas + libraries | `features/palette` |
-| More `…` | | eraser, measure, slice, plugin tools | |
+| Pointer | V · K · H (Space) | Move, Scale (resize scales the whole subtree: text, strokes, radii, gap, padding), Hand | `canvas/Canvas.tsx`, `canvas/scale.ts` |
+| Shapes | R · O | Rectangle, Ellipse, Polygon, Icon (lucide picker → vector), Script (soon), Import image or SVG (Ctrl+Shift+K), Import Figma (soon) | `lib/importers.ts` |
+| Pen | P | Click points, drag for curves, click first point to close, Enter/Esc finish, Backspace undoes a point | `canvas/pen.ts` |
+| Text · Frame | T · F | | |
+| Sticky note | S | Click/drag on the page; edits in place | |
+| Web page | B | Live page on the page; double-click to scroll/click inside, Esc leaves; URL bar above when selected | `canvas/EmbedLayer.tsx` |
+| Comment | C | Pins + threads; right panel becomes Comments | `canvas/CommentsLayer.tsx`, `ui/CommentsPanel.tsx` |
+| Variables | | Floating table: name, typed value, duplicate/delete, add colour/number/string | `ui/RailPanels.tsx` |
+| Find layer | Ctrl+F | Search names, text and URLs; Enter selects + zooms | `ui/RailPanels.tsx` |
+
+Image import keeps pixels in the node (downscaled to 2048 px); SVG becomes a frame of vectors when it has no rotation, text, gradients or `<use>`, else an image. Planned: pencil, line/arrow/star, section and device presets, components entry, `…` menu.
 
 A tool is `{ id, cursor, onPointerDown/Move/Up, onKey }` producing ops through the core client — never mutating the view model directly except as optimistic pending ops.
 

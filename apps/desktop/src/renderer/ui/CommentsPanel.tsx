@@ -46,7 +46,7 @@ export function CommentsPanel() {
         <div className="shrink-0 border-t border-line p-3">
           <button disabled={running} onClick={() => void applyComments(open)}
             title={running ? 'The agent is working' : 'Send every open comment to the chat agent'}
-            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-fg text-[12.5px] font-semibold text-app hover:opacity-90 disabled:opacity-40">
+            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-accent text-[12.5px] font-semibold text-white hover:brightness-110 disabled:opacity-40">
             <Sparkles size={14} />Apply all ({open.length})
           </button>
         </div>

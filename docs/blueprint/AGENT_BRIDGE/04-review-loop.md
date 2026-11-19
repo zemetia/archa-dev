@@ -17,6 +17,8 @@
 
 Attachments go to the asset store (sha256).
 
+**Built today (v1):** threads are `doc.comments` (pin at a node offset or a page point, `resolved`, messages with author + time), changed with `setComment` ops so they save in the `.archa` and undo like edits. Canvas: comment tool (C) drops a pin and composer; a pin opens its thread (reply, Apply, resolve, delete). Right panel while commenting: Open / Resolved, Apply, Apply all, hide pins. **Apply** sends the thread(s) as one prompt to the chat composer's agent in the current conversation; when that run finishes, the comments resolve. Agents can also call `resolveComment(id)`. Author name = git `user.name`, else the OS account (`app.info.user`). No rounds, markup or `review_wait` yet.
+
 ---
 
 ## Round Flow

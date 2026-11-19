@@ -53,6 +53,8 @@ export async function place(input: NodeInput, at: { x: number; y: number } | und
   const w = Number(input.width ?? 100), h = Number(input.height ?? 100);
   const parent = containerAt(doc, c.x, c.y);
   const o = originOf(doc, parent.id);
+  // Icons are drawn in dark ink for light frames; straight on the dark page they get light ink to stay visible.
+  if (input.type === 'path' && parent.type === 'page' && Array.isArray(input.strokes)) input = { ...input, strokes: (input.strokes as Array<Record<string, unknown>>).map((st) => ({ ...st, color: '#d4d4d8' })) };
   const { ops, rootId } = insertOpsFor({ ...input, x: Math.round(c.x - w / 2 - o.x), y: Math.round(c.y - h / 2 - o.y) }, parent.id);
   if (await commit(label, ops)) {
     select([rootId]);

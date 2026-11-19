@@ -450,7 +450,8 @@ export function Canvas() {
     const input = {
       type: 'path', name: 'Vector', d: penPath(pts, closed), viewBox: b,
       x: round2(b.x - o.x), y: round2(b.y - o.y), width: Math.max(1, round2(b.width)), height: Math.max(1, round2(b.height)),
-      fills: closed ? ['#d4d4d8'] : [], strokes: [{ color: '#18181b', width: 2, align: 'center' }],
+      // Dark ink inside a (light) frame; light ink straight on the dark page so the line stays visible.
+      fills: closed ? ['#d4d4d8'] : [], strokes: [{ color: parent.type === 'frame' ? '#18181b' : '#d4d4d8', width: 2, align: 'center' }],
     } as unknown as NodeInput;
     const { ops, rootId } = insertOpsFor(input, parent.id);
     if (await commit('Draw vector', ops)) select([rootId]);

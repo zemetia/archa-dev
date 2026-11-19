@@ -22,6 +22,8 @@
 - `manifest.json` is the first entry so it can be read without inflating the rest.
 - Pages load lazily: visible page first, others on demand.
 
+`formatVersion` 2 (current): `document.json` = `{ meta, variables, comments }`; v1 files migrate on open (`packages/formats/src/migrations/archa/`, fixture `test/fixtures/archa-v1/`). Images live inline as data URLs in v2 — `assets/` arrives with the asset store.
+
 ---
 
 ## Unpacked — `.archadev/designs/<name>/`

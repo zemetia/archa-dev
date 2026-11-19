@@ -47,6 +47,8 @@ restore
 - Effects that need a layer (blur, layer blur, opacity < 1 with children) use `saveLayer` — and mark the node "expensive" → L4 bitmap cache.
 - Images: decoded once per mip level from the asset store; never decode at full resolution beyond the zoom need.
 
+**Canvas2D backend today:** `polygon` and `path` draw through `polygonPoints` / `viewBoxMatrix` (`packages/core/src/shapes.ts`, shared with SVG export). `image` decodes once per `src` (`packages/render/src/images.ts`); drawing a not-yet-decoded image paints a placeholder and the canvas repaints on load, one-shot renders (`renderNodePng`) wait for decode. `embed` draws a placeholder card (what exports and agent screenshots see); the app lays a sandboxed `<webview>` over it (`canvas/EmbedLayer.tsx`, partition `persist:archa-embed`, guarded in main by `will-attach-webview`). The live page sits **above** the canvas, so nodes drawn over an embed are hidden behind it.
+
 ---
 
 ## Text

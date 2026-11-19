@@ -47,6 +47,8 @@ exportNode(id: NodeRef, opts: ExportOptions): string             // returns path
 
 `NodeRef` = node id string **or** unique node name. `NodeInput` uses the same schema as the document, with `children` allowed inline for building a subtree in one call.
 
+Built today on top of the above: `insert` takes every node type in [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md); `variables()`, `setVariable(name, value)` (`"#hex"` = colour, number, else string); `resolveComment(id)`. `get_state` lists variables and open comments (id, node, thread) so agents use the tokens and can act on review notes. Text for agents lives in `packages/protocol/src/agent-docs.ts`.
+
 ---
 
 ## Guard Rails Built into the API

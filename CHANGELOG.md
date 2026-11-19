@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file, following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Tool rail
+- The left tool rail is reorganised. A chevron under a button opens its family:
+  - **Move / Scale / Hand.** Scale resizes a selection together with everything inside it: text, strokes, corner radius, gaps, padding and shadows.
+  - **Rectangle, Ellipse, Polygon, Icon, Import image or SVG.** Script and Import Figma are marked coming soon.
+- New tools: **Pen** (curves, closing, Enter to finish), **Sticky note**, **Web page** (a live site on the canvas that you can scroll and click after a double-click), and **Comment**.
+- **Variables** opens a table of the document's colours, numbers and text values. Agents see them in their state and can set them.
+- **Find layer** (Ctrl+F) searches layer names, text and URLs, then selects and zooms to the result.
+- **Icon** inserts any lucide icon as an editable vector. **Import image or SVG** (Ctrl+Shift+K): an SVG becomes editable vectors when it can.
+- **Comments**: drop pins, reply, resolve, and **Apply** (or Apply all) to have the chat agent make the change. Applied comments resolve when the agent finishes.
+
+### Documents
+- `.archa` format 2: polygon, vector path, image, sticky note and web page nodes, plus document variables and comments. Older files open and upgrade automatically.
+
 ## [0.2.4] - 2026-11-19
 
 ### Settings
