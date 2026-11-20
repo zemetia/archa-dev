@@ -1,0 +1,20 @@
+%% Workflow across actors: supplier invoice from photo to paid.
+%% In Mermaid, use a sequenceDiagram for swimlanes: each participant is a lane, time runs downward.
+%% (flowchart subgraphs lose their lane direction as soon as arrows cross lanes, so they tangle.)
+%% For a true box-and-arrow swimlane, draw it on the ArchaDev canvas: examples/canvas-flows.js.
+sequenceDiagram
+  autonumber
+  actor P as Pemilik toko
+  participant A as Arunika
+  actor K as Admin keuangan
+  P->>A: Foto nota supplier
+  A->>A: Baca nota (OCR), cocokkan dengan stok masuk
+  A->>P: Tagihan + jatuh tempo, minta persetujuan
+  alt disetujui
+    P->>K: Teruskan untuk dibayar
+    K->>K: Bayar lewat m-banking
+    A-->>A: Tandai lunas saat mutasi masuk
+  else ditolak
+    P->>A: Foto ulang / koreksi
+  end
+  Note over A: Langkah Arunika otomatis, yang lain manual
