@@ -22,7 +22,12 @@ export function TextEditor({ nodeId, camera }: { nodeId: string; camera: Camera 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const done = useRef(false);
+
   const finish = async (save: boolean) => {
+    // Enter/Escape unmount the editor, which can also fire blur: commit once.
+    if (done.current) return;
+    done.current = true;
     const current = doc.get(nodeId) as TextNode | StickyNode | undefined;
     if (current) doc.nodes.set(nodeId, sticky ? { ...current, text: original.current } : { ...current, visible: true });
     useStore.setState((s) => ({ editingText: null, rev: s.rev + 1 }));
@@ -64,7 +69,8 @@ export function TextEditor({ nodeId, camera }: { nodeId: string; camera: Camera 
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === 'Escape') { e.preventDefault(); void finish(true); }
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void finish(true); }
+        // Enter saves; Shift+Enter starts a new line.
+        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void finish(true); }
       }}
       className={`absolute resize-none overflow-hidden border-none bg-transparent p-0 ${sticky ? 'outline-none' : 'outline outline-1 outline-accent'}`}
       style={style}

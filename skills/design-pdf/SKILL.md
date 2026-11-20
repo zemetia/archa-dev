@@ -9,10 +9,45 @@ Author the document as **HTML + CSS for paged media**, then print it to PDF with
 Chrome or Edge. You get real typography, grids, web fonts, SVG charts and icons, and pixel-exact
 results. Then render the pages to images and **look at them** before you hand anything over.
 
+## 0. Read first: rules that beat your defaults
+
+You are a senior designer who makes documents for real clients. Your work is minimal (little text,
+one idea per page) and never boring. AI-made documents fail in two ways: **over-decorated** (labels
+above every heading, badges, gradients, icons everywhere) or **flat and boring** (the same layout
+on every page, everything at one size, nothing in front of anything). These rules fix both and
+override your habits:
+
+1. **No eyebrows.** No small uppercase or letter-spaced label above a heading (`MASALAH`,
+   `SOLUSI`, `01 — PRICING`), no badge above a title, no gradient text. The heading is a full
+   sentence that carries itself. Small text is allowed only as real metadata (a running header, a
+   caption, a table column, a date), never as a section label.
+2. **One hero per page, at extreme scale.** Each page has one element at 5–20× the body size: a
+   number, a word, a date, a shape, a product. Everything else is small and quiet. Scale contrast,
+   not decoration, is what makes a page feel designed.
+3. **Use the edge.** Let the hero bleed: crop a giant number or shape at the page edge, run a
+   colour field off the side. Keep text inside the margins; let shapes break them.
+4. **Depth: ground, raised, floating.** A colour field (ground), a white card on it with a soft
+   two-layer shadow tinted with the ink colour (raised), and one thing overlapping the edge between
+   them (a card half on the field, a sticker on a glass, a phone over a panel). At least one overlap
+   per page with a visual.
+5. **One motif, repeated with variation.** Pick one shape from the subject (a wheel, an arch, a
+   coffee ring, a vine) and place it differently on each page. It ties the set together.
+6. **Rhythm across the set.** Alternate grounds (dark, light, accent) and layouts so no two
+   neighbours look alike. Never use the same layout twice in a row.
+7. **Content diet.** Cut words until it hurts: a page states one finding; body text 9–11pt, at most two short columns. Real names, real numbers with units,
+   specific places. Data is drawn (bars, dots, lines, direct labels), not described.
+8. **Budget.** 1 accent colour, 2 typefaces, 0 emoji, 0 decorative blobs or glows, 0 clip-art.
+
+Before you deliver, put this check in your reply: no eyebrows · one hero per page · an overlap ·
+grounds alternate · nothing collides or crosses a margin it shouldn't · every page looked at.
+
 ## Files in this skill
 
 | File | What it is |
 |---|---|
+| [examples/report-annual.html](examples/report-annual.html) | 3-page annual report, "data editorial": a cropped outline year on the cover, a +31% hero number, a chart card overlapping a green field, a full-width money bar, a quote band |
+| [examples/cv.html](examples/cv.html) | 1-page CV: the name as the hero on a cobalt field, three work cards overlapping its edge, a calm two-column body (ATS-friendly real text) |
+| [examples/studio-profile.html](examples/studio-profile.html) | 2-page studio profile, "brand motif": the arch repeated as hero window, project frames and bullets; façade patterns drawn in CSS |
 | [examples/proposal.html](examples/proposal.html) | A 4-page A4 proposal in the "Swiss / colour block" concept: full-bleed cover, huge section numbers, timeline, pricing table, signatures |
 | [examples/canvas-a4-pages.js](examples/canvas-a4-pages.js) | The same cover and an inner page laid out on the ArchaDev canvas with `execute` (checked against the real executor) |
 | [scripts/render-pdf.mjs](scripts/render-pdf.mjs) | `node scripts/render-pdf.mjs doc.html doc.pdf --preview` renders with the installed Chrome/Edge (waiting for fonts) and writes page PNGs |

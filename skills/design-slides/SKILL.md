@@ -8,10 +8,44 @@ description: Design and produce striking, distinctive presentation decks (pitch 
 A great deck is **a story told one idea per slide**, set in a strict visual system with one
 memorable concept. Write the story first, then design and build.
 
+## 0. Read first: rules that beat your defaults
+
+You are a senior designer who makes decks for real clients. Your work is minimal (little text,
+one idea per slide) and never boring. AI-made decks fail in two ways: **over-decorated** (labels
+above every heading, badges, gradients, icons everywhere) or **flat and boring** (the same layout
+on every slide, everything at one size, nothing in front of anything). These rules fix both and
+override your habits:
+
+1. **No eyebrows.** No small uppercase or letter-spaced label above a heading (`MASALAH`,
+   `SOLUSI`, `01 — PRICING`), no badge above a title, no gradient text. The heading is a full
+   sentence that carries itself. Small text is allowed only as real metadata (a running header, a
+   caption, a table column, a date), never as a section label.
+2. **One hero per slide, at extreme scale.** Each slide has one element at 5–20× the body size: a
+   number, a word, a date, a shape, a product. Everything else is small and quiet. Scale contrast,
+   not decoration, is what makes a slide feel designed.
+3. **Use the edge.** Let the hero bleed: crop a giant number or shape at the slide edge, run a
+   colour field off the side. Keep text inside the margins; let shapes break them.
+4. **Depth: ground, raised, floating.** A colour field (ground), a white card on it with a soft
+   two-layer shadow tinted with the ink colour (raised), and one thing overlapping the edge between
+   them (a card half on the field, a sticker on a glass, a phone over a panel). At least one overlap
+   per slide with a visual.
+5. **One motif, repeated with variation.** Pick one shape from the subject (a wheel, an arch, a
+   coffee ring, a vine) and place it differently on each slide. It ties the set together.
+6. **Rhythm across the set.** Alternate grounds (dark, light, accent) and layouts so no two
+   neighbours look alike. Never use the same layout twice in a row.
+7. **Content diet.** Cut words until it hurts: a title of at most 12 words, at most 25 words of body, the rest in speaker notes. Real names, real numbers with units,
+   specific places. Data is drawn (bars, dots, lines, direct labels), not described.
+8. **Budget.** 1 accent colour, 2 typefaces, 0 emoji, 0 decorative blobs or glows, 0 clip-art.
+
+Before you deliver, put this check in your reply: no eyebrows · one hero per slide · an overlap ·
+grounds alternate · nothing collides or crosses a margin it shouldn't · every slide looked at.
+
 ## Files in this skill
 
 | File | What it is |
 |---|---|
+| [examples/deck-launch.html](examples/deck-launch.html) | 6-slide product launch, "bold": ink / paper / lime grounds, poster-scale type that bleeds, the wheel motif cropped differently per slide, a spec card overlapping a colour panel, a highlighted bar chart |
+| [examples/deck-research.html](examples/deck-research.html) | 5-slide research deck, "editorial findings": newspaper serif statements, a 100-dot matrix, tilted chat cards, a phone overlapping a vermilion field, a directly labelled line chart |
 | [examples/deck.html](examples/deck.html) | A 7-slide pitch deck as HTML slides (cover, big number, split, chart, quote, comparison, ask). Render it with `../design-pdf/scripts/render-pdf.mjs` |
 | [examples/deck.mjs](examples/deck.mjs) | The same deck as an **editable PPTX** with pptxgenjs: a 12-column grid helper, a safe-area check, a native chart and speaker notes |
 | [examples/canvas-slides.js](examples/canvas-slides.js) | The deck started on the ArchaDev canvas: 1920×1080 frames and a header component reused with `instance()` (checked against the real executor) |
@@ -104,7 +138,11 @@ Make each slide a `<section>` of 1920×1080px with `@page { size: 1920px 1080px;
 node ../design-pdf/scripts/render-pdf.mjs deck.html deck.pdf --preview --dpi 32
 ```
 
-Watch for one CSS trap that appeared in real renders: a generic rule such as `.row p` beats the class on
+Shapes or giant type that bleed off the **bottom** of a slide must be drawn inside one full-slide
+`<svg class="art" viewBox="0 0 1920 1080">`: a positioned div crossing the page bottom is cut by print
+fragmentation (a circle prints as a straight-sided arch). See `deck-launch.html`.
+
+Watch for one more CSS trap that appeared in real renders: a generic rule such as `.row p` beats the class on
 the big number (`.huge`) and silently shrinks it. Scope it with `.row p:not(.huge)`.
 
 ## 7. QA: render and look at every slide
