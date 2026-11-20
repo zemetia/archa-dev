@@ -1,0 +1,10 @@
+%% State diagram: supplier invoice lifecycle and who can move it.
+stateDiagram-v2
+  [*] --> Draf: foto diunggah
+  Draf --> MenungguPersetujuan: OCR selesai
+  MenungguPersetujuan --> Disetujui: pemilik setuju
+  MenungguPersetujuan --> Draf: pemilik minta koreksi
+  Disetujui --> Lunas: mutasi bank cocok
+  Disetujui --> Terlambat: lewat jatuh tempo
+  Terlambat --> Lunas: mutasi bank cocok
+  Lunas --> [*]

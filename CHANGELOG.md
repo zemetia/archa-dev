@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### Design skills
+- **Four design skills for agents** in `skills/`: `design-website` (minimalist professional sites), `design-pdf` (designed PDF documents), `design-slides` (decks as editable PPTX or HTML/PDF) and `design-flows` (page maps, user flows, swimlanes, state diagrams). Import them in Settings → Skills.
+- Each skill ships a complete worked example, ArchaDev canvas snippets for `execute`, a reference of which ArchaDev tools to call (and the `execute` traps seen in real runs), and render scripts that use the installed Chrome/Edge: page screenshots at phone/tablet/desktop width, HTML → PDF with page previews, PPTX previews through PowerPoint, and Mermaid → SVG/PNG.
+- Every canvas snippet was run through the real executor, and every example was rendered and checked.
+
+### Web page objects
+- New web pages start as a phone (390 × 844) and empty; the link is asked once, then never shown.
+- The toolbar snaps to Phone / Tablet / Desktop and saves JPG screenshots: Wide (1440 × 900) or Object (as shown).
+- Page scrollbars are hidden; a wheel over the selected page scrolls it without double-clicking. The placeholder card drops the address strip.
+
 ## [1.0.1] - 2026-11-20
 
 ### Design panel

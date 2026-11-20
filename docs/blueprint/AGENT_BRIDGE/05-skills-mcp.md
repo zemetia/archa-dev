@@ -42,6 +42,8 @@ A skill is a folder with `SKILL.md` (frontmatter `name`, `description`, then Mar
 
 RPC: `skills.list | create | import | update | delete | read`; event `skills.changed`.
 
+Repo skills: `skills/design-*` (website, pdf, slides, flows) are ready to import → [STRUCTURE/01](../STRUCTURE/01-root-apps.md). They are not seeded into the library automatically (proposal, not built).
+
 ---
 
 ## External MCP Servers
@@ -72,7 +74,7 @@ RPC: `mcp.list | save | delete | test | importCandidates | import`; event `mcp.c
 
 ---
 
-**Linked from:** [AGENT_BRIDGE/02](./02-roster-profiles.md) · [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md)
+**Linked from:** [AGENT_BRIDGE/02](./02-roster-profiles.md) · [STRUCTURE/01](../STRUCTURE/01-root-apps.md) · [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md)
 
 **Code:** [`apps/desktop/src/core-host/agents.ts`](../../../apps/desktop/src/core-host/agents.ts) · [`apps/desktop/src/core-host/mcp-servers.ts`](../../../apps/desktop/src/core-host/mcp-servers.ts) · [`apps/desktop/src/core-host/skills.ts`](../../../apps/desktop/src/core-host/skills.ts) · [`apps/desktop/src/renderer/ui/settings/McpPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/McpPage.tsx) · [`apps/desktop/src/renderer/ui/settings/OtherPages.tsx`](../../../apps/desktop/src/renderer/ui/settings/OtherPages.tsx) · [`apps/desktop/src/renderer/ui/settings/SkillsPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/SkillsPage.tsx) · [`apps/desktop/src/renderer/ui/SettingsDialog.tsx`](../../../apps/desktop/src/renderer/ui/SettingsDialog.tsx) · [`apps/desktop/test/settings.test.ts`](../../../apps/desktop/test/settings.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/settings.ts`](../../../packages/protocol/src/settings.ts)
 <!-- backlinks:end -->

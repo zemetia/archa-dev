@@ -1,0 +1,13 @@
+%% Page map: Arunika marketing site + app. Numbered IDs, max 3 levels, utility pages grouped.
+flowchart TB
+  home["0 Beranda"]
+  home --> fitur["1.0 Fitur"] & harga["2.0 Harga"] & cerita["3.0 Cerita pelanggan"] & bantuan["4.0 Bantuan"]
+  fitur --> f1["1.1 Kas & bank"] & f2["1.2 Stok"] & f3["1.3 Laporan pajak"]
+  cerita --> c1["3.x Detail cerita"]
+  bantuan --> b1["4.1 Panduan mulai"] & b2["4.2 FAQ"] & b3["4.3 Kontak"]
+  home -.-> daftar["5.0 Daftar"] --> app["App: Dasbor"]
+  subgraph util [Footer & utilitas]
+    privasi["Privasi"]; syarat["Syarat"]; e404["404"]
+  end
+  classDef key fill:#e3f1ef,stroke:#0f766e,color:#0b3d38;
+  class home,daftar key;
