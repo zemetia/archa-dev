@@ -10,7 +10,16 @@ skill: `SKILL.md` (frontmatter `name` + `description`, then instructions), plus 
 | [design-website](design-website/SKILL.md) | Minimalist, modern, professional websites and landing pages | `execute` (tokens, sections, components, `icon()`), `screenshot`, `browser` |
 | [design-pdf](design-pdf/SKILL.md) | Designed PDF documents: proposals, reports, CVs, invoices, certificates | A4 page frames via `execute`, Export → PDF, print HTML + `render-pdf.mjs` |
 | [design-slides](design-slides/SKILL.md) | Pitch and presentation decks as PPTX or HTML/PDF | 1920×1080 frames, the Slides panel, `delegate` for long decks, pptxgenjs |
+| [design-social](design-social/SKILL.md) | Instagram posts and carousels (4:5, 1:1, 9:16), LinkedIn/X images | 1080×1350 frames via `execute`, PNG export, HTML + `render-pdf.mjs --dpi 96` |
 | [design-flows](design-flows/SKILL.md) | Page maps, user flows, swimlanes, state diagrams | Boxes + `connector` nodes via `execute`, Mermaid for docs |
+
+## Shared rules
+
+Every design skill opens with the same hard rules, because agents imitate defaults and examples
+before prose: **no eyebrows** (no small label above a heading), one hero element at extreme scale,
+use the edge (bleed), depth through ground / raised / floating with at least one overlap, one motif
+repeated with variation, alternating grounds and layouts, a content diet, and a decoration budget.
+The examples obey them, so copying an example never teaches the wrong habit.
 
 ## Every example is checked
 

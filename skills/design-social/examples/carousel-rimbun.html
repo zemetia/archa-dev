@@ -1,0 +1,127 @@
+<!doctype html>
+<!--
+  Example: 5-slide Instagram carousel, 1080×1350 each (fictional plant shop "Rimbun").
+  Concept: "one continuous stem". A single vine is drawn across a 5400px-wide strip and every slide
+  shows its own 1080px window of it, so the stem leaves slide 1 on the right and enters slide 2 on
+  the left: swiping feels like one surface. Slide 1 is the hook (the problem, big), slides 2–4 are
+  one cause each (a huge numeral, a two-word name, one sentence, one fix), slide 5 is the save/share
+  ask. Grounds alternate so each swipe visibly changes.
+  Render: node ../../design-pdf/scripts/render-pdf.mjs carousel-rimbun.html carousel.pdf --preview --dpi 30
+  Upload PNGs, exactly 1080×1350: pdftoppm -png -scale-to-x 1080 -scale-to-y 1350 carousel.pdf carousel
+-->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Rimbun: Carousel Daun Menguning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  @page { size: 1080px 1350px; margin: 0; }
+  :root { --forest: #173a2a; --sage: #dfe7d4; --cream: #f7f3ea; --blush: #f2b8a2; --yellow: #e8c547; --ink: #13241b; --muted: #5d6b60;
+          --serif: "DM Serif Display", Georgia, serif; --sans: "DM Sans", system-ui, sans-serif;
+          --lift: 0 2px 4px rgb(19 36 27 / .1), 0 36px 60px -24px rgb(19 36 27 / .45); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: var(--sans); background: #444; }
+  .slide { position: relative; width: 1080px; height: 1350px; overflow: hidden; break-after: page; color: var(--ink); }
+  .slide:last-child { break-after: auto; }
+  .vine { position: absolute; top: 0; left: 0; width: 5400px; height: 1350px; }   /* the shared strip, shifted per slide */
+  .count { position: absolute; right: 72px; top: 72px; font: 500 26px var(--sans); opacity: .6; }
+  .brand { position: absolute; left: 72px; bottom: 64px; font: 700 28px var(--sans); letter-spacing: -.02em; }
+  .swipe { position: absolute; right: 72px; bottom: 60px; display: flex; align-items: center; gap: 12px; font: 500 26px var(--sans); }
+  h1, h2, .num { font-family: var(--serif); font-weight: 400; letter-spacing: -.02em; }
+  .num { font-size: 420px; line-height: .8; }
+
+  .s1 { background: var(--forest); color: var(--cream); }
+  .s1 h1 { position: absolute; left: 72px; top: 150px; width: 820px; font-size: 128px; line-height: .95; }
+  .s1 h1 em { color: var(--yellow); }
+  .s1 p.sub { position: absolute; left: 72px; top: 650px; width: 470px; font-size: 34px; line-height: 1.35; color: rgb(247 243 234 / .78); }
+
+  .cause { background: var(--cream); }
+  .cause.alt { background: var(--sage); }
+  .cause .num { position: absolute; left: 50px; top: 60px; color: var(--forest); }
+  .cause h2 { position: absolute; left: 72px; top: 470px; width: 640px; font-size: 104px; line-height: .95; }
+  .cause p.why { position: absolute; left: 72px; top: 720px; width: 560px; font-size: 32px; line-height: 1.4; color: var(--muted); }
+  .cause .fix { position: absolute; left: 72px; bottom: 170px; width: 600px; background: #fff; border-radius: 32px; padding: 34px 38px; box-shadow: var(--lift); font-size: 30px; line-height: 1.35; }
+  .cause .fix b { display: inline-block; background: var(--blush); color: var(--ink); border-radius: 999px; padding: 4px 16px; font-size: 22px; margin-bottom: 14px; }
+
+  .s5 { background: var(--blush); }
+  .s5 h2 { position: absolute; left: 72px; top: 150px; width: 820px; font-size: 112px; line-height: .95; }
+  .s5 .card { position: absolute; left: 72px; right: 72px; top: 560px; background: var(--cream); border-radius: 36px; padding: 44px 48px; box-shadow: var(--lift); }
+  .s5 .card ol { list-style: none; display: grid; gap: 22px; font-size: 32px; }
+  .s5 .card li { display: flex; gap: 22px; align-items: baseline; }
+  .s5 .card li span { font: 400 44px/1 var(--serif); color: var(--forest); width: 36px; }
+  .s5 .ask { position: absolute; left: 72px; top: 1030px; font-size: 32px; width: 640px; line-height: 1.35; }
+</style>
+</head>
+<body>
+
+<!-- One vine for all 5 slides (x 0–5400). Each .slide gets a copy shifted by −1080 × index (see the script). -->
+<template id="vine">
+  <svg class="vine" viewBox="0 0 5400 1350" fill="none" aria-hidden="true">
+    <!-- The stem stays in the empty zones: behind the giant numerals and along the right edge, never under body text. -->
+    <path d="M760 1350 C 790 1000, 880 600, 1080 400 S 1500 230, 1700 330 S 2000 420, 2160 360 S 2600 220, 2800 320 S 3100 420, 3240 360 S 3700 220, 3900 320 S 4200 430, 4320 520 S 4700 600, 5000 660"
+          stroke="#2f6b4a" stroke-width="16" stroke-linecap="round"/>
+    <!-- leaves: healthy green, one yellowing leaf per slide -->
+    <g transform="translate(870 760) rotate(-150)"><path d="M0 0 C 60 -90, 200 -100, 260 0 C 200 100, 60 90, 0 0Z" fill="#3f8a5f"/></g>
+    <g transform="translate(1010 660) rotate(-60)"><path d="M0 0 C 60 -90, 200 -100, 260 0 C 200 100, 60 90, 0 0Z" fill="#e8c547"/></g>
+    <g transform="translate(1640 300) rotate(-35)"><path d="M0 0 C 60 -90, 200 -100, 260 0 C 200 100, 60 90, 0 0Z" fill="#e8c547"/></g>
+    <g transform="translate(1960 400) rotate(45)"><path d="M0 0 C 60 -90, 200 -100, 260 0 C 200 100, 60 90, 0 0Z" fill="#3f8a5f"/></g>
+    <g transform="translate(2740 300) rotate(-50)"><path d="M0 0 C 60 -90, 200 -100, 260 0 C 200 100, 60 90, 0 0Z" fill="#e8c547"/></g>
+    <g transform="translate(3060 410) rotate(40)"><path d="M0 0 C 60 -90, 200 -100, 260 0 C 200 100, 60 90, 0 0Z" fill="#3f8a5f"/></g>
+    <g transform="translate(3840 300) rotate(-40)"><path d="M0 0 C 60 -90, 200 -100, 260 0 C 200 100, 60 90, 0 0Z" fill="#e8c547"/></g>
+    <g transform="translate(4150 420) rotate(30)"><path d="M0 0 C 60 -90, 200 -100, 260 0 C 200 100, 60 90, 0 0Z" fill="#2f6b4a"/></g>
+    <g transform="translate(4950 650) rotate(-50)"><path d="M0 0 C 70 -110, 240 -120, 320 0 C 240 120, 70 110, 0 0Z" fill="#2f6b4a"/></g>
+  </svg>
+</template>
+
+<section class="slide s1">
+  <h1>Daun monsteramu <em>menguning?</em></h1>
+  <p class="sub">Biasanya bukan penyakit. Ini tiga penyebab yang paling sering kami temui.</p>
+  <p class="count">1/5</p><p class="brand">rimbun</p>
+  <p class="swipe">geser <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></p>
+</section>
+
+<section class="slide cause">
+  <p class="num">1</p>
+  <h2>Terlalu sering disiram</h2>
+  <p class="why">Akar yang terus basah kekurangan udara, lalu daun bawah menguning duluan.</p>
+  <p class="fix"><b>Coba</b><br>Siram hanya kalau 3 cm tanah atas sudah kering. Tusuk dengan jari.</p>
+  <p class="count">2/5</p>
+</section>
+
+<section class="slide cause alt">
+  <p class="num">2</p>
+  <h2>Kurang cahaya</h2>
+  <p class="why">Di pojok gelap, tanaman melepas daun tua untuk menghemat tenaga.</p>
+  <p class="fix"><b>Coba</b><br>Geser ke 1–2 meter dari jendela yang terang, tanpa matahari langsung.</p>
+  <p class="count">3/5</p>
+</section>
+
+<section class="slide cause">
+  <p class="num">3</p>
+  <h2>Pot tanpa lubang</h2>
+  <p class="why">Air menggenang di dasar pot dan diam-diam membusukkan akar.</p>
+  <p class="fix"><b>Coba</b><br>Pakai pot dalam berlubang, taruh di pot hias. Buang air sisa di bawahnya.</p>
+  <p class="count">4/5</p>
+</section>
+
+<section class="slide s5">
+  <h2>Simpan dulu, cek lagi minggu depan.</h2>
+  <div class="card"><ol><li><span>1</span>Tanah atas kering? Baru siram.</li><li><span>2</span>Dekat jendela, bukan di bawah matahari.</li><li><span>3</span>Pot berlubang, tatakan kosong.</li></ol></div>
+  <p class="ask">Masih menguning? Kirim fotonya lewat DM, tim kami jawab dalam sehari.</p>
+  <p class="count">5/5</p><p class="brand">rimbun</p>
+</section>
+
+<script>
+  // Give every slide its window onto the shared vine (inserted first, so it sits behind the text).
+  const tpl = document.getElementById('vine');
+  document.querySelectorAll('.slide').forEach((slide, i) => {
+    const svg = tpl.content.firstElementChild.cloneNode(true);
+    svg.style.left = `${-1080 * i}px`;
+    slide.prepend(svg);
+  });
+</script>
+</body>
+</html>

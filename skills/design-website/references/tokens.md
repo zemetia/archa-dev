@@ -12,13 +12,19 @@ Every palette passes WCAG AA for body text on its background. Check your own cha
 | Warm, friendly, local business | Fraunces 500 (soft optical size) | DM Sans 400/500 | Rounded radii (12–16px) suit it |
 | Bold, modern, startup | Space Grotesk 600 | Inter 400/500 | Oversized headings, strong colour block |
 | Corporate, trustworthy | Manrope 700 | Manrope 400/500 | One family, hierarchy by size and weight |
-| Fashion, studio, portfolio | Playfair Display 400 or Newsreader | Work Sans 400 | Lots of whitespace, small uppercase labels |
+| Fashion, studio, portfolio | Playfair Display 400 or Newsreader | Work Sans 400 | Lots of whitespace; small caps only for real metadata (dates, credits), never as eyebrows |
 
 Use at most 2 families and 4 font files. Use `font-display: swap`.
 
 ## Palettes (light / dark)
 
 Token order: bg · surface · text · muted · border · accent · accent-ink (text on the accent).
+
+Add two derived tokens to every palette:
+- `--raised` (plane 1 cards): `#ffffff` in light mode (on Monochrome use `#ffffff` with `--bg: #fafafa`);
+  in dark mode the surface colour lifted one step (e.g. Stone `#22201d`, Zinc `#1e1e23`).
+- `--accent-soft`: the accent at ~10% on the background (Stone `#e3f1ef`, Zinc `#ecebfc`,
+  Vermilion `#fbe9df`, Forest `#e6efe4`, Amber `#fbefdc`), for the hero backdrop and the big tile.
 
 **Stone + teal** (calm, finance, health)
 - Light: `#fbfaf8 #f3f1ed #171614 #6b6760 #e4e0d9 #0f766e #ffffff`
@@ -52,12 +58,18 @@ Token order: bg · surface · text · muted · border · accent · accent-ink (t
 | Neutral modern | 6 | 12 | 20 | 8 or 999 (pill) |
 | Soft, friendly | 10 | 16 | 28 | 999 |
 
-## Shadows (use sparingly: floating things only)
+## Elevation and shadows (three planes, see SKILL.md Rule 3)
+
+Tint shadows with the palette's text colour (here Stone `#171614` = `23 22 20`), always two layers:
 
 ```css
---shadow-sm: 0 1px 2px rgb(0 0 0 / .05);
---shadow-md: 0 1px 2px rgb(0 0 0 / .04), 0 8px 24px rgb(0 0 0 / .06);
---shadow-lg: 0 2px 4px rgb(0 0 0 / .04), 0 24px 48px rgb(0 0 0 / .10);
+--shadow-1: 0 1px 2px rgb(23 22 20 / .06), 0 4px 12px rgb(23 22 20 / .05);         /* raised cards */
+--shadow-2: 0 2px 4px rgb(23 22 20 / .06), 0 24px 48px -12px rgb(23 22 20 / .18);  /* the one floating element */
+--edge:     inset 0 1px 0 rgb(255 255 255 / .7);                                   /* top highlight on raised surfaces */
 ```
 
-In dark mode, raise surfaces with a lighter background instead of shadows.
+In dark mode, raise surfaces with a lighter background; keep only `--shadow-2` (`0 24px 48px -12px rgb(0 0 0 / .6)`)
+and a faint ring for plane 1 (`0 0 0 1px rgb(255 255 255 / .04)`).
+
+On the ArchaDev canvas the same values are `effects`:
+`[{ type: 'drop-shadow', color: '#1716140f', x: 0, y: 1, blur: 2 }, { type: 'drop-shadow', color: '#1716140d', x: 0, y: 4, blur: 12 }]`.

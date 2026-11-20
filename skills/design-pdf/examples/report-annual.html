@@ -1,0 +1,163 @@
+<!doctype html>
+<!--
+  Example: 3-page A4 annual report (fictional coffee co-op "Gayo Lestari").
+  Concept: "data editorial". One oversized element per page (a cropped year, a 31% headline number,
+  a full-width money bar), a forest-green colour field that bleeds off the edge, and a white card
+  overlapping it (depth). No labels above headings: the headings are full sentences.
+  Render: node ../scripts/render-pdf.mjs report-annual.html report.pdf --preview
+-->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Gayo Lestari: Laporan Tahunan 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --forest: #13261f; --forest-2: #1d3a2f; --cream: #f4efe4; --paper: #faf7f0; --ink: #1a1915; --muted: #6e695e;
+    --line: #ddd5c4; --saffron: #e09a2d; --saffron-soft: #f6e3c2;
+    --serif: "Fraunces", Georgia, serif; --sans: "Inter", system-ui, sans-serif;
+    --shadow: 0 1mm 2mm rgb(19 38 31 / .08), 0 6mm 14mm -3mm rgb(19 38 31 / .22);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font: 400 10pt/1.55 var(--sans); color: var(--ink); background: #888; }
+  .page { position: relative; width: 210mm; height: 297mm; overflow: hidden; break-after: page; background: var(--paper); }
+  .page:last-child { break-after: auto; }
+  .folio { position: absolute; left: 20mm; right: 20mm; bottom: 12mm; display: flex; justify-content: space-between; font-size: 7.5pt; color: var(--muted); }
+  h2 { font: 400 26pt/1.08 var(--serif); letter-spacing: -.02em; font-variation-settings: "opsz" 144; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- page 1: cover ---------- */
+  .cover { background: var(--forest); color: var(--cream); }
+  .cover .mark { position: absolute; left: 20mm; top: 18mm; display: flex; align-items: center; gap: 3mm; font: 500 9pt var(--sans); }
+  .cover .mark i { width: 7mm; height: 7mm; border-radius: 50% 50% 50% 0; background: var(--saffron); display: block; transform: rotate(-45deg); }
+  .cover .year { position: absolute; right: -14mm; top: 34mm; font: 300 300pt/0.8 var(--serif); letter-spacing: -.06em;
+                 font-variation-settings: "opsz" 144; color: transparent; -webkit-text-stroke: .5mm rgb(244 239 228 / .22); }
+  .cover .year b { font-weight: 300; color: var(--saffron); -webkit-text-stroke: 0; }
+  .cover .title { position: absolute; left: 20mm; right: 20mm; bottom: 46mm; }
+  .cover h1 { font: 300 46pt/1.0 var(--serif); letter-spacing: -.03em; font-variation-settings: "opsz" 144; }
+  .cover h1 em { font-style: italic; color: var(--saffron); }
+  .cover .sub { margin-top: 6mm; font-size: 11.5pt; max-width: 110mm; color: rgb(244 239 228 / .75); }
+  .cover .meta { position: absolute; left: 20mm; right: 20mm; bottom: 16mm; display: grid; grid-template-columns: repeat(3, 1fr);
+                 gap: 6mm; padding-top: 5mm; border-top: .3mm solid rgb(244 239 228 / .25); font-size: 8.5pt; color: rgb(244 239 228 / .7); }
+  .cover .meta strong { display: block; color: var(--cream); font-weight: 500; font-size: 9.5pt; }
+
+  /* ---------- page 2: summary ---------- */
+  .p2 .head { position: absolute; left: 20mm; top: 22mm; width: 112mm; }
+  .p2 .lead { margin-top: 5mm; color: var(--muted); font-size: 10.5pt; }
+  .p2 .big { position: absolute; left: 16mm; top: 80mm; font: 300 118pt/0.85 var(--serif); letter-spacing: -.05em; color: var(--saffron);
+             font-variation-settings: "opsz" 144; }
+  .p2 .big small { font-size: .42em; letter-spacing: -.02em; }
+  .p2 .big-cap { position: absolute; left: 20mm; top: 128mm; width: 66mm; font-size: 9pt; color: var(--muted); }
+  .p2 .big-cap strong { color: var(--ink); font-weight: 600; }
+  .p2 .field { position: absolute; right: 0; top: 64mm; width: 78mm; height: 132mm; background: var(--forest); }
+  .p2 .card { position: absolute; right: 20mm; top: 96mm; width: 94mm; background: #fff; border-radius: 3mm; padding: 7mm 7mm 6mm;
+              box-shadow: var(--shadow); }
+  .p2 .card h3 { font: 600 9.5pt var(--sans); }
+  .p2 .card p.s { font-size: 8pt; color: var(--muted); margin-top: 1mm; }
+  .p2 .bars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; align-items: end; height: 46mm; margin-top: 6mm;
+              border-bottom: .3mm solid var(--line); }
+  .p2 .bars div { background: var(--line); border-radius: 1mm 1mm 0 0; position: relative; }
+  .p2 .bars div.hi { background: var(--saffron); }
+  .p2 .bars div span { position: absolute; top: -5mm; left: 0; right: 0; text-align: center; font-size: 8pt; font-weight: 600; }
+  .p2 .bars-x { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; margin-top: 2mm; font-size: 7.5pt; color: var(--muted); text-align: center; }
+  .p2 .three { position: absolute; left: 20mm; right: 20mm; top: 214mm; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8mm; }
+  .p2 .three p.k { font: 400 24pt/1 var(--serif); letter-spacing: -.02em; }
+  .p2 .three p.t { margin-top: 2.5mm; font-size: 8.5pt; color: var(--muted); padding-top: 2.5mm; border-top: .3mm solid var(--ink); }
+
+  /* ---------- page 3: money ---------- */
+  .p3 .head { position: absolute; left: 20mm; top: 22mm; width: 150mm; }
+  .p3 .total { position: absolute; left: 20mm; top: 62mm; font: 300 54pt/1 var(--serif); letter-spacing: -.03em; }
+  .p3 .total span { font-size: 9pt; font-family: var(--sans); color: var(--muted); letter-spacing: 0; margin-left: 3mm; }
+  .p3 .stack { position: absolute; left: 20mm; right: 0; top: 86mm; height: 30mm; display: flex; }
+  .p3 .stack div { height: 100%; }
+  .p3 .legend { position: absolute; left: 20mm; right: 0; top: 121mm; display: grid; grid-template-columns: 68fr 14fr 11fr 7fr; gap: 0; font-size: 8pt; }
+  .p3 .legend p { padding-right: 3mm; border-left: .3mm solid var(--ink); padding-left: 2mm; }
+  .p3 .legend strong { display: block; font: 400 15pt/1.1 var(--serif); }
+  .p3 .legend span { color: var(--muted); }
+  .p3 .cols { position: absolute; left: 20mm; right: 20mm; top: 152mm; display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; font-size: 9.5pt; }
+  .p3 .cols h3 { font: 600 10pt var(--sans); margin-bottom: 2mm; }
+  .p3 .cols p { color: #3d3a33; }
+  .p3 .quote { position: absolute; left: 0; right: 0; bottom: 0; height: 88mm; background: var(--saffron-soft); }
+  .p3 .quote .mark { position: absolute; left: 14mm; top: 4mm; font: 300 120pt/1 var(--serif); color: var(--saffron); }
+  .p3 .quote blockquote { position: absolute; left: 40mm; right: 24mm; top: 18mm; font: 300 19pt/1.3 var(--serif); letter-spacing: -.01em; }
+  .p3 .quote p.by { position: absolute; left: 40mm; top: 58mm; font-size: 8.5pt; color: var(--muted); }
+  .p3 .quote p.by strong { color: var(--ink); font-weight: 600; }
+  .p3 .folio { bottom: 8mm; }
+</style>
+</head>
+<body>
+
+<section class="page cover">
+  <p class="mark"><i></i>Koperasi Gayo Lestari</p>
+  <p class="year" aria-hidden="true">20<b>26</b></p>
+  <div class="title">
+    <h1>Panen lebih sedikit,<br>harga lebih <em>adil</em>.</h1>
+    <p class="sub">Laporan tahunan untuk 412 petani anggota, pembeli, dan mitra pendanaan di Takengon, Aceh Tengah.</p>
+  </div>
+  <div class="meta">
+    <p><strong>412 petani</strong>anggota aktif</p>
+    <p><strong>1.240 ton</strong>gabah kopi dibeli</p>
+    <p><strong>Maret 2027</strong>tahun buku Jan–Des 2026</p>
+  </div>
+</section>
+
+<section class="page p2">
+  <div class="head">
+    <h2>Harga di tingkat petani naik, walau hujan memotong panen.</h2>
+    <p class="lead">Kemarau basah memangkas panen 12%. Kontrak langsung dengan tiga roastery menahan harga tetap di atas pasar.</p>
+  </div>
+  <p class="big num">+31<small>%</small></p>
+  <p class="big-cap"><strong>Rp 11.800 per kg</strong> harga gabah rata-rata yang diterima petani, naik dari Rp 9.000 tahun lalu.</p>
+  <div class="field" aria-hidden="true"></div>
+  <div class="card">
+    <h3>Harga gabah per kg, 2026</h3>
+    <p class="s">Rata-rata per kuartal, rupiah</p>
+    <div class="bars">
+      <div style="height:62%"><span>9.4rb</span></div>
+      <div style="height:70%"><span>10.6rb</span></div>
+      <div style="height:80%"><span>12.1rb</span></div>
+      <div class="hi" style="height:90%"><span>13.3rb</span></div>
+    </div>
+    <div class="bars-x"><span>K1</span><span>K2</span><span>K3</span><span>K4</span></div>
+  </div>
+  <div class="three">
+    <div><p class="k num">−12%</p><p class="t">hasil panen, akibat curah hujan Juni–Agustus</p></div>
+    <div><p class="k num">3</p><p class="t">kontrak langsung dengan roastery, tanpa perantara</p></div>
+    <div><p class="k num">Rp 2,1 M</p><p class="t">sisa hasil usaha yang dibagikan ke anggota</p></div>
+  </div>
+  <div class="folio"><span>Gayo Lestari · Laporan Tahunan 2026</span><span>2</span></div>
+</section>
+
+<section class="page p3">
+  <div class="head"><h2>Dari setiap rupiah penjualan, 68 sen kembali ke kebun.</h2></div>
+  <p class="total num">Rp 18,4 M<span>total penjualan 2026</span></p>
+  <div class="stack" aria-label="Pembagian pendapatan">
+    <div style="flex:68; background:var(--forest)"></div>
+    <div style="flex:14; background:var(--forest-2)"></div>
+    <div style="flex:11; background:var(--saffron)"></div>
+    <div style="flex:7; background:var(--line)"></div>
+  </div>
+  <div class="legend">
+    <p><strong class="num">68%</strong><span>dibayar ke petani saat gabah diterima</span></p>
+    <p><strong class="num">14%</strong><span>pengolahan</span></p>
+    <p><strong class="num">11%</strong><span>logistik</span></p>
+    <p><strong class="num">7%</strong><span>kas</span></p>
+  </div>
+  <div class="cols">
+    <div><h3>Yang berjalan baik</h3><p>Pembayaran tunai di hari yang sama membuat 38 petani baru bergabung. Pengering tenaga surya di Bebesen memangkas waktu jemur dari 14 menjadi 9 hari.</p></div>
+    <div><h3>Yang harus diperbaiki</h3><p>Stok gudang Oktober menumpuk karena kontainer terlambat dua minggu. Tahun ini kami menyewa gudang kedua dekat Pelabuhan Belawan.</p></div>
+  </div>
+  <div class="quote">
+    <p class="mark" aria-hidden="true">“</p>
+    <blockquote>Dulu kami jual ke tengkulak dan menunggu sebulan. Sekarang uangnya masuk sebelum saya pulang dari gudang.</blockquote>
+    <p class="by"><strong>Rahmah Ali</strong> · petani anggota sejak 2019, Kampung Kenawat</p>
+  </div>
+  <div class="folio"><span>Gayo Lestari · Laporan Tahunan 2026</span><span>3</span></div>
+</section>
+
+</body>
+</html>

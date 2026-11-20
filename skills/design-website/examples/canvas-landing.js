@@ -11,8 +11,13 @@ setVariable('color/text', '#171614');
 setVariable('color/muted', '#6b6760');
 setVariable('color/border', '#e4e0d9');
 setVariable('color/accent', '#0f766e');
+setVariable('color/accent-soft', '#e3f1ef');
+setVariable('color/raised', '#ffffff');
 setVariable('radius/md', 12);
-C = { bg: '#fbfaf8', surface: '#f3f1ed', text: '#171614', muted: '#6b6760', border: '#e4e0d9', accent: '#0f766e' };
+C = { bg: '#fbfaf8', surface: '#f3f1ed', raised: '#ffffff', text: '#171614', muted: '#6b6760', border: '#e4e0d9', accent: '#0f766e', accentSoft: '#e3f1ef' };
+// Depth (Rule 3): two-layer shadows tinted with the text hue. Plane 1 = raised, plane 2 = floating.
+SHADOW_1 = [{ type: 'drop-shadow', color: '#1716140f', x: 0, y: 1, blur: 2 }, { type: 'drop-shadow', color: '#1716140d', x: 0, y: 4, blur: 12 }];
+SHADOW_2 = [{ type: 'drop-shadow', color: '#1716140f', x: 0, y: 2, blur: 4 }, { type: 'drop-shadow', color: '#1716142e', x: 0, y: 24, blur: 48 }];
 SERIF = 'Instrument Serif'; SANS = 'Inter';
 spot = findEmptySpace(1440, 2400);
 page = insert(null, {
@@ -38,16 +43,19 @@ makeComponent(navBtn, 'Primary pill button: accent fill, white 15/500 label');
 
 update('Hero', { padding: [96, 140, 80, 140], layout: 'row', gap: 64, align: 'center' });
 copyCol = insert('Hero', { type: 'frame', name: 'Hero copy', layout: 'column', gap: 24, sizing: { horizontal: 'fill', vertical: 'hug' } });
-insert(copyCol, { type: 'text', name: 'Eyebrow', text: 'PEMBUKUAN UNTUK TOKO & UMKM', fontFamily: SANS, fontSize: 13, fontWeight: 500, letterSpacing: 1, fills: [C.accent] });
+// No eyebrow above the headline (Rule 1): who it is for goes into the lead instead.
 insert(copyCol, { type: 'text', name: 'Headline', text: 'Tutup buku tiap malam, tanpa mencatat.', fontFamily: SERIF, fontSize: 84, lineHeight: 1.05, letterSpacing: -1.5, fills: [C.text], textSizing: 'auto-height', sizing: { horizontal: 'fill', vertical: 'hug' } });
-insert(copyCol, { type: 'text', name: 'Lead', text: 'Arunika membaca transaksi kasir dan mutasi rekening Anda, lalu menyusun laba rugi, stok dan kas secara otomatis.', fontFamily: SANS, fontSize: 20, lineHeight: 1.6, fills: [C.muted], textSizing: 'auto-height', sizing: { horizontal: 'fill', vertical: 'hug' } });
+insert(copyCol, { type: 'text', name: 'Lead', text: 'Untuk toko dan UMKM: Arunika membaca transaksi kasir dan mutasi rekening Anda, lalu menyusun laba rugi, stok dan kas secara otomatis.', fontFamily: SANS, fontSize: 20, lineHeight: 1.6, fills: [C.muted], textSizing: 'auto-height', sizing: { horizontal: 'fill', vertical: 'hug' } });
 actions = insert(copyCol, { type: 'frame', name: 'Actions', layout: 'row', gap: 12, sizing: 'hug' });
 cta = instance(navBtn, actions, { name: 'Primary CTA' });
 update(children(cta)[0].id, { text: 'Mulai 30 hari gratis' });
 icon('arrow-right', cta, { size: 18, color: '#ffffff' });
 update(cta, { gap: 8 });
-ledger = insert('Hero', { type: 'frame', name: 'Ledger card', layout: 'column', gap: 10, padding: 28, cornerRadius: 20,
-  fills: [C.surface], strokes: [{ color: C.border, width: 1, align: 'inside' }], sizing: { horizontal: 'fill', vertical: 'hug' } });
+// Hero visual as a stage (Rule 4): tinted backdrop (plane 0) -> raised ledger (plane 1) -> floating notice (plane 2).
+stage = insert('Hero', { type: 'frame', name: 'Stage', layout: 'column', padding: [40, 0, 64, 40], cornerRadius: 28,
+  fills: [C.accentSoft], sizing: { horizontal: 'fill', vertical: 'hug' } });
+ledger = insert(stage, { type: 'frame', name: 'Ledger card', layout: 'column', gap: 10, padding: 28, cornerRadius: 20,
+  fills: [C.raised], strokes: [{ color: C.border, width: 1, align: 'inside' }], effects: SHADOW_1, sizing: { horizontal: 'fill', vertical: 'hug' } });
 insert(ledger, { type: 'text', name: 'Card label', text: 'Kas masuk hari ini · Toko Sumber Rejeki', fontFamily: SANS, fontSize: 14, fills: [C.muted] });
 insert(ledger, { type: 'text', name: 'Total', text: 'Rp 8.420.500', fontFamily: SERIF, fontSize: 56, fills: [C.text] });
 // Strokes go round the whole box, so a divider line between rows is a 1px rect.
@@ -60,9 +68,21 @@ for (const [k, v] of [['QRIS · 64 transaksi', '+ Rp 5.112.000'], ['Tunai · 41 
       { type: 'text', name: 'Amount', text: v, fontFamily: SANS, fontSize: 15, fontWeight: 500, fills: [v.startsWith('+') ? C.accent : C.text] },
     ] });
 }
+// Plane 2: absolute, so it overlaps the ledger's bottom-left corner instead of joining the column.
+// Keep it inside the stage: frames clip their children by default (or set clip: false on the stage).
+notice = insert(stage, { type: 'frame', name: 'Stock notice', absolute: true, x: 0, y: 0, layout: 'row', gap: 12, align: 'center',
+  padding: [14, 18], cornerRadius: 16, fills: [C.raised], strokes: [{ color: C.border, width: 1, align: 'inside' }], effects: SHADOW_2, sizing: 'hug',
+  children: [{ type: 'frame', name: 'Notice text', layout: 'column', gap: 2, sizing: 'hug', children: [
+    { type: 'text', name: 'Title', text: 'Stok menipis', fontFamily: SANS, fontSize: 14, fontWeight: 600, fills: [C.text] },
+    { type: 'text', name: 'Detail', text: 'Gula pasir 1 kg · sisa 6', fontFamily: SANS, fontSize: 14, fills: [C.muted] },
+  ] }] });
+icon('package', notice, { size: 18, color: '#b45309' });
+move(children(notice)[1].id, notice, 0);
+update(notice, { y: get(stage).height - 88 });   // pin near the stage's bottom edge once its height is known
 screenshot(page, { scale: 0.5 });
 
-// ---- CALL 3+: Logos, Features (bento: one big stat tile + three small tiles), Pricing (2 plans,
-// pro plan with a 2px accent stroke), CTA band, Footer. One section per call, each ending with
+// ---- CALL 3+: Logos, Features (bento: one big accent-soft stat tile + three raised tiles with SHADOW_1),
+// Steps on a C.surface band, Pricing on a C.surface band (2 raised plans; the pro plan gets a 2px accent
+// stroke and SHADOW_2), CTA, Footer. No section starts with an eyebrow. One section per call, each ending with
 // screenshot(). Reuse the button component with instance(); icons with icon(name, parent, {...}).
 // Then build "Landing / Mobile" (390 wide, padding 20) from the same tokens and components.

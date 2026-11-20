@@ -16,15 +16,15 @@ cover = insert(null, { type: 'frame', name: '01 Cover', x: at.x, y: at.y, width:
   layout: 'column', justify: 'end', padding: A4.m, gap: 48, clip: true, fills: [P.brand] });
 insert(cover, { type: 'ellipse', name: 'Mark', absolute: true, x: 420, y: -110, width: 680, height: 680,
   fills: [], strokes: [{ color: '#ffffff', width: 84, align: 'inside' }], opacity: 0.07 });
-insert(cover, { type: 'text', name: 'Kicker', absolute: true, x: A4.m, y: A4.m, text: 'NARA STUDIO · PROPOSAL NO. 2611-04',
-  fontFamily: 'Inter', fontSize: 10, fontWeight: 600, letterSpacing: 1.2, fills: ['#f3cdb3'] });
+insert(cover, { type: 'text', name: 'Running header', absolute: true, x: A4.m, y: A4.m, text: 'Nara Studio · Proposal no. 2611-04',
+  fontFamily: 'Inter', fontSize: 10, fontWeight: 500, fills: ['#f3cdb3'] });
 insert(cover, { type: 'text', name: 'Title', text: 'Identitas & website untuk Kopi Rana', fontFamily: 'Fraunces',
   fontSize: 86, lineHeight: 0.95, letterSpacing: -1.5, fills: [P.cream], textSizing: 'auto-height', sizing: { horizontal: 'fill', vertical: 'hug' } });
 meta = insert(cover, { type: 'frame', name: 'Meta', layout: 'row', gap: 24, padding: [20, 0, 0, 0], sizing: { horizontal: 'fill', vertical: 'hug' } });
 insert(meta, { type: 'rect', name: 'Meta rule', absolute: true, x: 0, y: 0, width: A4.w - A4.m * 2, height: 1, fills: [P.cream], opacity: 0.35 });
-for (const [k, v] of [['UNTUK', 'Rana Pratiwi, Pemilik'], ['TANGGAL', '20 November 2026'], ['BERLAKU HINGGA', '20 Desember 2026']])
+for (const [k, v] of [['Untuk', 'Rana Pratiwi, Pemilik'], ['Tanggal', '20 November 2026'], ['Berlaku hingga', '20 Desember 2026']])
   insert(meta, { type: 'frame', name: `Meta ${k}`, layout: 'column', gap: 6, sizing: { horizontal: 'fill', vertical: 'hug' }, children: [
-    { type: 'text', name: 'Key', text: k, fontFamily: 'Inter', fontSize: 9, fontWeight: 600, letterSpacing: 1, fills: ['#f3cdb3'] },
+    { type: 'text', name: 'Key', text: k, fontFamily: 'Inter', fontSize: 10, fontWeight: 500, fills: ['#f3cdb3'] },
     { type: 'text', name: 'Value', text: v, fontFamily: 'Inter', fontSize: 12, fills: [P.cream] },
   ] });
 screenshot(cover, { scale: 0.5 });
@@ -35,7 +35,7 @@ pg = insert(null, { type: 'frame', name: '02 Problem', x: at.x + A4.w + 80, y: a
 head = insert(pg, { type: 'frame', name: 'Opener', layout: 'row', gap: 40, sizing: { horizontal: 'fill', vertical: 'hug' } });
 insert(head, { type: 'text', name: 'Number', text: '01', fontFamily: 'Fraunces', fontSize: 160, lineHeight: 0.8, fills: [P.soft] });
 col = insert(head, { type: 'frame', name: 'Heading', layout: 'column', gap: 12, padding: [20, 0, 0, 0], sizing: { horizontal: 'fill', vertical: 'hug' } });
-insert(col, { type: 'text', name: 'Label', text: 'MASALAH', fontFamily: 'Inter', fontSize: 10, fontWeight: 600, letterSpacing: 1.2, fills: [P.muted] });
+// No label above the H2 (no eyebrows): the big section number and the sentence carry the section.
 insert(col, { type: 'text', name: 'H2', text: 'Kopinya dikenal di Malang, tapi tidak bisa ditemukan di internet.', fontFamily: 'Fraunces',
   fontSize: 34, lineHeight: 1.1, fills: [P.ink], textSizing: 'auto-height', sizing: { horizontal: 'fill', vertical: 'hug' } });
 stats = insert(pg, { type: 'frame', name: 'Stats', layout: 'row', gap: 24, sizing: { horizontal: 'fill', vertical: 'hug' } });
