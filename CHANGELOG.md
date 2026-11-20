@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-20
+
 ### Design skills
 - **Four design skills for agents** in `skills/`: `design-website` (minimalist professional sites), `design-pdf` (designed PDF documents), `design-slides` (decks as editable PPTX or HTML/PDF) and `design-flows` (page maps, user flows, swimlanes, state diagrams). Import them in Settings → Skills.
 - Each skill ships a complete worked example, ArchaDev canvas snippets for `execute`, a reference of which ArchaDev tools to call (and the `execute` traps seen in real runs), and render scripts that use the installed Chrome/Edge: page screenshots at phone/tablet/desktop width, HTML → PDF with page previews, PPTX previews through PowerPoint, and Mermaid → SVG/PNG.
