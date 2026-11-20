@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-20
+
 ### Assets: icons and logos
 - **Assets panel** (grid button on the tool rail, or Shift+I): over 20,000 icons in one place. Lucide, Tabler (outline + filled), Phosphor (thin, light, regular, bold, fill), Heroicons (outline, solid, mini, micro) and about 3,500 brand logos in their brand colours. Search one set or all of them, pick a size and colour, then click to insert or drag onto the canvas.
 - **My icons**: upload your own SVG or PNG icons and logos. They are saved on this computer for every document; SVGs stay editable vectors.
