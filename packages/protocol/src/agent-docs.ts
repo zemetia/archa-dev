@@ -22,8 +22,10 @@ API (ids are strings; any ref may be a node id or a unique node name):
   distribute(refs, "horizontal"|"vertical", { gap? })  equal spacing (3+ layers), or pack with a fixed gap
   wrap(refs, { layout?: "row"|"column"|"auto", gap?, padding?, name?, ...frame props }) -> id   put sibling layers in a new frame at their place (auto layout when layout is set)
   outline(ref?, { depth? }) -> text                  compact tree (sizes, layout, fills, text, context notes); print(outline(card)) to read a design cheaply
-  icon(name, parentRef | null, { size?, color?, strokeWidth?, index?, x?, y?, name? }) -> id   lucide icon as a vector (e.g. "search", "arrow-right")
-  icons(query) -> [names]                            find icon names
+  icon(name, parentRef | null, { size?, color?, strokeWidth?, index?, x?, y?, name? }) -> id   icon as a vector. "search" = lucide; other sets by prefix:
+      tabler:, tabler-filled:, ph: (Phosphor) ph-thin: ph-light: ph-bold: ph-fill:, hero: (Heroicons outline) hero-solid: hero-mini: hero-micro:,
+      logos:<brand> (brand logo in its brand colour, e.g. logos:github, logos:google, logos:stripe), my:<name> (icons the person uploaded)
+  icons(query, { set?, limit? }) -> [refs]           search every set, best first (e.g. icons("github") → "logos:github", …)
   screenshot(ref, { scale? })                        attach an image of the node to the reply (a call that creates nodes and asks for none gets one of its new top node automatically)
   print(...values)
 

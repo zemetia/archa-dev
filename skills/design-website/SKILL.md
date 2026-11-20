@@ -25,7 +25,7 @@ not a generic AI template.
 - **Inside ArchaDev**: design on the canvas first with the `archadev` MCP tools (`get_state` →
   `execute` per section → `screenshot`, `say` between sections, `browser` for references and for
   checking the built site). Read [references/archadev-tools.md](references/archadev-tools.md) before your first `execute`.
-- **Icons**: on the canvas use `icon(name, parent, {...})` (Lucide). In code use one icon library
+- **Icons**: on the canvas use `icon(name, parent, {...})`: Lucide by default, other sets with a prefix (`tabler:home`, `ph-fill:heart`, `logos:github` for brand logos, `my:<name>` for uploads). Stick to one set per design. In code use one icon library
   (`lucide-react` or inline Lucide SVG). If the `svg-icons` skill / icon kit is installed, use it to search and export.
 - **QA**: `node scripts/shoot.mjs <url|file.html> <outDir>`, then look at the PNGs.
 

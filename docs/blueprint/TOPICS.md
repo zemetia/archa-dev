@@ -36,7 +36,7 @@ A–Z keyword → the doc that owns the rules → the code that implements it to
 | Export (PNG / JPG / SVG / PDF) | [RENDERING/03](./RENDERING/03-export.md) | `packages/render/src/scene.ts`, `packages/formats/src/svg.ts`, `main/pdf.ts` |
 | Format version / migrations | [FILE_FORMATS/03](./FILE_FORMATS/03-migrations-validation.md) | `packages/formats/src/migrations/archa/`, fixtures in `packages/formats/test/fixtures/` |
 | Hit testing / selection | [RENDERING/02](./RENDERING/02-layers-hit-testing.md) | `renderer/lib/geometry.ts`, `renderer/canvas/overlay.ts` |
-| Icons (lucide) | [MCP/02](./MCP/02-execute-api.md) | `packages/core/src/icons.ts`, `scripts/gen-icons.mjs` |
+| Icons, logos, Assets panel, My icons | [DESIGN_SYSTEM/05](./DESIGN_SYSTEM/05-icons-assets.md), [MCP/02](./MCP/02-execute-api.md) | `packages/icons/`, `scripts/gen-icon-sets.mjs`, `ui/AssetsPanel.tsx`, `core-host/icons.ts` |
 | Import (image, SVG, `.pen`) | [FILE_FORMATS/04](./FILE_FORMATS/04-importers.md) | `renderer/lib/importers.ts`; `.pen` not built |
 | IPC / RPC protocol | [ARCHITECTURE/02](./ARCHITECTURE/02-protocol-ipc.md), [CODE_MAP/05](./CODE_MAP/05-interfaces.md) | `packages/protocol/src/index.ts`, `apps/desktop/src/preload/index.ts` |
 | Knowledge files (THIS / LEARN) | [KNOWLEDGE](./KNOWLEDGE.md) | `docs/knowledge/` |

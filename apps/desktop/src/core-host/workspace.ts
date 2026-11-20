@@ -11,6 +11,7 @@ import { AgentExecutor, describeState } from './execute';
 import { ADAPTERS, ChatRunner, findBin, type McpCommand } from './agents';
 import { AccountManager, parse, resolveCli } from './accounts';
 import { LibraryStore, libraryInsertSchema, libraryItemSchema, libraryPublishSchema } from './library';
+import { IconStore, iconsAddSchema, iconsRemoveSchema } from './icons';
 import { SkillManager } from './skills';
 import { McpServerManager } from './mcp-servers';
 import { callBrowser } from './main-bridge';
@@ -86,6 +87,7 @@ export class Workspace {
   readonly mcpServers = new McpServerManager(() => this.broadcast('mcp.changed', {}));
   readonly chat = new ChatRunner(this, mcpCommand);
   readonly library = new LibraryStore();
+  readonly icons = new IconStore();
 
   constructor() {
     this.newDoc('Untitled');
@@ -391,6 +393,9 @@ export class Workspace {
       const p = parse(libraryItemSchema, params);
       this.library.remove(p.library, p.id);
     },
+    'icons.custom.list': () => this.icons.list(),
+    'icons.custom.add': (params) => this.icons.add(parse(iconsAddSchema, params).icons),
+    'icons.custom.remove': (params) => { this.icons.remove(parse(iconsRemoveSchema, params).name); },
     'library.insert': (params, conn) => {
       const p = parse(libraryInsertSchema, params);
       const s = this.session(p.docId);

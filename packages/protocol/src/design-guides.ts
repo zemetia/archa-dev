@@ -60,7 +60,9 @@ Every text node needs fills — text has no colour by default.`,
   icons: {
     title: 'Icons',
     when: 'navs, buttons, lists, features',
-    body: `icon(name, parent, { size?: 20, color?: "#hex", strokeWidth?: 2, index?, x?, y? }) inserts a lucide icon as a vector and returns its id. icons("query") lists matching names when unsure.
+    body: `icon(name, parent, { size?: 20, color?: "#hex", strokeWidth?: 2, index?, x?, y? }) inserts an icon as a vector and returns its id. icons("query") searches every set when unsure.
+Sets: plain names are lucide; "tabler:…", "ph:…" (Phosphor; ph-fill/ph-bold/ph-light/ph-thin), "hero:…" (Heroicons; hero-solid/hero-mini/hero-micro). Keep ONE icon set per design.
+Brand logos: icon("logos:github"), "logos:google", "logos:apple", "logos:stripe", "logos:whatsapp"… keep their brand colour (pass color for a one-colour row of logos). Use them for social links, "trusted by" rows and sign-in buttons — never draw a logo by hand. "my:<name>" places an icon the person uploaded.
 Common names: search, menu, x, check, chevron-right, chevron-down, arrow-right, plus, minus, settings, user, users, bell, mail, home, calendar, clock, star, heart, shopping-cart, credit-card, lock, eye, trash-2, pencil, download, upload, share-2, filter, sliders-horizontal, layout-dashboard, bar-chart-3, file-text, folder, image, globe, phone, map-pin, sun, moon, log-out, zap, shield-check, sparkles.
 Sizes: 16 in dense UI and buttons, 20 in navs and lists, 24-32 in feature tiles (inside a tinted rounded frame). Colour = the text colour next to it, or the accent.`,
   },

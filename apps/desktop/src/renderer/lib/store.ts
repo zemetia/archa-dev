@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, threadOf, type AccountsOverview, type ChatMode, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, threadOf, type AccountsOverview, type ChatMode, type CustomIconInfo, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodeImage, renderNodePng } from '@archa/render';
 import { onChatRun } from './comments';
@@ -10,7 +10,7 @@ import * as changes from '../canvas/changes';
 export type LeftTab = 'chat' | 'history' | 'layers' | 'components' | 'slides' | 'library';
 export type Tool = 'select' | 'scale' | 'hand' | 'frame' | 'rect' | 'ellipse' | 'polygon' | 'pen' | 'text' | 'sticky' | 'embed' | 'connector' | 'comment';
 /** Floating panels opened from the tool rail. */
-export type RailPanel = 'variables' | 'find' | 'icons' | null;
+export type RailPanel = 'variables' | 'find' | 'assets' | null;
 export type Camera = { x: number; y: number; zoom: number };
 type Toast = { id: number; text: string; kind: 'info' | 'error' };
 
@@ -74,6 +74,8 @@ type State = {
   interactEmbed: string | null;
   /** Canvas right-click menu: screen position and the page point under it. */
   contextMenu: { x: number; y: number; world: { x: number; y: number } } | null;
+  /** Icons the person uploaded (Assets → My icons); null until first loaded. */
+  customIcons: CustomIconInfo[] | null;
   /** 1px grid drawn when zoomed in far enough; remembered per machine. */
   pixelGrid: boolean;
 };
@@ -86,7 +88,7 @@ export const useStore = create<State>(() => ({
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
   browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
   railPanel: null, showComments: true, openComment: null, commentDraft: null, interactEmbed: null,
-  contextMenu: null, pixelGrid: readFlag('archa.pixelGrid'),
+  contextMenu: null, customIcons: null, pixelGrid: readFlag('archa.pixelGrid'),
 }));
 
 /** Switches tool and closes per-tool UI that no longer applies. */

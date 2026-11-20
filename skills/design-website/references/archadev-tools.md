@@ -26,7 +26,7 @@ that the app is running.
    `Landing / Mobile` (390). Add the empty named section frames inside (column layout, fill width, hug height).
 4. **Sections**: one `execute` call per section. Repeated pieces (button, card, nav item, pricing row) are
    built once, then `makeComponent(frame, 'purpose')`, then placed with `instance()`. Icons use
-   `icon('arrow-right', parent, { size: 18, color })` (the Lucide set; find names with `icons('query')`).
+   `icon('arrow-right', parent, { size: 18, color })` (Lucide by default; prefix other sets: `tabler:`, `ph:`/`ph-fill:`, `hero:`, brand logos `logos:github`, uploads `my:`; `icons('query')` searches them all).
 5. **References**: `browser open <url>` + `screenshot`, or an `embed` node (`{ type: 'embed', url }`) on
    the canvas next to your frames, so the person sees what you are drawing from.
 6. **Review**: `screenshot` each frame, read the `Issues` list in every reply, and fix with `update()`

@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Channel, ChatMessage, ChatRunEvent, ExecuteResult, Message } from '@archa/protocol';
 import { guidesFor, guideText } from '@archa/protocol';
-import { iconPath, searchIcons } from '@archa/core/icons';
+import { getIcon, loadIconSet, searchIcons } from '@archa/icons';
+import { colorToHex } from '@archa/schema';
 import { Workspace } from '../src/core-host/workspace';
 import { ADAPTERS, type Adapter } from '../src/core-host/agent-adapters';
 
@@ -127,8 +128,8 @@ describe('internal design guides', () => {
 
 describe('execute helpers', () => {
   it('icon() inserts a lucide vector, suggests names, and text without fill is auto-fixed with a screenshot', async () => {
-    expect(iconPath('ArrowRight')).toBeTruthy();
-    expect(searchIcons('arrow')).toContain('arrow-right');
+    expect(getIcon(await loadIconSet('lucide'), 'arrow-right')).toBeTruthy();
+    expect(searchIcons('arrow', { sets: ['lucide'] })).toContain('arrow-right');
     const ws = new Workspace();
     ws.attach(fakeChannel().channel, { kind: 'renderer', name: 'window' });
     ws.requestRender = async () => ({ png: 'AAAA' });
@@ -155,6 +156,38 @@ describe('execute helpers', () => {
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.reason).toMatch(/did you mean .*search/);
     void ({} as ChatMessage);
+  });
+
+  it('icon() reaches every set, brand logos keep their colour, and uploaded icons work as my:<name>', async () => {
+    const ws = new Workspace();
+    ws.attach(fakeChannel().channel, { kind: 'renderer', name: 'window' });
+    ws.requestRender = async () => ({ png: 'AAAA' });
+    const agent = ws.attach(fakeChannel().channel, { kind: 'mcp', name: 'claude', agentId: 'claude' });
+    const docId = ws.summaries()[0]!.id;
+    ws.icons.add([{ name: 'Brand mark', width: 48, height: 24, node: { type: 'path', name: 'x', d: 'M0 0h48v24H0Z', viewBox: { x: 0, y: 0, width: 48, height: 24 }, width: 48, height: 24, fills: ['#ff0000'] } as never }]);
+    const r = await ws.handlers['agent.execute']({ docId, code: `
+      icon('tabler:home', null, { size: 24, name: 'T' });
+      icon('ph-fill:house', null, { size: 32, name: 'P' });
+      icon('hero-solid:bell', null, { name: 'H' });
+      icon('logos:github', null, { size: 40 });
+      icon('my:Brand mark', null, { size: 96, color: '#00ff00' });
+      print(icons('github').slice(0, 3).join(','));
+      print(icons('house', { set: 'ph' }).slice(0, 2).join(','));
+    ` }, agent) as ExecuteResult;
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const doc = ws.session(docId).doc;
+    expect(doc.findByName('T')[0]).toMatchObject({ type: 'path', viewBox: { width: 24 }, fills: [] });
+    expect(doc.findByName('P')[0]).toMatchObject({ type: 'path', width: 32, viewBox: { width: 256 }, strokes: [] });
+    const logo = doc.findByName('GitHub')[0]!;
+    expect(logo.type === 'path' && colorToHex(logo.fills[0]!.color)).toBe('#181717');
+    const mine = doc.findByName('Brand mark')[0]!;
+    expect(mine).toMatchObject({ width: 96, height: 48 });
+    expect(mine.type === 'path' && colorToHex(mine.fills[0]!.color)).toBe('#00ff00');
+    expect(r.output[0]).toContain('logos:github');
+    expect(r.output[1]).toMatch(/^ph:house/);
+    const unknown = await ws.handlers['agent.execute']({ docId, code: `icon('nope:x')` }, agent) as ExecuteResult;
+    expect(!unknown.ok && unknown.reason).toMatch(/Unknown icon set "nope"/);
   });
 });
 
@@ -183,6 +216,6 @@ describe('forgiving execute input', () => {
     const bad = await run(`insert('Box', { type: 'frame', name: 'Bad', sizing: { vertical: 'grow' } })`);
     expect(!bad.ok && bad.reason).toMatch(/\(got "grow"\)/);
     const c = await run(`icon('twitter', 'Box')`);
-    expect(!c.ok && c.reason).toMatch(/no brand logos/);
+    expect(!c.ok && c.reason).toMatch(/logos:<brand>/);
   });
 });

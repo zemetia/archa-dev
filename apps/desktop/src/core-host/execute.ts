@@ -3,7 +3,7 @@ import {
   alignOps, applyOps, contextOf, distributeOps, DocumentError, findEmptySpace, insertOpsFor, outline, wrapOps, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, subtreeInput, syncInstanceOps,
   type ArchaDocument, type DocumentSession,
 } from '@archa/core';
-import { iconKey, iconPath, searchIcons } from '@archa/core/icons';
+import { CUSTOM_SET, customIconNode, getIcon, ICON_SETS, iconNode, iconSetMeta, loadAllIconSets, loadedIconSet, parseIconRef, searchIcons, searchNames } from '@archa/icons';
 import { colorToHex, hexToColor, isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
 import type { ExecuteResult, TrailAction, TrailStep } from '@archa/protocol';
 import type { Connection, Workspace } from './workspace';
@@ -41,7 +41,7 @@ var distribute = (refs, axis, opts) => __call('distribute', [[].concat(refs), ax
 var wrap = (refs, frame) => __call('wrap', [[].concat(refs), frame || {}]);
 var outline = (ref, opts) => __call('outline', [ref, opts || {}]);
 var icon = (name, parent, opts) => __call('icon', [name, parent, opts || {}]);
-var icons = (query) => __call('icons', [query]);
+var icons = (query, opts) => __call('icons', [query, opts || {}]);
 var print = (...v) => __call('print', [v.map((x) => typeof x === 'string' ? x : JSON.stringify(x))]);
 var find = (visitor, opts) => {
   if (!opts || !opts.under) throw new Error('find() needs { under: <frame id or name> } — use get_state for the page overview');
@@ -97,6 +97,8 @@ export class AgentExecutor {
     }
     if (!code?.trim()) return { ok: false, revision: session.revision, reason: 'Pass `code` (a JS snippet) or `editId` + `edits`.', editId: newId(6) };
 
+    // Icon sets load once, on the first snippet that asks for one (they are large).
+    if (/\bicons?\s*\(/.test(code)) await loadAllIconSets();
     const ctx = await this.context();
     const page = session.doc.pages[0]!;
     this.state = { working: session.doc.clone(), ops: [], created: [], changed: new Map(), output: [], shots: [], pageRoot: page.rootId, selection: this.ws.selection.get(session.id) ?? [], steps: [] };
@@ -333,18 +335,26 @@ export class AgentExecutor {
       }
       case 'icon': {
         const [nameArg, parent, opts = {}] = args as [string, string | null | undefined, { size?: number; color?: string; strokeWidth?: number; index?: number; x?: number; y?: number; name?: string }];
-        const d = iconPath(String(nameArg ?? ''));
-        if (!d) {
-          const near = searchIcons(String(nameArg ?? ''), 8);
-          throw new Error(`No icon "${String(nameArg)}"${near.length ? ` — did you mean ${near.join(', ')}?` : ' — lucide has no brand logos; use a neutral icon (globe, mail, link, at-sign, message-circle) or a short text label. icons("query") lists names'}`);
-        }
+        const { set, name: key } = parseIconRef(String(nameArg ?? ''));
         const parentId = parent ? ref(parent) : st.pageRoot;
         const size = Number(opts.size) > 0 ? Number(opts.size) : 20;
-        const input = {
-          type: 'path', name: opts.name ?? `Icon ${iconKey(String(nameArg))}`, d, viewBox: { x: 0, y: 0, width: 24, height: 24 }, width: size, height: size,
-          fills: [], strokes: [{ color: opts.color ?? inkFor(doc, parentId), width: ((Number(opts.strokeWidth) || 2) * size) / 24, align: 'center' }],
-          lineCap: 'round', lineJoin: 'round', ...(opts.x !== undefined ? { x: opts.x } : {}), ...(opts.y !== undefined ? { y: opts.y } : {}),
-        } as NodeInput;
+        let input: NodeInput;
+        if (set === CUSTOM_SET) {
+          const mine = this.ws.icons.get(key);
+          if (!mine) throw new Error(`No uploaded icon "${key}" — uploaded icons: ${this.ws.icons.list().map((i) => i.name).slice(0, 30).join(', ') || 'none'}`);
+          input = customIconNode(mine, { size, color: opts.color, name: opts.name });
+        } else {
+          const icon = getIcon(loadedIconSet(set), key);
+          if (!icon) {
+            if (!iconSetMeta(set)) throw new Error(`Unknown icon set "${set}" — sets: ${ICON_SETS.map((x) => x.id).join(', ')}, my`);
+            const near = searchIcons(key, { sets: [set], limit: 8 });
+            throw new Error(`No icon "${String(nameArg)}"${near.length ? ` — did you mean ${near.join(', ')}?` : ''}. icons("query") searches every set; brand logos are "logos:<brand>"`);
+          }
+          // Logos keep their brand colour unless one is asked for; icons default to readable ink.
+          input = iconNode(icon, { size, color: opts.color ?? (icon.brand ? undefined : inkFor(doc, parentId)), strokeWidth: opts.strokeWidth, name: opts.name });
+        }
+        if (opts.x !== undefined) (input as { x?: number }).x = opts.x;
+        if (opts.y !== undefined) (input as { y?: number }).y = opts.y;
         const { ops, rootId, created } = insertOpsFor(input, parentId, opts.index ?? undefined);
         commit(ops);
         st.created.push(...created);
@@ -375,8 +385,14 @@ export class AgentExecutor {
         step('read', id);
         return outline(doc, id, opts?.depth ?? (id === st.pageRoot ? 1 : 3));
       }
-      case 'icons':
-        return searchIcons(String(args[0] ?? ''), 30);
+      case 'icons': {
+        const [q, o] = args as [string, { set?: string | string[]; limit?: number } | undefined];
+        const sets = o?.set ? [o.set].flat() : undefined;
+        const limit = Math.min(Number(o?.limit) || 30, 100);
+        const hits = searchIcons(String(q ?? ''), { sets: sets?.filter((x) => x !== CUSTOM_SET), limit });
+        if (!sets || sets.includes(CUSTOM_SET)) hits.unshift(...searchNames(this.ws.icons.list().map((i) => i.name), String(q ?? ''), 6).map((n) => `${CUSTOM_SET}:${n}`));
+        return hits.slice(0, limit);
+      }
       case 'print':
         st.output.push((args[0] as string[]).join(' '));
         return null;
