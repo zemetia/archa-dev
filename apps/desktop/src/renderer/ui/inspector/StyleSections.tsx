@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
-import { Circle, CircleDashed, CornerDownRight, Eye, EyeOff, MoveUpRight, Minus, Plus, Square, SquareDashed, TextAlignCenter, TextAlignEnd, TextAlignStart } from 'lucide-react';
+import { Circle, CircleDashed, CornerDownRight, Eraser, Eye, EyeOff, Loader2, MoveUpRight, Minus, Plus, Square, SquareDashed, TextAlignCenter, TextAlignEnd, TextAlignStart } from 'lucide-react';
 import { hexToColor, type Effect, type EffectType, type Node, type Paint, type Stroke } from '@archa/schema';
 import { Check, ColorField, IconButton, MenuButton, NumberField, Section, Segmented, Select } from '../controls';
 import { EMBED_DEVICES } from '../../canvas/EmbedLayer';
+import { useStore } from '../../lib/store';
+import { removeBackground } from '../../lib/removeBackground';
 import { FontPicker } from './FontPicker';
 
 /* Style sections of the design panel: appearance, text, fill, stroke, effects and per-type extras. */
@@ -212,14 +214,7 @@ export function TypeExtras({ node: n, set }: { node: Node; set: SetProps }) {
       </Section>
     );
   }
-  if (n.type === 'image') {
-    return (
-      <Section title="Image">
-        <Select title="Fit" value={n.fit} onChange={(fit) => set({ fit }, 'Image fit')}
-          options={[{ value: 'crop', label: 'Fill (crop)' }, { value: 'fit', label: 'Fit' }, { value: 'fill', label: 'Stretch' }]} />
-      </Section>
-    );
-  }
+  if (n.type === 'image') return <ImageSection key={n.id} n={n} set={set} />;
   if (n.type === 'path') {
     return (
       <Section title="Vector">
@@ -235,4 +230,20 @@ export function TypeExtras({ node: n, set }: { node: Node; set: SetProps }) {
     );
   }
   return null;
+}
+
+function ImageSection({ n, set }: { n: Extract<Node, { type: 'image' }>; set: SetProps }) {
+  const job = useStore((s) => s.bgJob);
+  const busy = job?.nodeId === n.id;
+  return (
+    <Section title="Image">
+      <Select title="Fit" value={n.fit} onChange={(fit) => set({ fit }, 'Image fit')}
+        options={[{ value: 'crop', label: 'Fill (crop)' }, { value: 'fit', label: 'Fit' }, { value: 'fill', label: 'Stretch' }]} />
+      <button disabled={!!job} onClick={() => void removeBackground(n.id)} title="Cut the subject out on this computer — the photo never leaves it"
+        className="mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-panel-2 text-[12px] text-fg-muted hover:bg-panel-3 hover:text-fg disabled:cursor-not-allowed disabled:opacity-50">
+        {busy ? <Loader2 size={13} className="animate-spin" /> : <Eraser size={13} />}
+        {busy ? (job.phase === 'download' ? `Downloading model · ${Math.round(job.progress * 100)}%` : 'Removing background…') : 'Remove background'}
+      </button>
+    </Section>
+  );
 }

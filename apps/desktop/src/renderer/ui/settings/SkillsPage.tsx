@@ -11,7 +11,7 @@ import { call, Chip, Empty, Field, FormCard, IconAction, Notice, openFolder, Pag
  * chat runs; skills the agent CLIs load on their own are listed read-only and can be copied in.
  */
 
-const SOURCE_BRAND: Record<SkillSource, Brand | null> = { archadev: null, claude: 'claude', codex: 'codex', gemini: 'agy', agents: null };
+const SOURCE_BRAND: Record<SkillSource, Brand | null> = { archadev: null, builtin: null, claude: 'claude', codex: 'codex', gemini: 'agy', agents: null };
 
 export function SkillsPage() {
   const data = useStore((s) => s.skills);
@@ -23,7 +23,8 @@ export function SkillsPage() {
 
   const match = (s: Skill) => !query.trim() || `${s.name} ${s.description}`.toLowerCase().includes(query.trim().toLowerCase());
   const library = (data?.skills ?? []).filter((s) => s.source === 'archadev');
-  const others = useMemo(() => (data?.sources ?? []).filter((s) => s.source !== 'archadev').map((src) => ({ ...src, skills: (data?.skills ?? []).filter((s) => s.source === src.source) })), [data]);
+  const builtin = (data?.skills ?? []).filter((s) => s.source === 'builtin');
+  const others = useMemo(() => (data?.sources ?? []).filter((s) => s.source !== 'archadev' && s.source !== 'builtin').map((src) => ({ ...src, skills: (data?.skills ?? []).filter((s) => s.source === src.source) })), [data]);
 
   const importFolder = async () => {
     const dir = await window.archa.pickFolder('Choose a skill folder (it contains SKILL.md)');
@@ -37,7 +38,7 @@ export function SkillsPage() {
   return (
     <>
       <PageHeader title="Skills"
-        description="Skills are folders of instructions an agent loads when a task matches their description. Skills in the ArchaDev library are given to every chat run, on top of what your agent CLIs already know."
+        description="Skills are folders of instructions an agent loads when a task matches their description. ArchaDev's built-in skills and your library are given to every chat run, on top of what your agent CLIs already know. Type / in the chat to use one on purpose."
         actions={!creating && (
           <>
             <Button variant="ghost" disabled={importing} onClick={() => void importFolder()}>{importing ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}Import folder</Button>
@@ -57,6 +58,13 @@ export function SkillsPage() {
               onKeyDown={(e) => e.stopPropagation()} className="w-full bg-transparent text-[12px] placeholder:text-fg-subtle" />
           </div>
 
+          {builtin.length > 0 && (
+            <div>
+              <SectionTitle>Built into ArchaDev <span className="font-normal text-fg-subtle">{builtin.length} · on for every chat unless you turn one off</span></SectionTitle>
+              <div className="space-y-2">{builtin.filter(match).map((s) => <SkillRow key={s.id} skill={s} />)}</div>
+            </div>
+          )}
+
           <div>
             <SectionTitle action={<button onClick={() => void openFolder(data.libraryDir)} className="flex items-center gap-1 text-[11px] text-fg-subtle hover:text-fg-muted"><FolderOpen size={12} />Open folder</button>}>
               ArchaDev library <span className="font-normal text-fg-subtle">{library.length}</span>
@@ -66,7 +74,7 @@ export function SkillsPage() {
               {library.length === 0 && !creating && (
                 <Empty icon={<Sparkles size={22} className="text-accent-fg" />} title="No skills in the library yet"
                   action={<Button variant="primary" onClick={() => setCreating(true)}><Plus size={13} />New skill</Button>}>
-                  Write one here, import a folder with a SKILL.md, or copy one from an agent below. Enabled skills reach Claude Code chat runs.
+                  Write one here, import a folder with a SKILL.md, or copy one from an agent below. Enabled skills reach every chat run, whichever agent runs it.
                 </Empty>
               )}
             </div>
@@ -85,6 +93,7 @@ function SkillRow({ skill: s }: { skill: Skill }) {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const library = s.source === 'archadev';
+  const builtin = s.source === 'builtin';
 
   const toggleOpen = async () => {
     const next = !open;
@@ -95,7 +104,7 @@ function SkillRow({ skill: s }: { skill: Skill }) {
   const remove = () => call(setBusy, async (c) => { await c.call('skills.delete', { id: s.id }); toast(`Deleted ${s.name}`); });
 
   return (
-    <div className={cn('rounded-xl border border-line bg-panel-2/40', library && !s.enabled && 'opacity-60')}>
+    <div className={cn('rounded-xl border border-line bg-panel-2/40', (library || builtin) && !s.enabled && 'opacity-60')}>
       <div className="flex items-center gap-3 px-4 py-3">
         <button onClick={() => void toggleOpen()} title={open ? 'Hide SKILL.md' : 'Show SKILL.md'} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-subtle hover:bg-panel-3 hover:text-fg">
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -115,8 +124,12 @@ function SkillRow({ skill: s }: { skill: Skill }) {
           </div>
         ) : (
           <div className="flex shrink-0 items-center gap-1">
-            {!library && <Button variant="ghost" disabled={busy} onClick={copyIn} title="Copy into the ArchaDev library so chat runs get it">{busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}Add to ArchaDev</Button>}
+            {!library && !builtin && <Button variant="ghost" disabled={busy} onClick={copyIn} title="Copy into the ArchaDev library so chat runs get it">{busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}Add to ArchaDev</Button>}
             <IconAction title="Open folder" onClick={() => void openFolder(s.dir)}><FolderOpen size={14} /></IconAction>
+            {builtin && (
+              <div className="px-1.5"><Switch checked={s.enabled} label={s.enabled ? `Turn off ${s.name}` : `Turn on ${s.name}`}
+                onChange={(v) => void call(setBusy, async (c) => { await c.call('skills.update', { id: s.id, enabled: v }); })} /></div>
+            )}
             {library && (
               <>
                 <div className="px-1.5"><Switch checked={s.enabled} label={s.enabled ? `Turn off ${s.name}` : `Turn on ${s.name}`}

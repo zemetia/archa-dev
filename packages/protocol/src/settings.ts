@@ -4,7 +4,8 @@
  * ------------------------------------------------------------------------- */
 
 /** Where a skill folder was found. `archadev` skills live in ~/.archadev/skills and are the only ones ArchaDev edits. */
-export type SkillSource = 'archadev' | 'claude' | 'codex' | 'gemini' | 'agents';
+/** builtin: the design skills that ship with ArchaDev (repo `skills/`), on by default. */
+export type SkillSource = 'archadev' | 'builtin' | 'claude' | 'codex' | 'gemini' | 'agents';
 
 export type Skill = {
   /** `<source>:<folder name>` */
@@ -13,7 +14,7 @@ export type Skill = {
   description: string;
   source: SkillSource;
   dir: string;
-  /** archadev skills only: handed to chat runs. */
+  /** archadev and builtin skills: handed to chat runs when on. */
   enabled: boolean;
   /** SKILL.md frontmatter could not be read. */
   error?: string;

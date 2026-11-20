@@ -14,6 +14,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
           'core-host': resolve(__dirname, 'src/core-host/index.ts'),
+          'ml-host': resolve(__dirname, 'src/main/ml-host.ts'),
         },
       },
     },

@@ -22,7 +22,7 @@
 
 ---
 
-**Linked from:** [CLAUDE.md](../../CLAUDE.md) · [STRUCTURE/03](./STRUCTURE/03-runtime-dirs.md)
+**Linked from:** [CLAUDE.md](../../CLAUDE.md) · [RENDERING/04](./RENDERING/04-background-removal.md) · [STRUCTURE/03](./STRUCTURE/03-runtime-dirs.md)
 
 **Code:** — see its parts
 <!-- backlinks:end -->

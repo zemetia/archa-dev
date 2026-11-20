@@ -32,23 +32,57 @@ export function importImageOrSvg(): Promise<void> {
 }
 
 export async function importFile(file: File, at?: { x: number; y: number }) {
-  const name = file.name.replace(/\.[^.]+$/, '') || 'Image';
-  if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
-    const text = await file.text();
-    const vector = svgToNodes(text, name);
-    if (vector) return place(vector, at, `Import ${name}`);
-    return place(await imageInput(`data:image/svg+xml;base64,${b64(text)}`, name), at, `Import ${name}`);
-  }
-  if (!file.type.startsWith('image/')) throw new Error(`${file.name} is not an image`);
-  return place(await imageInput(await readDataUrl(file), name), at, `Import ${name}`);
+  const name = baseName(file);
+  return place(await fileInput(file), at, `Import ${name}`);
 }
 
-/** Inserts at `at` (page coordinates) or the centre of the view, inside whatever frame is there. */
+/** The node an image or SVG file becomes (SVG as editable vectors when it can be). */
+async function fileInput(file: File): Promise<NodeInput> {
+  const name = baseName(file);
+  if (isSvg(file)) {
+    const text = await file.text();
+    return svgToNodes(text, name) ?? imageInput(`data:image/svg+xml;base64,${b64(text)}`, name);
+  }
+  if (!file.type.startsWith('image/')) throw new Error(`${file.name} is not an image`);
+  return imageInput(await readDataUrl(file), name);
+}
+
+const baseName = (file: File) => file.name.replace(/\.[^.]+$/, '') || 'Image';
+const isSvg = (file: File) => file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg');
+
+/**
+ * Files dropped on the canvas (photos from Explorer, a browser, the desktop): placed side by side
+ * starting under the pointer, inside the frame there, then selected together.
+ */
+export async function dropFiles(files: File[], at: { x: number; y: number }) {
+  const images = files.filter((f) => f.type.startsWith('image/') || isSvg(f));
+  if (!images.length) {
+    if (files.length) toast('Drop image files (PNG, JPG, WebP, GIF, SVG)', 'error');
+    return;
+  }
+  const ids: string[] = [];
+  let x = at.x;
+  for (const f of images) {
+    try {
+      const input = await fileInput(f);
+      const w = Number(input.width ?? 100);
+      // The first image centres on the pointer; the next ones line up to its right.
+      const cx = ids.length ? x + w / 2 : at.x;
+      const id = await place(input, { x: cx, y: at.y }, `Drop ${baseName(f)}`);
+      if (id) ids.push(id);
+      x = cx + w / 2 + 24;
+    } catch (e) {
+      toast(`Could not import ${f.name}: ${(e as Error).message}`, 'error');
+    }
+  }
+  if (ids.length > 1) select(ids);
+}
+
 /** Inserts a node centred on `at` (default: the middle of the view). `autoInk` lightens a dark icon dropped straight on the dark page. */
-export async function place(input: NodeInput, at: { x: number; y: number } | undefined, label: string, opts: { autoInk?: boolean } = {}) {
+export async function place(input: NodeInput, at: { x: number; y: number } | undefined, label: string, opts: { autoInk?: boolean } = {}): Promise<string | null> {
   const st = useStore.getState();
   const doc = st.doc;
-  if (!doc) return;
+  if (!doc) return null;
   const host = document.querySelector('[data-canvas-host]');
   const c = at ?? toWorld(st.camera, (host?.clientWidth ?? 800) / 2, (host?.clientHeight ?? 600) / 2);
   const w = Number(input.width ?? 100), h = Number(input.height ?? 100);
@@ -60,10 +94,10 @@ export async function place(input: NodeInput, at: { x: number; y: number } | und
     input = { ...input, strokes: light(input.strokes), fills: light(input.fills) } as NodeInput;
   }
   const { ops, rootId } = insertOpsFor({ ...input, x: Math.round(c.x - w / 2 - o.x), y: Math.round(c.y - h / 2 - o.y) }, parent.id);
-  if (await commit(label, ops)) {
-    select([rootId]);
-    setTool('select');
-  }
+  if (!(await commit(label, ops))) return null;
+  select([rootId]);
+  setTool('select');
+  return rootId;
 }
 
 export async function imageInput(src: string, name: string): Promise<NodeInput> {

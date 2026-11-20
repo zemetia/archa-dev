@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### Canvas
+- **Drag and drop photos** from Explorer (or a browser) onto the canvas: they land under the pointer, inside the frame there, side by side when you drop several. Dropping a photo on the chat composer attaches it to your message.
+- **Remove background**: right-click an image (or Design panel → Image) to cut the subject out, on this computer. The model (BiRefNet lite, MIT) downloads once (~224 MB); the photo never leaves your machine. Undo brings the original back.
+- **Drag layers out of frames**: a photo or any layer can now be dragged out of an auto-layout frame (dragging inside it still reorders) and stays visible while it leaves a clipping frame. Dropping into an auto-layout frame shows where it will land.
+
+### Export
+- **Multi-page PDF**: select several frames (Shift+click or drag a box) and export them as one PDF, a page each at its own size, in canvas order (left to right, top to bottom). From the Design panel's Export section or right-click **Export as PDF**. PNG, JPG and SVG with several layers save one file per layer into a folder.
+
+### Chat
+- **Expandable steps**: every step the agent takes (execute, inspect, screenshot…) opens to show what it did: the code it ran or the arguments, and what came back (or the error).
+- **Built-in design skills are on**: `design-website`, `design-pdf`, `design-slides` and `design-flows` now ship with the app and reach every chat run (Claude Code loads them as skills; Antigravity and Codex get them as a list to read). Turn one off in Settings → Skills; a library skill with the same name replaces it.
+- **`/skill` mentions**: type `/` in the composer to pick a skill or a built-in guide; its instructions go with that message, for every agent.
+- **Minimal by default**: agents now build only what you ask for, without filler sections, labels above headings, badges or extra copy, unless you ask for more.
+
 ## [1.2.0] - 2026-11-20
 
 ### Assets: icons and logos

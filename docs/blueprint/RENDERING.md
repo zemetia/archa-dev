@@ -7,6 +7,7 @@
 | [01 — CanvasKit pipeline](./RENDERING/01-canvaskit-pipeline.md) | Engine, surfaces, draw order per node, fonts, headless parity |
 | [02 — Render layers and layer tree](./RENDERING/02-layers-hit-testing.md) | Stacked render layers, layer panel behaviour, hit testing, code frames |
 | [03 — Export](./RENDERING/03-export.md) | PNG/JPEG/WebP, SVG, PDF, screenshots for agents, export cache |
+| [04 — Background removal](./RENDERING/04-background-removal.md) | On-device subject cut-out for image nodes: model, ML host process, download cache |
 
 ---
 

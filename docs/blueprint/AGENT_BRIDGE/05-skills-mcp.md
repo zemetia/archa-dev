@@ -31,18 +31,20 @@ A skill is a folder with `SKILL.md` (frontmatter `name`, `description`, then Mar
 | Source | Folder | ArchaDev may |
 |---|---|---|
 | `archadev` (library) | `~/.archadev/skills/<name>/` | create, import, enable/disable, delete |
+| `builtin` | `resources/skills` in the installed app; repo `skills/` in dev (main sets `ARCHA_BUILTIN_SKILLS`) | on by default, enable/disable; never deleted |
 | `claude` | `~/.claude/skills` (host login, never an inherited `CLAUDE_CONFIG_DIR`) | list; "Add to ArchaDev" copies it in |
 | `codex` | `$CODEX_HOME/skills` | same |
 | `gemini` | `~/.gemini/skills` | same |
 | `agents` | `~/.agents/skills` | same |
 
-- Disabled library skills are listed in `~/.archadev/skills.json` (`{ version: 1, disabled: [...] }`); new skills are on.
+- Disabled library skills are listed in `~/.archadev/skills.json` (`{ version: 1, disabled: [...] }`, built-in ones as `builtin:<folder>`); new skills are on.
 - Import copies the folder (skipping `node_modules`, `.git`); the folder name is the skill's slugged `name`. Never imports from inside the library.
-- **Runs:** before each Claude Code run, enabled library skills are mirrored into `<runtime>/.claude/skills/` (the run's cwd, so they load as project skills) and `Skill` is added to `--allowedTools`. The mirror is rebuilt every run — it is derivable.
+- **Mentions:** typing `/` in the chat composer lists every readable skill (any source, enabled or not) and the built-in guides. A `/name` in a sent message makes the core add that skill's `SKILL.md` body (≤ 40k chars) and folder path — or the guide text — to that turn's prompt (`ChatRunner.mentions` → `SkillManager.mention`), so **every** agent CLI follows it. Unknown names stay plain text; at most 5 per message.
+- **Runs:** `forRunSkills()` = enabled library + built-in skills (a library skill replaces a built-in one of the same name). Claude Code: mirrored into `<runtime>/.claude/skills/` (the run's cwd, so they load as project skills) and `Skill` is added to `--allowedTools`; the mirror is rebuilt every run — it is derivable. Antigravity / Codex (no Skill tool): the first turn lists each skill's name, description and `SKILL.md` path, to read when the task fits.
 
 RPC: `skills.list | create | import | update | delete | read`; event `skills.changed`.
 
-Repo skills: `skills/design-*` (website, pdf, slides, flows) are ready to import → [STRUCTURE/01](../STRUCTURE/01-root-apps.md). They are not seeded into the library automatically (proposal, not built).
+Repo skills: `skills/design-*` (website, pdf, slides, flows) ship with the app as the `builtin` source (electron-builder `extraResources`) → [STRUCTURE/01](../STRUCTURE/01-root-apps.md). Settings → Skills shows them first, under "Built into ArchaDev".
 
 ---
 
@@ -66,7 +68,7 @@ RPC: `mcp.list | save | delete | test | importCandidates | import`; event `mcp.c
 
 ## Not Yet
 
-- Skills and MCP servers reach **Claude Code** runs only; agy / Codex runners are not wired (see [03](./03-runs-steering.md)).
+- MCP servers reach **Claude Code** runs only; agy / Codex get skills as a list to read, not as loaded skills (see [03](./03-runs-steering.md)).
 - No per-document or per-project selection — the library and server list are global.
 - GitHub sign-in (device flow, token in keyring) and the other integrations are UI placeholders.
 
@@ -76,5 +78,5 @@ RPC: `mcp.list | save | delete | test | importCandidates | import`; event `mcp.c
 
 **Linked from:** [AGENT_BRIDGE/02](./02-roster-profiles.md) · [STRUCTURE/01](../STRUCTURE/01-root-apps.md) · [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md)
 
-**Code:** [`apps/desktop/src/core-host/agents.ts`](../../../apps/desktop/src/core-host/agents.ts) · [`apps/desktop/src/core-host/mcp-servers.ts`](../../../apps/desktop/src/core-host/mcp-servers.ts) · [`apps/desktop/src/core-host/skills.ts`](../../../apps/desktop/src/core-host/skills.ts) · [`apps/desktop/src/renderer/ui/settings/McpPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/McpPage.tsx) · [`apps/desktop/src/renderer/ui/settings/OtherPages.tsx`](../../../apps/desktop/src/renderer/ui/settings/OtherPages.tsx) · [`apps/desktop/src/renderer/ui/settings/SkillsPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/SkillsPage.tsx) · [`apps/desktop/src/renderer/ui/SettingsDialog.tsx`](../../../apps/desktop/src/renderer/ui/SettingsDialog.tsx) · [`apps/desktop/test/settings.test.ts`](../../../apps/desktop/test/settings.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/settings.ts`](../../../packages/protocol/src/settings.ts)
+**Code:** [`apps/desktop/src/core-host/agents.ts`](../../../apps/desktop/src/core-host/agents.ts) · [`apps/desktop/src/core-host/mcp-servers.ts`](../../../apps/desktop/src/core-host/mcp-servers.ts) · [`apps/desktop/src/core-host/skills.ts`](../../../apps/desktop/src/core-host/skills.ts) · [`apps/desktop/src/renderer/ui/ChatPanel.tsx`](../../../apps/desktop/src/renderer/ui/ChatPanel.tsx) · [`apps/desktop/src/renderer/ui/settings/McpPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/McpPage.tsx) · [`apps/desktop/src/renderer/ui/settings/OtherPages.tsx`](../../../apps/desktop/src/renderer/ui/settings/OtherPages.tsx) · [`apps/desktop/src/renderer/ui/settings/SkillsPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/SkillsPage.tsx) · [`apps/desktop/src/renderer/ui/SettingsDialog.tsx`](../../../apps/desktop/src/renderer/ui/SettingsDialog.tsx) · [`apps/desktop/test/chat-details.test.ts`](../../../apps/desktop/test/chat-details.test.ts) · [`apps/desktop/test/settings.test.ts`](../../../apps/desktop/test/settings.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/settings.ts`](../../../packages/protocol/src/settings.ts)
 <!-- backlinks:end -->

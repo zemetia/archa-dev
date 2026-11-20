@@ -58,6 +58,7 @@ function DesignPanel() {
             <>
               <AlignmentSection ids={selection} />
               <ArrangeSection ids={selection} />
+              <ExportSection ids={selection.filter((id) => doc.get(id))} />
             </>
           )}
           {single && <NodeSections key={single.id} node={single} />}
@@ -103,7 +104,7 @@ function NodeSections({ node: n }: { node: Node }) {
       {'strokes' in n && <StrokeSection node={n} set={set} />}
       {'effects' in n && <EffectsSection node={n} set={set} />}
       <CodeSection nodeId={n.id} />
-      <ExportSection nodeId={n.id} />
+      <ExportSection ids={[n.id]} />
     </>
   );
 }

@@ -136,3 +136,22 @@ export function distanceToPolyline(pts: ReadonlyArray<{ x: number; y: number }>,
   }
   return best;
 }
+
+/**
+ * Pages of a multi-layer export in canvas reading order: rows top to bottom (layers whose vertical
+ * middles fall inside one another's height share a row), left to right within a row.
+ */
+export function readingOrder(doc: ArchaDocument, ids: string[]): string[] {
+  // A layer inside another selected layer is already on that page.
+  const live = ids.filter((id) => doc.get(id) && !ids.some((other) => other !== id && doc.isAncestor(other, id)));
+  const boxes = [...new Set(live)].map((id) => ({ id, b: doc.worldBounds(id) }));
+  boxes.sort((a, b) => a.b.y - b.b.y);
+  const rows: Array<{ top: number; bottom: number; items: typeof boxes }> = [];
+  for (const it of boxes) {
+    const mid = it.b.y + it.b.height / 2;
+    const row = rows.find((r) => mid >= r.top && mid <= r.bottom);
+    if (row) { row.items.push(it); row.bottom = Math.max(row.bottom, it.b.y + it.b.height); }
+    else rows.push({ top: it.b.y, bottom: it.b.y + it.b.height, items: [it] });
+  }
+  return rows.flatMap((r) => r.items.sort((a, b) => a.b.x - b.b.x).map((it) => it.id));
+}

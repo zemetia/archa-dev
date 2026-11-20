@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { openSettings, togglePixelGrid, useStore } from '../lib/store';
+import { exportPdf, openSettings, readingOrder, togglePixelGrid, useStore } from '../lib/store';
 import {
   arrange, canMakeComponent, copy, createComponent, deleteSelection, duplicate, group, hasCopiedLayers, pasteAt, removeLayout, selectAll, ungroup, ungroupable, wrapInFrame,
 } from '../lib/commands';
 import { cn } from './controls';
+import { canRemoveBackground, removeBackground } from '../lib/removeBackground';
 
 /*
  * Canvas right-click menu (blueprint APP_UI/01 → Context menu). The canvas sets `contextMenu` after
@@ -83,6 +84,8 @@ function Menu({ x, y, world }: { x: number; y: number; world: { x: number; y: nu
       { kind: 'item', label: 'Copy', keys: 'Ctrl+C', run: copy },
       paste,
       { kind: 'item', label: 'Duplicate', keys: 'Ctrl+D', run: duplicate },
+      ...(ids.length === 1 && doc.get(ids[0]!)?.type === 'image'
+        ? [SEP, { kind: 'item', label: 'Remove background', run: () => removeBackground(ids[0]!), disabled: !canRemoveBackground(ids[0]) } as const] : []),
       SEP,
       { kind: 'item', label: 'Bring to front', keys: 'Ctrl+]', run: () => arrange('front') },
       { kind: 'item', label: 'Send to back', keys: 'Ctrl+[', run: () => arrange('back') },
@@ -93,6 +96,8 @@ function Menu({ x, y, world }: { x: number; y: number; world: { x: number; y: nu
       { kind: 'item', label: 'Add auto layout', keys: 'Shift+A', run: () => wrapInFrame(true) },
       ...(ids.some((id) => { const n = doc.get(id); return n?.type === 'frame' && n.layout !== 'none'; })
         ? [{ kind: 'item', label: 'Remove auto layout', keys: 'Shift+Alt+A', run: removeLayout } as const] : []),
+      SEP,
+      { kind: 'item', label: readingOrder(doc, ids).length > 1 ? `Export as PDF · ${readingOrder(doc, ids).length} pages` : 'Export as PDF', run: () => exportPdf(ids) },
       ...(ids.length === 1 && canMakeComponent(doc, ids[0]!)
         ? [SEP, { kind: 'item', label: 'Create component', keys: 'Ctrl+Alt+K', run: createComponent } as const] : []),
       SEP,

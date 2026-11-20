@@ -13,7 +13,7 @@
 | `apps/` | dir | Runnable programs: desktop app, CLI |
 | `packages/` | dir | Libraries → [02-packages.md](./02-packages.md) |
 | `skills/archadev/` | dir | The local skill shipped with the app → [MCP/04](../MCP/04-local-skill.md) |
-| `skills/design-*/` | dir | **Built:** design skills (website, pdf, slides, flows) for agents; imported via Settings → Skills → [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
+| `skills/design-*/` | dir | **Built:** design skills (website, pdf, slides, flows) for agents; bundled into the installer (`resources/skills`) and on for every chat run as built-in skills → [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
 | `docs/plan/` | dir | Intent, decisions, roadmap |
 | `docs/blueprint/` | dir | Build contract (this dir) |
 | `docs/knowledge/` | dir | `THIS.md`, `LEARN.md` → [KNOWLEDGE.md](../KNOWLEDGE.md) |

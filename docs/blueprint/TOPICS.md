@@ -16,11 +16,13 @@ A–Z keyword → the doc that owns the rules → the code that implements it to
 | `.archadev/` project folder | [FILE_FORMATS/02](./FILE_FORMATS/02-archadev-project.md), [STRUCTURE/03](./STRUCTURE/03-runtime-dirs.md) | Not built |
 | `ARCHA_HOME` / runtime dirs | [STRUCTURE/03](./STRUCTURE/03-runtime-dirs.md), [CODE_MAP/05](./CODE_MAP/05-interfaces.md) | `packages/protocol/src/node.ts` |
 | Auto layout (hug / fill / gap / padding) | [DOCUMENT_MODEL/03](./DOCUMENT_MODEL/03-layout.md) | `packages/core/src/layout.ts` |
+| Background removal (on-device) | [RENDERING/04](./RENDERING/04-background-removal.md) | `main/models.ts`, `main/ml-host.ts`, `renderer/lib/removeBackground.ts` |
 | Browser (agent-driven, in-app) | [BROWSER](./BROWSER.md) | `main/browser.ts`, `main/browser-page.ts`, `packages/protocol/src/browser.ts`, `renderer/ui/BrowserPanel.tsx` |
 | Cache (bitmap, thumbnails, hashing) | [CACHE](./CACHE.md), [DOCUMENT_MODEL/04](./DOCUMENT_MODEL/04-hashing.md) | `packages/render/src/cache.ts`, `renderer/lib/thumbs.ts`, `packages/core/src/hash.ts` |
 | Canvas drawing | [RENDERING/01](./RENDERING/01-canvaskit-pipeline.md) | `packages/render/src/draw.ts`, `scene.ts`, `renderer/canvas/Canvas.tsx` |
 | Changelog / release / branches | [BEST_PRACTICE/03](./BEST_PRACTICE/03-git-changelog-release.md) | `CHANGELOG.md`, `apps/desktop/electron-builder.yml` |
 | Chat (composer, threads, history) | [AGENT_BRIDGE/03](./AGENT_BRIDGE/03-runs-steering.md), [plan/CHAT_AGENT](../plan/CHAT_AGENT.md) | `core-host/agents.ts`, `renderer/ui/ChatPanel.tsx`, `HistoryPanel.tsx` |
+| Chat tool rows (expand: input + result) | [AGENT_BRIDGE/03](./AGENT_BRIDGE/03-runs-steering.md) | `core-host/agent-adapters.ts` (`toolDetail`, `result` events), `renderer/ui/ChatPanel.tsx` (`ToolRow`) |
 | CLI (`archa`) | [CLI](./CLI.md), [CODE_MAP/05](./CODE_MAP/05-interfaces.md) | `apps/cli/src/index.ts`, `connect.ts` |
 | Code export (HTML, CSS, Tailwind) | [DESIGN_SYSTEM/04](./DESIGN_SYSTEM/04-code-export.md) | `packages/formats/src/export/html.ts`, `tailwind.ts` |
 | Colours (oklch) | [DOCUMENT_MODEL/01](./DOCUMENT_MODEL/01-nodes-properties.md) | `packages/schema/src/color.ts` |
@@ -29,6 +31,8 @@ A–Z keyword → the doc that owns the rules → the code that implements it to
 | Context notes for agents (`meta.context`) | [APP_UI/04](./APP_UI/04-design-panel.md), [MCP/01](./MCP/01-transports-tools.md) | `packages/core/src/outline.ts`, `renderer/ui/inspector/OutputSections.tsx` |
 | Core host (single writer) | [ARCHITECTURE/01](./ARCHITECTURE/01-processes.md), [ARCHITECTURE/04](./ARCHITECTURE/04-single-writer-sync.md) | `core-host/index.ts`, `core-host/workspace.ts` |
 | Design guides (`read_guide`) | [MCP/04](./MCP/04-local-skill.md) | `packages/protocol/src/design-guides.ts` |
+| Drag and drop files onto the canvas / composer | [FILE_FORMATS/04](./FILE_FORMATS/04-importers.md) | `renderer/lib/importers.ts` (`dropFiles`), `renderer/canvas/Canvas.tsx`, `renderer/ui/ChatPanel.tsx` |
+| Drag layers in / out of frames | [RENDERING/02](./RENDERING/02-layers-hit-testing.md) | `renderer/canvas/Canvas.tsx` (move gesture, `layoutSlot`, `drawLifted`) |
 | Design panel / inspector | [APP_UI/04](./APP_UI/04-design-panel.md) | `renderer/ui/RightPanel.tsx`, `renderer/ui/inspector/` |
 | Embed / web page node | [DOCUMENT_MODEL/01](./DOCUMENT_MODEL/01-nodes-properties.md) | `renderer/canvas/EmbedLayer.tsx`, `main/index.ts` (`guardWebviews`), `main/embed-shot.ts` |
 | Entry points (open, file association) | [ENTRY_POINTS](./ENTRY_POINTS.md) | `main/index.ts` (`parseArgv`), `apps/desktop/electron-builder.yml` |
@@ -56,7 +60,7 @@ A–Z keyword → the doc that owns the rules → the code that implements it to
 | Screenshots for agents | [RENDERING/03](./RENDERING/03-export.md) | `core-host/workspace.ts` (`screenshot`), `renderer/lib/store.ts` (`render.request`) |
 | Settings dialog | [AGENT_BRIDGE/05](./AGENT_BRIDGE/05-skills-mcp.md) | `renderer/ui/SettingsDialog.tsx`, `renderer/ui/settings/` |
 | Shortcuts / tools / tool rail | [APP_UI/01](./APP_UI/01-shell-tools-panels.md) | `renderer/ui/ToolRail.tsx` (`TOOL_KEYS`), `renderer/App.tsx`, `renderer/lib/commands.ts` |
-| Skills (for agent runs) | [AGENT_BRIDGE/05](./AGENT_BRIDGE/05-skills-mcp.md), [MCP/04](./MCP/04-local-skill.md) | `core-host/skills.ts`, `renderer/ui/settings/SkillsPage.tsx` |
+| Skills (for agent runs, `/name` mentions) | [AGENT_BRIDGE/05](./AGENT_BRIDGE/05-skills-mcp.md), [MCP/04](./MCP/04-local-skill.md) | `core-host/skills.ts` (`mention`), `core-host/agents.ts` (`mentions`), `renderer/ui/settings/SkillsPage.tsx`, `renderer/ui/ChatPanel.tsx` |
 | Slides panel / thumbnails | [APP_UI/01](./APP_UI/01-shell-tools-panels.md) | `renderer/ui/SlidesPanel.tsx`, `renderer/lib/thumbs.ts` |
 | State (Zustand store) | [APP_UI/03](./APP_UI/03-state.md) | `renderer/lib/store.ts` |
 | Steering (queue, Send now, stop, warm) | [AGENT_BRIDGE/03](./AGENT_BRIDGE/03-runs-steering.md) | `core-host/agents.ts` |

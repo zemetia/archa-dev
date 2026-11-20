@@ -37,9 +37,10 @@
 | [`lib/commands.ts`](../../../apps/desktop/src/renderer/lib/commands.ts) | Editing commands for shortcuts and menus: delete, duplicate, copy/paste, nudge, wrap in frame, reorder, select parent/children | [APP_UI/01](../APP_UI/01-shell-tools-panels.md), [DOCUMENT_MODEL/02](../DOCUMENT_MODEL/02-ops-transactions-undo.md) |
 | [`lib/geometry.ts`](../../../apps/desktop/src/renderer/lib/geometry.ts) | World ↔ screen, hit path, deep pick, container at point, handles, `fitCamera` | [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
 | [`lib/assets.ts`](../../../apps/desktop/src/renderer/lib/assets.ts) | Insert an icon / logo / uploaded icon (click or drop), upload and remove My icons, current asset style | [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md) |
-| [`lib/importers.ts`](../../../apps/desktop/src/renderer/lib/importers.ts) | Image / SVG import, SVG → vector nodes, `place` (needs the DOM, emits insert ops) | [FILE_FORMATS/04](../FILE_FORMATS/04-importers.md) |
+| [`lib/importers.ts`](../../../apps/desktop/src/renderer/lib/importers.ts) | Image / SVG import, files dropped on the canvas (`dropFiles`), SVG → vector nodes, `place` (needs the DOM, emits insert ops) | [FILE_FORMATS/04](../FILE_FORMATS/04-importers.md) |
 | [`lib/comments.ts`](../../../apps/desktop/src/renderer/lib/comments.ts) | Add / reply / resolve / delete comments, **Apply** to the chat agent, auto-resolve when the run ends | [AGENT_BRIDGE/04](../AGENT_BRIDGE/04-review-loop.md) |
 | [`lib/thumbs.ts`](../../../apps/desktop/src/renderer/lib/thumbs.ts) | Node thumbnails keyed by subtree hash (Slides, Components) | [CACHE/01](../CACHE/01-layers-keys.md), [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
+| [`lib/removeBackground.ts`](../../../apps/desktop/src/renderer/lib/removeBackground.ts) | Background removal: image → 1024² RGB, mask from main, alpha-composited PNG, one `update` op | [RENDERING/04](../RENDERING/04-background-removal.md) |
 | [`lib/chatImages.ts`](../../../apps/desktop/src/renderer/lib/chatImages.ts) | Images pasted into the composer: re-encoded, size-capped | [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md) |
 
 ## Panels and chrome — `ui/`

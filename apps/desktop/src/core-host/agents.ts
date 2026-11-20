@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { newId } from '@archa/schema';
-import { guidesFor, guideText, ORCHESTRATOR_PROMPT, threadOf, workerBrief, type ChatImage, type ChatMessage, type ChatMode, type ChatRunEvent, type ModelOption, type OrchestraMeta, type OrchestraReport, type OrchestraTask, type OrchestraWorker } from '@archa/protocol';
+import { GUIDES, guidesFor, guideText, ORCHESTRATOR_PROMPT, threadOf, workerBrief, type ChatImage, type ChatMessage, type ChatMode, type ChatRunEvent, type ModelOption, type OrchestraMeta, type OrchestraReport, type OrchestraTask, type OrchestraWorker } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import type { Workspace } from './workspace';
 import { describeState } from './execute';
@@ -90,9 +90,15 @@ export class ChatRunner {
       list = [];
       const file = join(chatsDir(), `${safeName(docId)}.jsonl`);
       if (existsSync(file)) {
+        const at = new Map<string, number>();
         for (const line of readFileSync(file, 'utf8').split('\n')) {
           if (!line.trim()) continue;
-          try { list.push(JSON.parse(line) as ChatMessage); } catch { /* skip a torn line */ }
+          let m: ChatMessage;
+          try { m = JSON.parse(line) as ChatMessage; } catch { continue; /* skip a torn line */ }
+          // A tool row is written again once its result arrives: the later line replaces it in place.
+          const prev = at.get(m.id);
+          if (prev !== undefined) list[prev] = m;
+          else { at.set(m.id, list.length); list.push(m); }
         }
       }
       this.messages.set(docId, list);
@@ -159,8 +165,8 @@ export class ChatRunner {
     } catch { /* resume is best-effort */ }
   }
 
-  private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent' | 'persona'>, role: ChatMessage['role'], text: string, images?: ChatImage[]) {
-    const m: ChatMessage = { id: newId(), docId: run.docId, runId: run.id, threadId: run.threadId, role, agent: run.agent, persona: run.persona, text, ts: Date.now() };
+  private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent' | 'persona'>, role: ChatMessage['role'], text: string, images?: ChatImage[], extra?: Pick<ChatMessage, 'detail' | 'callId'>) {
+    const m: ChatMessage = { id: newId(), docId: run.docId, runId: run.id, threadId: run.threadId, role, agent: run.agent, persona: run.persona, text, ts: Date.now(), ...extra };
     if (images?.length) m.images = images.map((i) => i.thumb);
     const team = this.metaOf(run.docId, run.threadId);
     if (team) m.orchestra = team;
@@ -170,6 +176,24 @@ export class ChatRunner {
       appendFileSync(join(chatsDir(), `${safeName(run.docId)}.jsonl`), JSON.stringify(m) + '\n');
     } catch { /* history is best-effort; the live chat still works */ }
     this.ws.broadcast('chat.message', m);
+  }
+
+  /** A tool call's result arrives after its row: fill it in (same id, so the chat and history replace the row). */
+  private attachResult(run: Run, callId: string, result: string, failed: boolean) {
+    const list = this.list(run.docId);
+    const i = list.findLastIndex((m) => m.runId === run.id && m.callId === callId);
+    if (i < 0) return;
+    const m: ChatMessage = { ...list[i]!, result, ...(failed ? { failed } : {}) };
+    list[i] = m;
+    try { appendFileSync(join(chatsDir(), `${safeName(run.docId)}.jsonl`), JSON.stringify(m) + '\n'); } catch { /* history is best-effort */ }
+    this.ws.broadcast('chat.message', m);
+  }
+
+  /** Node ids in a tool summary read as their layer names ("inspect · Hero" instead of an opaque id). */
+  private named(docId: string, text: string): string {
+    let doc: ReturnType<Workspace['session']>['doc'];
+    try { doc = this.ws.session(docId).doc; } catch { return text; }
+    return text.replace(/[A-Za-z0-9_-]{6,40}/g, (id) => { const n = doc.get(id); return n && n.type !== 'page' ? `"${n.name}"` : id; });
   }
 
   /**
@@ -223,7 +247,13 @@ export class ChatRunner {
       : '';
     // The internal skill: guides that fit the request ride along on the first turn (saves a guide call).
     const guides = firstTurn ? guidesFor(request).map((t) => guideText(t)).join('\n\n') : '';
-    const fullPrompt = `${lead ? `${ORCHESTRATOR_PROMPT}\n\n---\nRequest:\n` : ''}${request}${focusLine}${imageLine}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}${guides ? `\n\n---\nGuides for this task:\n${guides}` : ''}`;
+    // Claude Code loads skills itself (mirrored into its project, Skill tool); other CLIs get the list to read from.
+    const runSkills = firstTurn && adapter.id !== 'claude' ? this.ws.skills.forRunSkills() : [];
+    const skillIndex = runSkills.length
+      ? `\n\n---\nSkills you can use — when the task fits one, read its SKILL.md first and follow it:\n${runSkills.map((s) => `- ${s.name}: ${s.description.slice(0, 300)} (${join(s.dir, 'SKILL.md')})`).join('\n')}`
+      : '';
+    const skillLine = this.mentions(asked);
+    const fullPrompt = `${lead ? `${ORCHESTRATOR_PROMPT}\n\n---\nRequest:\n` : ''}${request}${focusLine}${imageLine}${skillLine}${skillIndex}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}${guides ? `\n\n---\nGuides for this task:\n${guides}` : ''}`;
     const run: Run = { id: runId, docId, threadId, agent: agentId, persona: this.personaFor(docId, threadId), prompt: request, child: null, stopped: false, replied: false, failed: false, startedAt: Date.now(), fromLead: !!q.fromLead };
     this.runs.set(runId, run);
     if (!echoed) this.emit(run, 'user', prompt, q.images);
@@ -243,6 +273,21 @@ export class ChatRunner {
       }, (e: Error) => { run.failed = true; this.emit(run, 'error', e.message); this.finishRun(run, 'failed'); });
     } else this.startCold(run, adapter, cli, login, fullPrompt, model, account, images);
     return { runId, threadId, persona: run.persona };
+  }
+
+  /**
+   * `/skill-name` in a message: that skill's instructions (or a built-in guide) go with the message,
+   * so the agent follows them whichever CLI it is. Unknown names are left as plain text.
+   */
+  private mentions(text: string): string {
+    const names = [...new Set([...text.matchAll(/(?:^|\s)\/([a-z0-9][a-z0-9-]{0,63})(?=$|[\s.,;:!?)])/gi)].map((m) => m[1]!.toLowerCase()))].slice(0, 5);
+    const blocks: string[] = [];
+    for (const name of names) {
+      const skill = this.ws.skills.mention(name);
+      if (skill) blocks.push(`## /${name} — ${skill.description}\n(Skill folder: ${skill.dir} — its examples and references are there.)\n\n${skill.body}`);
+      else if (name in GUIDES) blocks.push(`## /${name}\n${guideText(name)}`);
+    }
+    return blocks.length ? `\n\n---\nSkills the person asked for with /name — follow them for this request:\n\n${blocks.join('\n\n')}` : '';
   }
 
   /** Spawn the agent's process for a thread ahead of the first message (composer focus), so Send starts at once. */
@@ -589,7 +634,8 @@ export class ChatRunner {
     if (ev.kind === 'session') this.rememberSession(sessionKey, ev.id);
     else if (ev.kind === 'delta') this.ws.broadcast('chat.delta', { docId: run.docId, runId: run.id, threadId: run.threadId, agent: run.agent, text: ev.text });
     else if (ev.kind === 'text') { run.replied = true; this.emit(run, 'agent', ev.text); }
-    else if (ev.kind === 'tool') this.emit(run, 'tool', ev.text);
+    else if (ev.kind === 'tool') this.emit(run, 'tool', this.named(run.docId, ev.text), undefined, { ...(ev.detail ? { detail: ev.detail } : {}), ...(ev.callId ? { callId: ev.callId } : {}) });
+    else if (ev.kind === 'result') this.attachResult(run, ev.callId, ev.text, ev.failed);
     // An interrupted turn ends "with an error" by design; that is a stop, not a failure.
     else if (ev.kind === 'error') { if (!run.stopped) { run.failed = true; this.emit(run, 'error', ev.text); } }
     // The final answer repeats the last message; show it only when nothing was said along the way.

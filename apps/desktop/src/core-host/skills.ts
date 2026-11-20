@@ -10,15 +10,19 @@ import { claudeHostDir, codexHostDir, parse } from './accounts';
 /*
  * Settings → Skills (blueprint AGENT_BRIDGE/05). A skill is a folder with a SKILL.md
  * (YAML frontmatter `name` + `description`, then instructions). ArchaDev keeps its own library in
- * ~/.archadev/skills and hands the enabled ones to chat runs; skills the agent CLIs already load
- * on their own (~/.claude/skills, ~/.codex/skills, …) are listed read-only.
+ * ~/.archadev/skills, ships built-in design skills (repo `skills/`, path from ARCHA_BUILTIN_SKILLS),
+ * and hands the enabled ones of both to chat runs; skills the agent CLIs already load on their own
+ * (~/.claude/skills, ~/.codex/skills, …) are listed read-only.
  */
 
 export const skillsDir = () => join(archaHome(), 'skills');
+/** Built-in skills: resources/skills in the installed app, the repo's skills/ in dev (set by main). */
+export const builtinSkillsDir = () => process.env.ARCHA_BUILTIN_SKILLS ?? '';
 const stateFile = () => join(archaHome(), 'skills.json');
 
 const SOURCES: Array<{ source: SkillSource; label: string; dir: () => string }> = [
   { source: 'archadev', label: 'ArchaDev library', dir: skillsDir },
+  { source: 'builtin', label: 'ArchaDev built-in', dir: builtinSkillsDir },
   { source: 'claude', label: 'Claude Code', dir: () => join(claudeHostDir(), 'skills') },
   { source: 'codex', label: 'Codex', dir: () => join(codexHostDir(), 'skills') },
   { source: 'gemini', label: 'Antigravity / Gemini', dir: () => join(homedir(), '.gemini', 'skills') },
@@ -34,6 +38,8 @@ export const skillParams = {
 };
 
 type State = { version: 1; disabled: string[] };
+/** Longest SKILL.md body sent with a message; longer skills are cut and the agent is pointed at the file. */
+const MAX_MENTION = 40_000;
 
 export class SkillManager {
   constructor(private changed: () => void) {}
@@ -43,16 +49,17 @@ export class SkillManager {
     const skills: Skill[] = [];
     for (const s of SOURCES) {
       const dir = s.dir();
+      if (!dir) continue;
       for (const folder of listDirs(dir)) {
         const meta = readSkill(join(dir, folder));
         if (!meta) continue;
         skills.push({
           id: `${s.source}:${folder}`, name: meta.name || folder, description: meta.description, source: s.source,
-          dir: join(dir, folder), enabled: s.source === 'archadev' && !disabled.has(folder), error: meta.error,
+          dir: join(dir, folder), enabled: s.source === 'archadev' ? !disabled.has(folder) : s.source === 'builtin' && !disabled.has(`builtin:${folder}`), error: meta.error,
         });
       }
     }
-    return { skills, libraryDir: skillsDir(), sources: SOURCES.map((s) => ({ source: s.source, label: s.label, dir: s.dir(), exists: existsSync(s.dir()) })) };
+    return { skills, libraryDir: skillsDir(), sources: SOURCES.map((s) => ({ source: s.source, label: s.label, dir: s.dir(), exists: !!s.dir() && existsSync(s.dir()) })) };
   }
 
   create(params: unknown): Skill {
@@ -83,7 +90,8 @@ export class SkillManager {
 
   update(params: unknown): Skill {
     const { id, enabled } = parse(skillParams.update, params);
-    const folder = this.libraryFolder(id);
+    // Built-in skills can be turned off (never deleted); they share the disabled list under a prefix.
+    const folder = id.startsWith('builtin:') ? `builtin:${this.builtinFolder(id)}` : this.libraryFolder(id);
     const st = this.state();
     st.disabled = st.disabled.filter((f) => f !== folder);
     if (!enabled) st.disabled.push(folder);
@@ -108,15 +116,44 @@ export class SkillManager {
     return { content: readFileSync(join(skill.dir, 'SKILL.md'), 'utf8').slice(0, 200_000) };
   }
 
-  /** Enabled library skill folders, for a chat run. */
+  /**
+   * A skill the person named with `/name` in a chat message, from any source (the ArchaDev library
+   * first). Its instructions ride along with that message, so every agent CLI can follow it.
+   */
+  mention(name: string): { name: string; description: string; dir: string; body: string } | null {
+    const want = name.toLowerCase();
+    const order: SkillSource[] = ['archadev', 'builtin', 'claude', 'agents', 'codex', 'gemini'];
+    const hit = this.overview().skills
+      .filter((s) => !s.error && (s.name.toLowerCase() === want || basename(s.dir).toLowerCase() === want))
+      .sort((a, b) => order.indexOf(a.source) - order.indexOf(b.source))[0];
+    if (!hit) return null;
+    let text: string;
+    try { text = readFileSync(join(hit.dir, 'SKILL.md'), 'utf8'); } catch { return null; }
+    const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
+    return { name: hit.name, description: hit.description, dir: hit.dir, body: body.length > MAX_MENTION ? `${body.slice(0, MAX_MENTION)}\n… (truncated — read the rest from SKILL.md)` : body };
+  }
+
+  /** Enabled library and built-in skill folders, for a chat run. A library skill replaces a built-in one of the same name. */
   forRun(): string[] {
-    return this.overview().skills.filter((s) => s.source === 'archadev' && s.enabled && !s.error).map((s) => s.dir);
+    return this.forRunSkills().map((s) => s.dir);
+  }
+
+  forRunSkills(): Skill[] {
+    const on = this.overview().skills.filter((s) => (s.source === 'archadev' || s.source === 'builtin') && s.enabled && !s.error);
+    const own = new Set(on.filter((s) => s.source === 'archadev').map((s) => s.name.toLowerCase()));
+    return on.filter((s) => s.source === 'archadev' || !own.has(s.name.toLowerCase()));
   }
 
   private get(id: string): Skill {
     const s = this.overview().skills.find((x) => x.id === id);
     if (!s) throw new DocumentError('NOT_FOUND', `No skill ${id}`);
     return s;
+  }
+
+  private builtinFolder(id: string): string {
+    const folder = id.slice('builtin:'.length);
+    if (!folder || !builtinSkillsDir() || !existsSync(join(builtinSkillsDir(), folder, 'SKILL.md'))) throw new DocumentError('NOT_FOUND', `No skill ${id}`);
+    return folder;
   }
 
   private libraryFolder(id: string): string {

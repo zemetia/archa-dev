@@ -9,8 +9,10 @@ declare global {
       showOpenDialog(): Promise<string | null>;
       showSaveDialog(suggested: string): Promise<string | null>;
       showExportDialog(suggested: string, ext: string): Promise<string | null>;
-      exportPdf(args: { html: string; width: number; height: number; path: string }): Promise<string | null>;
+      exportPdf(args: { pages: Array<{ html: string; width: number; height: number }>; path: string }): Promise<string | null>;
       embedScreenshot(webContentsId: number, mode: 'wide' | 'object'): Promise<{ path?: string | null; error?: string }>;
+      segment(rgb: Uint8Array): Promise<{ mask?: Uint8Array; error?: string }>;
+      onModelProgress(cb: (p: { received: number; total: number }) => void): () => void;
       pickFolder(title: string): Promise<string | null>;
       openFolder(path: string): Promise<string>;
       onOpenIntent(cb: (intent: { kind: string; path?: string }) => void): void;

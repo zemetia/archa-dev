@@ -8,6 +8,8 @@ export type OverlayExtras = {
   create?: { x: number; y: number; width: number; height: number };
   insertLine?: { x1: number; y1: number; x2: number; y2: number };
   dropTarget?: string | null;
+  /** Layers being dragged: drawn above everything so a clipping frame does not hide them while they leave it. */
+  lifted?: string[];
   /** Pen tool in progress: committed path, its points, and the rubber-band line to the pointer. */
   /** Connector being drawn or reattached: preview route (page coords) and the node it would stick to. */
   connect?: { points: Array<{ x: number; y: number }> | null; target: { x: number; y: number; width: number; height: number } | null };

@@ -176,6 +176,13 @@ export type ChatMessage = {
   text: string;
   /** Thumbnails (data URLs) of the images a user message carried. */
   images?: string[];
+  /** Tool rows: the call's full input (code or arguments) and, once it returns, its text result. */
+  detail?: string;
+  result?: string;
+  /** The tool call returned an error. */
+  failed?: boolean;
+  /** Pairs a tool row with the result the agent CLI reports later. */
+  callId?: string;
   /** Orchestrate mode: set on every message of a lead thread and of its worker threads. */
   orchestra?: OrchestraMeta;
   ts: number;
