@@ -44,7 +44,8 @@ export async function importFile(file: File, at?: { x: number; y: number }) {
 }
 
 /** Inserts at `at` (page coordinates) or the centre of the view, inside whatever frame is there. */
-export async function place(input: NodeInput, at: { x: number; y: number } | undefined, label: string) {
+/** Inserts a node centred on `at` (default: the middle of the view). `autoInk` lightens a dark icon dropped straight on the dark page. */
+export async function place(input: NodeInput, at: { x: number; y: number } | undefined, label: string, opts: { autoInk?: boolean } = {}) {
   const st = useStore.getState();
   const doc = st.doc;
   if (!doc) return;
@@ -54,7 +55,10 @@ export async function place(input: NodeInput, at: { x: number; y: number } | und
   const parent = containerAt(doc, c.x, c.y);
   const o = originOf(doc, parent.id);
   // Icons are drawn in dark ink for light frames; straight on the dark page they get light ink to stay visible.
-  if (input.type === 'path' && parent.type === 'page' && Array.isArray(input.strokes)) input = { ...input, strokes: (input.strokes as Array<Record<string, unknown>>).map((st) => ({ ...st, color: '#d4d4d8' })) };
+  if (opts.autoInk && input.type === 'path' && parent.type === 'page') {
+    const light = (ps: unknown) => (Array.isArray(ps) ? ps.map((p) => (typeof p === 'string' ? '#d4d4d8' : { ...(p as object), color: '#d4d4d8' })) : ps);
+    input = { ...input, strokes: light(input.strokes), fills: light(input.fills) } as NodeInput;
+  }
   const { ops, rootId } = insertOpsFor({ ...input, x: Math.round(c.x - w / 2 - o.x), y: Math.round(c.y - h / 2 - o.y) }, parent.id);
   if (await commit(label, ops)) {
     select([rootId]);
@@ -62,7 +66,7 @@ export async function place(input: NodeInput, at: { x: number; y: number } | und
   }
 }
 
-async function imageInput(src: string, name: string): Promise<NodeInput> {
+export async function imageInput(src: string, name: string): Promise<NodeInput> {
   const img = new Image();
   img.src = src;
   await img.decode();
@@ -177,15 +181,6 @@ export function svgToNodes(svgText: string, name: string): NodeInput | null {
   } finally {
     host.remove();
   }
-}
-
-/** One vector node from a rendered 24×24 stroke icon (lucide), keeping its stroke look. */
-export function iconToNode(svg: SVGSVGElement, name: string, size = 24, color = '#18181b'): NodeInput {
-  const d = [...svg.querySelectorAll(SHAPES)].map(shapeToD).filter(Boolean).join(' ');
-  return {
-    type: 'path', name, d, viewBox: { x: 0, y: 0, width: 24, height: 24 }, width: size, height: size,
-    fills: [], strokes: [{ color, width: 2 * (size / 24), align: 'center' }], lineCap: 'round', lineJoin: 'round',
-  } as NodeInput;
 }
 
 const round = (v: number) => Math.round(v * 100) / 100;

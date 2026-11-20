@@ -13,6 +13,7 @@ import { CommentsLayer } from './CommentsLayer';
 import { onImageLoaded } from '@archa/render';
 import { penBounds, penPath, type PenPoint } from './pen';
 import { scaleOps } from './scale';
+import { ASSET_MIME, assetStyle, insertAsset } from '../lib/assets';
 
 type Pt = { x: number; y: number };
 type Gesture =
@@ -611,7 +612,16 @@ export function Canvas() {
   return (
     <div ref={wrap} className="absolute inset-0 overflow-hidden bg-canvas" style={{ cursor }}
       onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-      onPointerLeave={() => useStore.setState({ hover: null })} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}>
+      onPointerLeave={() => useStore.setState({ hover: null })} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
+      onDragOver={(e) => { if (e.dataTransfer.types.includes(ASSET_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } }}
+      onDrop={(e) => {
+        // An icon dragged from the Assets panel lands where it is dropped.
+        const ref = e.dataTransfer.getData(ASSET_MIME);
+        if (!ref) return;
+        e.preventDefault();
+        const r = wrap.current!.getBoundingClientRect();
+        void insertAsset(ref, assetStyle(), toWorld(useStore.getState().camera, e.clientX - r.left, e.clientY - r.top));
+      }}>
       <canvas ref={content} className="absolute inset-0" />
       <canvas ref={overlay} className="absolute inset-0" />
       <EmbedLayer />

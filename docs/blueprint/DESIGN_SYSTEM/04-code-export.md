@@ -1,6 +1,6 @@
 # Design System — 04: Code Export
 
-← [DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md) | [Blueprint INDEX](../INDEX.md)
+← [DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md) | [Blueprint INDEX](../INDEX.md) | [05 — Icons and assets →](./05-icons-assets.md)
 
 **Phase:** 7 (tokens), 9 (HTML/React). Code: `packages/formats/src/export/code/`.
 

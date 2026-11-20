@@ -40,7 +40,8 @@ export function App() {
         <LeftPanel />
         <main data-canvas-host className="relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-line">
           {ready ? <Canvas /> : <div className="flex h-full items-center justify-center text-fg-subtle">Connecting to core…</div>}
-          <div className="pointer-events-none absolute left-3 top-1/2 z-30 -translate-y-1/2"><ToolRail /></div>
+          {/* Centred beside the canvas; on a short window the rail scrolls instead of running off the edges. */}
+          <div className="pointer-events-none absolute inset-y-3 left-3 z-30 flex items-center"><ToolRail /></div>
           <RailPanels />
           <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2"><ZoomBar /></div>
           {!rightOpen && (
@@ -128,6 +129,7 @@ function onKey(e: KeyboardEvent) {
   if (k === 'enter') return run(selectChildren);
   if (e.shiftKey && e.code === 'Digit1') return run(() => useStore.setState((s) => ({ fitRequest: s.fitRequest + 1 })));
   if (e.shiftKey && e.code === 'Digit0') return run(() => zoomTo(1));
+  if (e.shiftKey && k === 'i') return run(() => toggleRailPanel('assets'));
   if (e.shiftKey && e.altKey && k === 'a') return run(removeLayout);
   if (e.shiftKey && k === 'a') return run(() => wrapInFrame(true));
   if (k === ']') return run(() => reorder(1));

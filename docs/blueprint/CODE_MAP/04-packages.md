@@ -43,10 +43,16 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 | [`hash.ts`](../../../packages/core/src/hash.ts) | FNV-1a `selfHash`, `contentHash`, `subtreeHash` | [DOCUMENT_MODEL/04](../DOCUMENT_MODEL/04-hashing.md), [CACHE/01](../CACHE/01-layers-keys.md) |
 | [`lint.ts`](../../../packages/core/src/lint.ts) | Structural checks returned in every agent reply | [MCP/03](../MCP/03-response-contract-lint.md) |
 | [`outline.ts`](../../../packages/core/src/outline.ts) | Compact text tree of a node (`inspect`), `meta.context` notes | [MCP/01](../MCP/01-transports-tools.md), [APP_UI/04](../APP_UI/04-design-panel.md) |
-| [`icons.ts`](../../../packages/core/src/icons.ts) (+ generated `icons-data.ts`) | lucide icon lookup / search for `icon()` / `icons()` | [MCP/02](../MCP/02-execute-api.md) |
 | [`shapes.ts`](../../../packages/core/src/shapes.ts) | Polygon points, viewBox matrix — shared by render, SVG export, hit testing | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) |
 | [`space.ts`](../../../packages/core/src/space.ts) | `findEmptySpace` for new top-level frames | [MCP/02](../MCP/02-execute-api.md) |
 | [`index.ts`](../../../packages/core/src/index.ts) | Re-exports | [STRUCTURE/02](../STRUCTURE/02-packages.md) |
+
+## `@archa/icons` — `packages/icons/` (no DOM)
+
+| File | Purpose | Docs |
+|---|---|---|
+| [`src/index.ts`](../../../packages/icons/src/index.ts) | Set index, lazy `loadIconSet`, `parseIconRef`, cross-set `searchIcons`, `iconNode` / `customIconNode` / `scaleInput` / `recolorInput`, `iconSvg` | [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md), [MCP/02](../MCP/02-execute-api.md) |
+| `data/*.json` (generated) | One JSON chunk per set (lucide, Tabler, Phosphor, Heroicons, logos) + `index.json` | [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md) |
 
 ## `@archa/render` — `packages/render/src/` (Canvas2D backend)
 

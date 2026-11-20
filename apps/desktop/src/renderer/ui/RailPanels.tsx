@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown, Circle, Copy, Droplet, Frame, Globe, Group, Hash, Image, MoreHorizontal, PenTool, Plus, Search, Square, StickyNote, Trash2, Triangle, Type, Workflow, X,
 } from 'lucide-react';
 import { hexToColor, newId, type Node, type Variable, type VariableType } from '@archa/schema';
 import { commit, select, toast, useStore } from '../lib/store';
-import { iconToNode, place } from '../lib/importers';
 import { pageRoot } from '../lib/geometry';
 import { cn, ColorField, NumberField } from './controls';
+import { AssetsPanel } from './AssetsPanel';
 
 /** Floating panels opened from the tool rail; they sit beside it over the canvas (blueprint APP_UI/01). */
 export function RailPanels() {
@@ -16,7 +16,7 @@ export function RailPanels() {
     <div className="pointer-events-auto absolute left-[68px] top-3 z-30 flex max-h-[calc(100%-24px)]">
       {panel === 'variables' && <VariablesPanel />}
       {panel === 'find' && <FindPanel />}
-      {panel === 'icons' && <IconsPanel />}
+      {panel === 'assets' && <AssetsPanel onClose={close} />}
     </div>
   );
 }
@@ -207,58 +207,6 @@ function FindPanel() {
             </button>
           );
         })}
-      </div>
-    </Shell>
-  );
-}
-
-/* ----------------------------------- Icons ---------------------------------- */
-
-type IconSet = Array<[string, ComponentType<{ size?: number; strokeWidth?: number }>]>;
-let iconSet: Promise<IconSet> | null = null;
-const loadIcons = () => (iconSet ??= import('lucide-react').then((m) => Object.entries(m.icons) as IconSet));
-
-/** lucide icon picker (ISC licence); the clicked icon becomes an editable vector node. */
-function IconsPanel() {
-  const [all, setAll] = useState<IconSet | null>(null);
-  const [q, setQ] = useState('');
-  const [size, setSize] = useState(24);
-  const grid = useRef<HTMLDivElement>(null);
-  useEffect(() => { void loadIcons().then(setAll); }, []);
-  const needle = q.trim().toLowerCase().replace(/[\s-]/g, '');
-  const shown = (all ?? []).filter(([name]) => !needle || name.toLowerCase().includes(needle)).slice(0, 240);
-
-  const insert = (e: React.MouseEvent<HTMLButtonElement>, name: string) => {
-    const svg = e.currentTarget.querySelector('svg');
-    if (!svg) return;
-    void place(iconToNode(svg, name.replace(/([a-z])([A-Z0-9])/g, '$1 $2'), size), undefined, `Insert icon ${name}`);
-  };
-
-  return (
-    <Shell width={360} title="Icons" footer={
-      <div className="flex items-center gap-2 px-3 py-2 text-[11.5px] text-fg-subtle">
-        <span className="flex-1">Lucide · click to insert</span>
-        {[16, 24, 32, 48].map((s) => (
-          <button key={s} onClick={() => setSize(s)} className={cn('h-6 rounded-md px-1.5', size === s ? 'bg-panel-3 text-fg' : 'hover:text-fg')}>{s}</button>
-        ))}
-      </div>
-    }>
-      <div className="shrink-0 p-2">
-        <label className="flex h-9 items-center gap-2 rounded-lg bg-panel-2 px-2.5 ring-1 ring-line focus-within:ring-accent">
-          <Search size={14} className="text-fg-subtle" />
-          <input autoFocus value={q} placeholder="Search icons…" aria-label="Search icons" spellCheck={false} onChange={(e) => setQ(e.target.value)}
-            className="min-w-0 flex-1 bg-transparent text-[12.5px]" />
-        </label>
-      </div>
-      <div ref={grid} className="grid min-h-0 max-h-[380px] flex-1 grid-cols-8 gap-1 overflow-y-auto px-2 pb-2">
-        {!all && <p className="col-span-8 py-6 text-center text-[12px] text-fg-subtle">Loading icons…</p>}
-        {all && shown.length === 0 && <p className="col-span-8 py-6 text-center text-[12px] text-fg-subtle">No icons match.</p>}
-        {shown.map(([name, Icon]) => (
-          <button key={name} title={name} onClick={(e) => insert(e, name)}
-            className="flex aspect-square items-center justify-center rounded-lg text-fg-muted hover:bg-panel-3 hover:text-fg">
-            <Icon size={18} strokeWidth={2} />
-          </button>
-        ))}
       </div>
     </Shell>
   );

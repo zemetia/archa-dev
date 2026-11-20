@@ -45,7 +45,7 @@ Root scripts call bare `pnpm`; on this machine run them as `corepack pnpm@9.15.0
 | `corepack pnpm@9.15.0 test` | `vitest run` (root `vitest.config.ts`) |
 | `corepack pnpm@9.15.0 cli` | Build `apps/cli` (tsup bundle the app spawns as `archa mcp`) |
 | `corepack pnpm@9.15.0 dist` | CLI build + electron-builder installer |
-| `node scripts/gen-icons.mjs` | Regenerate `packages/core/src/icons-data.ts` from lucide |
+| `node scripts/gen-icon-sets.mjs` | Regenerate `packages/icons/data/` from the icon packages |
 | `node scripts/gen-backlinks.mjs [--check]` | Regenerate / verify blueprint backlinks, code-map coverage, broken links, 150-line limit |
 
 Not wired yet (target in [BEST_PRACTICE](./BEST_PRACTICE.md)): `pnpm lint`, `pnpm bench`, `pnpm gen:api-docs`, Turborepo, ESLint config, CI workflows.

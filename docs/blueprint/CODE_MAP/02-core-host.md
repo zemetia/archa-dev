@@ -36,6 +36,7 @@
 |---|---|---|
 | [`core-host/skills.ts`](../../../apps/desktop/src/core-host/skills.ts) | `SkillManager`: skill folders (`SKILL.md` frontmatter): editable ones in `ARCHA_HOME/skills`, read-only ones from `~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills`; enable state in `skills.json` | [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
 | [`core-host/mcp-servers.ts`](../../../apps/desktop/src/core-host/mcp-servers.ts) | `McpServerManager`: external MCP servers in `mcp.json` (stdio / http / sse), test, import from other agents' configs; `archadev` name reserved; secrets never sent to clients | [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md), [MCP/01](../MCP/01-transports-tools.md) |
+| [`core-host/icons.ts`](../../../apps/desktop/src/core-host/icons.ts) | `IconStore`: uploaded icons in `ARCHA_HOME/icons/custom.json` (`icons.custom.*`) | [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md), [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md) |
 | [`core-host/library.ts`](../../../apps/desktop/src/core-host/library.ts) | `LibraryStore`: global component libraries `ARCHA_HOME/libraries/<name>/` (`library.json`, `components/<id>.json` + thumbnail) | [DESIGN_SYSTEM/02](../DESIGN_SYSTEM/02-components-libraries.md), [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md) |
 
 ---

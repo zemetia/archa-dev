@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### Assets: icons and logos
+- **Assets panel** (grid button on the tool rail, or Shift+I): over 20,000 icons in one place. Lucide, Tabler (outline + filled), Phosphor (thin, light, regular, bold, fill), Heroicons (outline, solid, mini, micro) and about 3,500 brand logos in their brand colours. Search one set or all of them, pick a size and colour, then click to insert or drag onto the canvas.
+- **My icons**: upload your own SVG or PNG icons and logos. They are saved on this computer for every document; SVGs stay editable vectors.
+- Agents reach every set too: `icon("tabler:home")`, `icon("ph-fill:heart")`, `icon("logos:github")`, `icon("my:<name>")`, and `icons("query")` searches them all.
+
+### Fixes
+- The tool rail and the right-click menu scroll instead of running off a short window.
+
 ## [1.1.0] - 2026-11-20
 
 ### Design skills

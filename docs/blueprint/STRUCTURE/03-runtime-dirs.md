@@ -38,6 +38,7 @@
 | `profiles/<agent>/<profileId>/` | Agent login profiles — **never** copied into a project |
 | `plugins/<id>@<version>/` | Installed plugins |
 | `libraries/` | Global libraries and style profiles |
+| `icons/custom.json` | Icons the person uploaded (Assets → My icons) → [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md) |
 | `cache/` | Fonts, plugin bundles, standalone-file assets, `index.sqlite` |
 | `journal/<fileId>/` | Journals for standalone `.archa` files |
 | `runtime/core.json` | Running app: socket path + auth token (file mode 0600) |
@@ -68,5 +69,5 @@
 
 **Linked from:** [FILE_FORMATS/02](../FILE_FORMATS/02-archadev-project.md)
 
-**Code:** [`apps/desktop/src/core-host/library.ts`](../../../apps/desktop/src/core-host/library.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts)
+**Code:** [`apps/desktop/src/core-host/icons.ts`](../../../apps/desktop/src/core-host/icons.ts) · [`apps/desktop/src/core-host/library.ts`](../../../apps/desktop/src/core-host/library.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts)
 <!-- backlinks:end -->

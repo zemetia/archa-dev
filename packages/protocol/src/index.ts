@@ -1,7 +1,10 @@
-import type { Author, DocumentData, Issue, Op } from '@archa/schema';
+import type { Author, DocumentData, Issue, NodeInput, Op } from '@archa/schema';
 import type { BrowserCommand, BrowserReply } from './browser';
 import type { McpImportCandidate, McpImportSource, McpServer, McpServerInput, McpTestResult, SkillsOverview, Skill } from './settings';
 
+
+/** An icon the person uploaded: a node tree at its natural size. */
+export type CustomIconInfo = { name: string; width: number; height: number; node: NodeInput; addedAt: number; preview?: string };
 export * from './agent-docs';
 export * from './design-guides';
 export * from './browser';
@@ -96,6 +99,10 @@ export interface CoreMethods {
   'library.remove': { params: { library: string; id: string }; result: void };
   /** First use places a local main linked to the library; later uses add instances of it. */
   'library.insert': { params: { docId: string; library: string; id: string; parentId?: string; x?: number; y?: number }; result: { nodeId: string; placed: 'main' | 'instance' } };
+  // Uploaded icons, per machine (blueprint DESIGN_SYSTEM/05)
+  'icons.custom.list': { params: void; result: CustomIconInfo[] };
+  'icons.custom.add': { params: { icons: Array<{ name: string; width: number; height: number; node: NodeInput; preview?: string }> }; result: CustomIconInfo[] };
+  'icons.custom.remove': { params: { name: string }; result: void };
   // Agent login profiles (blueprint AGENT_BRIDGE/02)
   'accounts.overview': { params: void; result: AccountsOverview };
   'accounts.create': { params: { agent: AccountAgent; name?: string; apiKey?: string }; result: AgentAccount };
