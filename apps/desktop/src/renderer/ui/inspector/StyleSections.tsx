@@ -3,6 +3,7 @@ import { Circle, CircleDashed, CornerDownRight, Eye, EyeOff, MoveUpRight, Minus,
 import { hexToColor, type Effect, type EffectType, type Node, type Paint, type Stroke } from '@archa/schema';
 import { Check, ColorField, IconButton, MenuButton, NumberField, Section, Segmented, Select } from '../controls';
 import { EMBED_DEVICES } from '../../canvas/EmbedLayer';
+import { FontPicker } from './FontPicker';
 
 /* Style sections of the design panel: appearance, text, fill, stroke, effects and per-type extras. */
 
@@ -30,11 +31,9 @@ export function AppearanceSection({ node: n, set }: { node: Node; set: SetProps 
   );
 }
 
-const FONTS = ['Inter', 'Segoe UI', 'Georgia', 'Times New Roman', 'Arial', 'Consolas', 'Courier New', 'Trebuchet MS', 'Verdana'];
 const WEIGHTS: Record<number, string> = { 100: 'Thin', 200: 'Extra light', 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'Semibold', 700: 'Bold', 800: 'Extra bold', 900: 'Black' };
 
 export function TextSection({ node: n, set }: { node: Extract<Node, { type: 'text' }>; set: SetProps }) {
-  const fonts = FONTS.includes(n.fontFamily) ? FONTS : [n.fontFamily, ...FONTS];
   return (
     <Section title="Text">
       <div className="space-y-2">
@@ -42,7 +41,7 @@ export function TextSection({ node: n, set }: { node: Extract<Node, { type: 'tex
           onBlur={(e) => { if (e.target.value !== n.text) set({ text: e.target.value }, 'Edit text'); }}
           onKeyDown={(e) => e.stopPropagation()}
           className="w-full resize-y rounded-lg bg-panel-2 px-2 py-1.5 text-[12px] ring-1 ring-transparent focus:ring-accent" />
-        <Select title="Font" value={n.fontFamily} onChange={(fontFamily) => set({ fontFamily }, 'Font')} options={fonts.map((f) => ({ value: f, label: f }))} />
+        <FontPicker value={n.fontFamily} onChange={(fontFamily) => set({ fontFamily }, 'Font')} />
         <div className="grid grid-cols-2 gap-2">
           <Select title="Weight" value={String(n.fontWeight)} onChange={(w) => set({ fontWeight: Number(w) }, 'Font weight')}
             options={Object.entries(WEIGHTS).map(([w, label]) => ({ value: w, label }))} />
