@@ -67,9 +67,9 @@ describe('SkillManager', () => {
     process.env.ARCHA_BUILTIN_SKILLS = join(__dirname, '..', '..', '..', 'skills');
     const m = new SkillManager(() => changes++);
     const builtin = m.overview().skills.filter((s) => s.source === 'builtin');
-    expect(builtin.map((s) => s.name).sort()).toEqual(['design-flows', 'design-pdf', 'design-slides', 'design-website']);
+    expect(builtin.map((s) => s.name).sort()).toEqual(['design-flows', 'design-pdf', 'design-slides', 'design-social', 'design-website']);
     expect(builtin.every((s) => s.enabled && !s.error && s.description.length > 20)).toBe(true);
-    expect(m.forRun()).toHaveLength(4);
+    expect(m.forRun()).toHaveLength(5);
 
     expect(m.update({ id: 'builtin:design-pdf', enabled: false }).enabled).toBe(false);
     expect(m.forRunSkills().map((s) => s.name)).not.toContain('design-pdf');

@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-20
+
+### Text
+- **Clean in-place editing**: the old text no longer shows doubled under the editor, and one edit makes one undo step.
+- **Enter saves**, Shift+Enter starts a new line.
+- **Font picker**: search every font installed on this computer, each previewed in its own face, with keyboard navigation; type a name that isn't installed to use it anyway.
+
 ### Canvas
 - **Drag and drop photos** from Explorer (or a browser) onto the canvas: they land under the pointer, inside the frame there, side by side when you drop several. Dropping a photo on the chat composer attaches it to your message.
 - **Remove background**: right-click an image (or Design panel → Image) to cut the subject out, on this computer. The model (BiRefNet lite, MIT) downloads once (~224 MB); the photo never leaves your machine. Undo brings the original back.
@@ -14,9 +21,13 @@ All notable changes to this project are documented in this file, following [Keep
 
 ### Chat
 - **Expandable steps**: every step the agent takes (execute, inspect, screenshot…) opens to show what it did: the code it ran or the arguments, and what came back (or the error).
-- **Built-in design skills are on**: `design-website`, `design-pdf`, `design-slides` and `design-flows` now ship with the app and reach every chat run (Claude Code loads them as skills; Antigravity and Codex get them as a list to read). Turn one off in Settings → Skills; a library skill with the same name replaces it.
+- **Built-in design skills are on**: `design-website`, `design-pdf`, `design-slides`, `design-social` and `design-flows` now ship with the app and reach every chat run (Claude Code loads them as skills; Antigravity and Codex get them as a list to read). Turn one off in Settings → Skills; a library skill with the same name replaces it.
 - **`/skill` mentions**: type `/` in the composer to pick a skill or a built-in guide; its instructions go with that message, for every agent.
 - **Minimal by default**: agents now build only what you ask for, without filler sections, labels above headings, badges or extra copy, unless you ask for more.
+
+### Design skills
+- **Design taste rules** in every design skill: no labels above headings, one hero at real scale, layered depth with overlap, a repeated motif and a decoration budget, plus a self-check.
+- New examples: an annual report, a CV and a studio profile (PDF), a launch deck and a research deck (slides), and a new `design-social` skill with Instagram posts and a carousel.
 
 ## [1.2.0] - 2026-11-20
 
