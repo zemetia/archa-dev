@@ -32,7 +32,8 @@ WRONG: x/y inside an auto-layout frame (ignored) · "fill" in a layout:"none" pa
   taste: {
     title: 'Taste: avoid generic output',
     when: 'every visual decision',
-    body: `- One focal point per screen: one big headline or one hero visual, one primary button.
+    body: `- Minimal by default: only the sections and elements the request names; no filler copy, eyebrow labels, badges, stat rows or decorative icons unless asked. Fewer, larger, well-spaced elements beat many small ones.
+- One focal point per screen: one big headline or one hero visual, one primary button.
 - Hierarchy through size and weight, not colour: headline 48-72 / 700, section titles 28-36 / 600, body 16 / 400 with lineHeight 1.5, muted text for support copy.
 - Restraint: at most one accent colour, shadows only on floating things (menus, modals, a hero card), corner radius consistent (8-16).
 - Do not put a card around everything. Group with whitespace and dividers first.
@@ -69,14 +70,15 @@ Sizes: 16 in dense UI and buttons, 20 in navs and lists, 24-32 in feature tiles 
   landing: {
     title: 'Landing page',
     when: 'marketing sites, heroes, pricing',
-    body: `Order: Nav (logo, 3-5 links, one button) → Hero (headline ≤ 10 words, 1-2 line subtitle, primary + secondary button, a visual) → Social proof (logos or one metric row) → 3-4 Feature blocks (icon + title + 2 lines) → a deeper feature with visual → Pricing or Testimonials → final CTA band → Footer (4 link columns + small print).
-Width 1440, inner container 1200. Hero padding 96-128 top. Alternate section backgrounds (bg / surface) to separate without borders.
+    body: `Build the sections the request names. When it names none, keep it minimal: Nav (logo, up to 3 links, one button) → Hero (headline ≤ 8 words, one short line, one button, one visual) → at most one section with real content → a one-line footer. Social proof, feature grids, pricing, testimonials, FAQ and multi-column footers only when asked.
+Width 1440, inner container 1200. Hero padding 96-128 top. Separate sections with space, or alternate bg / surface — not borders.
 Pricing: 3 tiers in a row, middle one highlighted (accent border or dark surface), price large (40-48), feature list with check icons, one button per tier.`,
   },
   'web-app': {
     title: 'Web app and dashboard',
     when: 'dashboards, admin, SaaS screens, tables, forms',
-    body: `Shell: 1440×900, row layout: Sidebar (240-260 wide, nav items with icons, active item tinted) + Main (fill) with a Topbar (64 high: title, search, actions) and a content column with padding 24-32.
+    body: `Show only the data and controls the screen's job needs; add more panels, filters or widgets only when asked.
+Shell: 1440×900, row layout: Sidebar (240-260 wide, nav items with icons, active item tinted) + Main (fill) with a Topbar (64 high: title, search, actions) and a content column with padding 24-32.
 KPI row: 3-4 cards (label 13 muted, value 28-32 semibold, delta badge green/red). Charts: a frame with axis labels and bars/lines drawn as rects or paths — give data real-looking values.
 Tables: header row (12-13, muted, uppercase optional), rows 48-56 high with dividers, right-align numbers, status as badges, row actions as icons.
 Forms: label above input (14/500), inputs 40-44 high with border and radius 8, helper text 12 muted, primary action bottom-right.
@@ -85,7 +87,8 @@ Text sizes 13-14 for UI, 12 for meta. Gaps 8-16. Keep it calm: neutral surfaces,
   mobile: {
     title: 'Mobile app',
     when: 'phone screens, onboarding flows',
-    body: `Frame 390×844 (fixed height for a screen; hug for a long scroll), padding 20 sides. Status bar area 44-54 at the top, home indicator space 34 at the bottom.
+    body: `One task per screen, few words: a title, the content, one primary action.
+Frame 390×844 (fixed height for a screen; hug for a long scroll), padding 20 sides. Status bar area 44-54 at the top, home indicator space 34 at the bottom.
 Touch targets ≥ 44 high. Primary button full width (sizing.horizontal "fill"), 52-56 high, radius 12-16, at the bottom.
 Type: title 28-34 / 700, body 16-17, captions 13. Tab bar: 4-5 items with icon (24) + label (11), active in accent.
 Flows: place screens in one row left to right with 80 gap, named "01 Welcome", "02 …", so the sequence reads at a glance.`,

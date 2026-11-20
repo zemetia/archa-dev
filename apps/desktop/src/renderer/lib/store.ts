@@ -6,6 +6,7 @@ import { renderNodeImage, renderNodePng } from '@archa/render';
 import { onChatRun } from './comments';
 import { pushTrail, type AgentCursor } from '../canvas/cursors';
 import * as changes from '../canvas/changes';
+import { readingOrder } from './geometry';
 
 export type LeftTab = 'chat' | 'history' | 'layers' | 'components' | 'slides' | 'library';
 export type Tool = 'select' | 'scale' | 'hand' | 'frame' | 'rect' | 'ellipse' | 'polygon' | 'pen' | 'text' | 'sticky' | 'embed' | 'connector' | 'comment';
@@ -78,6 +79,8 @@ type State = {
   customIcons: CustomIconInfo[] | null;
   /** 1px grid drawn when zoomed in far enough; remembered per machine. */
   pixelGrid: boolean;
+  /** Background removal in progress: the image, and the model download share (0-1) while it downloads. */
+  bgJob: { nodeId: string; phase: 'download' | 'working'; progress: number } | null;
 };
 
 export const useStore = create<State>(() => ({
@@ -88,7 +91,7 @@ export const useStore = create<State>(() => ({
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
   browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
   railPanel: null, showComments: true, openComment: null, commentDraft: null, interactEmbed: null,
-  contextMenu: null, customIcons: null, pixelGrid: readFlag('archa.pixelGrid'),
+  contextMenu: null, customIcons: null, pixelGrid: readFlag('archa.pixelGrid'), bgJob: null,
 }));
 
 /** Switches tool and closes per-tool UI that no longer applies. */
@@ -185,6 +188,9 @@ export async function init() {
   client.on('chat.message', (m) => {
     if (m.docId !== get().activeDocId) return;
     // A finished agent message replaces the streamed preview of the same run.
+    // A tool row comes again with its result: replace it in place.
+    const at = m.role === 'tool' && m.callId ? get().chat.findLastIndex((c) => c.id === m.id) : -1;
+    if (at >= 0) { set((s) => ({ chat: s.chat.map((c, i) => (i === at ? m : c)) })); return; }
     set((s) => ({ chat: [...s.chat, m], chatLive: m.role === 'agent' && s.chatLive[threadOf(m)]?.runId === m.runId ? omit(s.chatLive, threadOf(m)) : s.chatLive }));
   });
   client.on('chat.delta', (d) => {
@@ -391,27 +397,74 @@ export const EXPORT_KINDS: Array<{ value: ExportKind; label: string; ext: string
   { value: 'tailwind', label: 'HTML + Tailwind', ext: 'html' },
 ];
 
-/** Export a node (blueprint RENDERING/03): rasters render here, PDF prints in main, the rest is written by the core. */
-export async function exportNode(nodeId: string, kind: ExportKind, scale = 2) {
-  const { client, doc, activeDocId } = get();
+/** Several layers as one PDF, a page each (vector, own size), in reading order. */
+export { readingOrder };
+
+export async function exportPdf(nodeIds: string[]) {
+  const { client, doc, activeDocId, docs } = get();
   if (!client || !doc || !activeDocId) return;
-  const node = doc.get(nodeId);
-  const spec = EXPORT_KINDS.find((k) => k.value === kind);
-  if (!node || !spec) return;
-  const suffix = (kind === 'png' || kind === 'jpg') && scale !== 1 ? `@${scale}x` : '';
-  const path = await window.archa.showExportDialog(`${node.name}${suffix}.${spec.ext}`, spec.ext);
+  const ids = readingOrder(doc, nodeIds);
+  if (!ids.length) return;
+  const name = ids.length === 1 ? doc.require(ids[0]!).name : docs.find((d) => d.id === activeDocId)?.name ?? 'Pages';
+  const path = await window.archa.showExportDialog(`${name}.pdf`, 'pdf');
   if (!path) return;
   try {
-    if (kind === 'pdf') {
-      const page = await client.call('export.page', { docId: activeDocId, nodeId });
-      const err = await window.archa.exportPdf({ ...page, path });
-      if (err) throw new Error(err);
-      toast('Exported PDF');
-      return;
+    const pages = [];
+    for (const nodeId of ids) pages.push(await client.call('export.page', { docId: activeDocId, nodeId }));
+    if (ids.length > 1) toast(`Printing ${ids.length} pages…`);
+    const err = await window.archa.exportPdf({ pages, path });
+    if (err) throw new Error(err);
+    toast(ids.length > 1 ? `Exported PDF · ${ids.length} pages` : 'Exported PDF');
+  } catch (e) {
+    toast(`Export failed: ${(e as Error).message}`, 'error');
+  }
+}
+
+/** Export a node (blueprint RENDERING/03): rasters render here, PDF prints in main, the rest is written by the core. */
+export async function exportNode(nodeId: string, kind: ExportKind, scale = 2) {
+  const { doc } = get();
+  const node = doc?.get(nodeId);
+  const spec = EXPORT_KINDS.find((k) => k.value === kind);
+  if (!node || !spec) return;
+  if (kind === 'pdf') return exportPdf([nodeId]);
+  const path = await window.archa.showExportDialog(`${node.name}${scaleSuffix(kind, scale)}.${spec.ext}`, spec.ext);
+  if (!path) return;
+  try {
+    const files = await saveExport(nodeId, kind, scale, path);
+    toast(files > 1 ? `Exported ${spec.label} (${files} files)` : `Exported ${spec.label}`);
+  } catch (e) {
+    toast(`Export failed: ${(e as Error).message}`, 'error');
+  }
+}
+
+const scaleSuffix = (kind: ExportKind, scale: number) => ((kind === 'png' || kind === 'jpg') && scale !== 1 ? `@${scale}x` : '');
+
+async function saveExport(nodeId: string, kind: Exclude<ExportKind, 'pdf'>, scale: number, path: string): Promise<number> {
+  const { client, doc, activeDocId } = get();
+  if (!client || !doc || !activeDocId) return 0;
+  const image = kind === 'png' || kind === 'jpg' ? await renderNodeImage(doc, nodeId, scale, kind === 'png' ? 'png' : 'jpeg') : undefined;
+  const { files } = await client.call('export.save', { docId: activeDocId, nodeId, format: kind, path, image });
+  return files.length;
+}
+
+/** Several layers as image files: one per layer, into a folder the person picks; equal names get a number. */
+export async function exportEach(nodeIds: string[], kind: Exclude<ExportKind, 'pdf'>, scale = 2) {
+  const { doc } = get();
+  const spec = EXPORT_KINDS.find((k) => k.value === kind);
+  if (!doc || !spec) return;
+  const ids = readingOrder(doc, nodeIds);
+  const folder = ids.length ? await window.archa.pickFolder(`Export ${ids.length} layers as ${spec.label}`) : null;
+  if (!folder) return;
+  const sep = folder.includes('\\') ? '\\' : '/';
+  const used = new Map<string, number>();
+  try {
+    for (const id of ids) {
+      const base = doc.require(id).name.replace(/[<>:"/\\|?*\x00-\x1f]+/g, '-').trim() || 'Layer';
+      const n = (used.get(base) ?? 0) + 1;
+      used.set(base, n);
+      await saveExport(id, kind, scale, `${folder}${sep}${n > 1 ? `${base} ${n}` : base}${scaleSuffix(kind, scale)}.${spec.ext}`);
     }
-    const image = kind === 'png' || kind === 'jpg' ? await renderNodeImage(doc, nodeId, scale, kind === 'png' ? 'png' : 'jpeg') : undefined;
-    const { files } = await client.call('export.save', { docId: activeDocId, nodeId, format: kind, path, image });
-    toast(files.length > 1 ? `Exported ${spec.label} (${files.length} files)` : `Exported ${spec.label}`);
+    toast(`Exported ${ids.length} ${spec.label} files`);
   } catch (e) {
     toast(`Export failed: ${(e as Error).message}`, 'error');
   }

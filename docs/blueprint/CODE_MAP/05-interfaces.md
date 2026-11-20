@@ -65,6 +65,7 @@ Everything else in [CLI/01](../CLI/01-commands.md) is the target. The app must b
 | `runtime/core.json` | `core-host/index.ts` | Socket path + token of the running core |
 | `runtime/core.sock` / `\\.\pipe\archadev-core-<user>[-<hash>]` | `protocol/node.ts` | Core socket; custom `ARCHA_HOME` gets its own pipe |
 | `runtime/threads/<threadId>/` | `core-host/agents.ts` | Per-thread MCP config, mirrored skills, pasted images |
+| `cache/models/birefnet-lite.onnx` | `main/models.ts` | Background removal model, downloaded on first use (derivable). IPC `ml:segment`, event `model:progress` |
 | `chats/<docId>.jsonl`, `chats/sessions.json` | `core-host/agents.ts` | Chat history; agent CLI session ids for resume |
 | `profiles/` | `core-host/accounts.ts` | Agent login profiles |
 | `skills/`, `skills.json` | `core-host/skills.ts` | ArchaDev-owned skills; enabled state |
@@ -80,6 +81,7 @@ Everything else in [CLI/01](../CLI/01-commands.md) is the target. The app must b
 | `ARCHA_HOME` | `protocol/node.ts` and tests | Global dir; tests **must** set a temp dir |
 | `ARCHA_RUN_ID`, `ARCHA_DOC_ID` | set by `core-host/agents.ts`, read by `cli/src/mcp.ts` | Launched run → thread session + target document |
 | `ARCHA_CLI` | `core-host/workspace.ts` | Override path of the `archa` CLI bundle |
+| `ARCHA_BUILTIN_SKILLS` | set by `main/index.ts`, read by `core-host/skills.ts` | Folder of the built-in skills (`resources/skills`, or the repo `skills/` in dev) |
 | `ARCHA_APP_PATH` | `cli/src/index.ts` | App binary for `archa open` |
 | `ARCHA_AGENT_IT`, `ARCHA_AGENT_IT_AGENTS` | `test/agents-live.test.ts` | Enable live agent tests / pick agents |
 | `CLAUDE_CONFIG_DIR`, `CODEX_HOME` | set per profile by `core-host/accounts.ts` | Point Claude / Codex at a profile dir; inherited values are **stripped** by main (the host login is the CLI default) |

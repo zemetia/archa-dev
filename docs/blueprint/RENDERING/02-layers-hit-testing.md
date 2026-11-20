@@ -59,6 +59,8 @@ Top-level nodes with an animating subtree skip the frame bitmap cache while they
 
 Runs in the renderer against the view model (node bounds + paths sent by the core), never round-trips to the core.
 
+**Moving between frames** (`Canvas.tsx` move gesture): the drop target is the deepest frame under the pointer (dragged layers excluded); the page when it is outside every frame. Inside an auto-layout parent a drag reorders while the pointer stays inside it and drags the layers out once it leaves. Dropping into auto layout inserts at the slot under the pointer (insert line shown); dropping into a free frame or the page keeps the world position and turns `fill` sizing into `fixed`. While dragging, layers whose frame clips them are drawn again on top, whole. Files dropped from Explorer land under the pointer, in the frame there → [FILE_FORMATS/04](../FILE_FORMATS/04-importers.md).
+
 ---
 
 ## Code Frames

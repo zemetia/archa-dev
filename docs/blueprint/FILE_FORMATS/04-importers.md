@@ -38,6 +38,8 @@ Plugins register importers through the same interface → [PLUGINS/01](../PLUGIN
 | `tokens` | DTCG JSON, CSS custom properties, Tailwind `@theme` | → variables |
 | `pen-export` | HTML/SVG exported **by pen.dev itself** | Uses the `html`/`svg` importers |
 
+**Built today** (`renderer/lib/importers.ts`): image + SVG via the picker, Ctrl+V, and **drag and drop** — files dropped on the canvas are placed side by side from the pointer, inside the frame under it, and selected (`dropFiles`); non-image files are refused with a toast. Photos dropped on the chat composer attach to the next message instead.
+
 ---
 
 ## `.pen` Rules (licence)
@@ -67,7 +69,7 @@ Saved as `.archadev/designs/<name>/import-report.json` (or shown only, for stand
 
 ---
 
-**Linked from:** [MCP/04](../MCP/04-local-skill.md) · [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md) · [REFERENCE](../REFERENCE.md)
+**Linked from:** [MCP/04](../MCP/04-local-skill.md) · [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md) · [REFERENCE](../REFERENCE.md) · [RENDERING/02](../RENDERING/02-layers-hit-testing.md)
 
 **Code:** [`apps/desktop/src/renderer/lib/importers.ts`](../../../apps/desktop/src/renderer/lib/importers.ts)
 <!-- backlinks:end -->

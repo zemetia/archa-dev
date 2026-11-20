@@ -4,8 +4,9 @@ import { app, BrowserWindow, dialog, ipcMain, MessageChannelMain, shell, utility
 import { z } from 'zod';
 import { browserCommandSchema, type MainBridgeResponse } from '@archa/protocol';
 import { BrowserManager } from './browser';
-import { printHtmlToPdf } from './pdf';
+import { printPagesToPdf } from './pdf';
 import { embedShotArgs, saveEmbedShot } from './embed-shot';
+import { segment, segmentArgs, stopMlHost } from './models';
 
 /* Main process: windows, argv, dialogs, core host lifecycle. Holds no document state (blueprint ARCHITECTURE/01). */
 
@@ -60,7 +61,11 @@ const ownEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k])
 
 function startCore() {
   // Packaged builds ship the CLI under resources/cli (electron-builder extraResources).
-  const env = app.isPackaged ? { ...ownEnv(), ARCHA_CLI: join(process.resourcesPath, 'cli', 'archa.cjs') } : ownEnv();
+  // Built-in design skills ship under resources/skills (electron-builder extraResources); in dev they are the repo's skills/.
+  const builtinSkills = app.isPackaged ? join(process.resourcesPath, 'skills') : resolve(app.getAppPath(), '..', '..', 'skills');
+  const env = app.isPackaged
+    ? { ...ownEnv(), ARCHA_CLI: join(process.resourcesPath, 'cli', 'archa.cjs'), ARCHA_BUILTIN_SKILLS: builtinSkills }
+    : { ...ownEnv(), ARCHA_BUILTIN_SKILLS: process.env.ARCHA_BUILTIN_SKILLS ?? builtinSkills };
   core = utilityProcess.fork(join(__dirname, 'core-host.js'), [], { serviceName: 'ArchaDev Core', stdio: 'inherit', env });
   core.on('message', onCoreMessage);
   core.on('exit', (code) => {
@@ -194,11 +199,13 @@ if (!app.requestSingleInstanceLock()) {
       const r = await dialog.showSaveDialog(win, { defaultPath: suggested, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
       return r.canceled ? null : r.filePath;
     });
-    const pdfArgs = z.object({ html: z.string().max(200_000_000), width: z.number().positive().max(20_000), height: z.number().positive().max(20_000), path: z.string().min(1).max(4096) });
+    // One page per node, in the order given; every page keeps its own size.
+    const pdfPage = z.object({ html: z.string().max(200_000_000), width: z.number().positive().max(20_000), height: z.number().positive().max(20_000) });
+    const pdfArgs = z.object({ pages: z.array(pdfPage).min(1).max(500), path: z.string().min(1).max(4096) });
     ipcMain.handle('export:pdf', async (_e, args: unknown) => {
       const a = pdfArgs.safeParse(args);
       if (!a.success || !isAbsolute(a.data.path)) return 'Invalid PDF export request';
-      try { await printHtmlToPdf(a.data.html, a.data.width, a.data.height, a.data.path); return null; } catch (err) { return (err as Error).message; }
+      try { await printPagesToPdf(a.data.pages, a.data.path); return null; } catch (err) { return (err as Error).message; }
     });
     ipcMain.handle('embed:screenshot', async (e, args: unknown) => {
       const a = embedShotArgs.safeParse(args);
@@ -213,6 +220,12 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('shell:open-path', async (_e, path: string) => {
       if (typeof path !== 'string' || !existsSync(path) || !statSync(path).isDirectory()) return 'Folder not found';
       return shell.openPath(path);
+    });
+    // On-device background removal: a foreground mask for a 1024×1024 RGB image (model downloaded on first use).
+    ipcMain.handle('ml:segment', async (e, args: unknown) => {
+      const a = segmentArgs.safeParse(args);
+      if (!a.success) return { error: 'Invalid background removal request' };
+      try { return { mask: await segment(a.data.rgb, e.sender) }; } catch (err) { return { error: (err as Error).message }; }
     });
     const rect = z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).nullable();
     ipcMain.on('browser:bounds', (e, r: unknown) => {
@@ -232,7 +245,7 @@ if (!app.requestSingleInstanceLock()) {
     createWindow(parseArgv(process.argv, process.cwd()));
   });
 
-  app.on('before-quit', () => { quitting = true; core?.postMessage({ type: 'shutdown' }); });
+  app.on('before-quit', () => { quitting = true; stopMlHost(); core?.postMessage({ type: 'shutdown' }); });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 }

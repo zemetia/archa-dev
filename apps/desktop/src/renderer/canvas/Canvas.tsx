@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { attachedBox, connectorRoute, insertOpsFor, routeConnectors, runLayout, type ArchaDocument } from '@archa/core';
-import { drawPage, FrameBitmapCache } from '@archa/render';
+import { drawNode, drawPage, FrameBitmapCache } from '@archa/render';
 import { isContainer, type ConnectorEnd, type ConnectorNode, type Node, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, setTool, useStore, type Camera, type Tool } from '../lib/store';
 import { connectorEnds, containerAt, fitCamera, handleCursor, handlePoint, HANDLES, hitPath, originOf, pageRoot, pickFromPath, selectionBounds, toWorld, type Handle } from '../lib/geometry';
@@ -14,6 +14,7 @@ import { onImageLoaded } from '@archa/render';
 import { penBounds, penPath, type PenPoint } from './pen';
 import { scaleOps } from './scale';
 import { ASSET_MIME, assetStyle, insertAsset } from '../lib/assets';
+import { dropFiles } from '../lib/importers';
 
 type Pt = { x: number; y: number };
 type Gesture =
@@ -64,6 +65,7 @@ export function Canvas() {
   const fitRequest = useStore((s) => s.fitRequest);
   const editingText = useStore((s) => s.editingText);
   const pixelGrid = useStore((s) => s.pixelGrid);
+  const bgJob = useStore((s) => s.bgJob);
 
   const redraw = () => {
     cancelAnimationFrame(frame.current);
@@ -79,6 +81,7 @@ export function Canvas() {
       const now = performance.now();
       if (st.doc) drawPage(ctx, st.doc, pageRoot(st.doc), st.camera, cache, dpr, size, changes.frame(st.doc, now));
       changes.drawGhosts(ctx, st.camera, dpr, now);
+      if (st.doc && extras.current.lifted) drawLifted(ctx, st.doc, extras.current.lifted, st.camera, dpr);
       const octx = o.getContext('2d')!;
       octx.setTransform(dpr, 0, 0, dpr, 0, 0);
       octx.clearRect(0, 0, size.width, size.height);
@@ -364,23 +367,19 @@ export function Canvas() {
       g.moved = true;
       const first = d.require(g.ids[0]!);
       const parent = first.parentId ? d.get(first.parentId) : undefined;
-      if (parent?.type === 'frame' && parent.layout !== 'none' && !first.absolute && g.ids.every((id) => d.get(id)?.parentId === parent.id)) {
-        // Inside auto-layout: dragging reorders instead of moving.
-        const origin = originOf(d, parent.id);
-        const row = parent.layout === 'row';
-        const pos = row ? w.x - origin.x : w.y - origin.y;
-        const siblings = d.children(parent.id).filter((s) => !g.ids.includes(s.id));
-        let index = siblings.findIndex((s) => pos < (row ? s.x + s.width / 2 : s.y + s.height / 2));
-        if (index < 0) index = siblings.length;
-        g.reorder = { parentId: parent.id, index };
-        const before = siblings[index - 1], after = siblings[index];
-        const at = after ? (row ? after.x : after.y) - parent.gap / 2 : before ? (row ? before.x + before.width : before.y + before.height) + parent.gap / 2 : (row ? parent.padding.left : parent.padding.top);
-        extras.current = { insertLine: row
-          ? { x1: origin.x + at, y1: origin.y + parent.padding.top, x2: origin.x + at, y2: origin.y + parent.height - parent.padding.bottom }
-          : { x1: origin.x + parent.padding.left, y1: origin.y + at, x2: origin.x + parent.width - parent.padding.right, y2: origin.y + at } };
-        redraw();
+      // Inside auto-layout: dragging reorders while the pointer stays in the frame; leaving it drags the layers out.
+      if (parent?.type === 'frame' && parent.layout !== 'none' && !first.absolute && g.ids.every((id) => d.get(id)?.parentId === parent.id) && inside(d.worldBounds(parent.id), w)) {
+        // Back inside after a trip out: the layers return to their slots.
+        for (const id of g.ids) { const o = g.orig.get(id)!; const n = d.require(id); if (n.x !== o.x || n.y !== o.y) d.nodes.set(id, { ...n, x: o.x, y: o.y }); }
+        const slot = layoutSlot(d, parent.id, w, new Set(g.ids));
+        g.reorder = { parentId: parent.id, index: slot.index };
+        g.drop = null;
+        extras.current = { insertLine: slot.line };
+        cache.invalidate();
+        useStore.setState((s) => ({ rev: s.rev + 1 }));
         return;
       }
+      g.reorder = null;
       for (const id of g.ids) {
         const o = g.orig.get(id)!;
         const n = d.require(id);
@@ -395,7 +394,10 @@ export function Canvas() {
       const exclude = new Set(g.ids);
       const target = containerAt(d, w.x, w.y, exclude);
       g.drop = target.id !== first.parentId ? target.id : null;
-      extras.current = { dropTarget: g.drop };
+      // Dropping into an auto-layout frame shows where the layers will land.
+      const slot = g.drop && target.type === 'frame' && target.layout !== 'none' ? layoutSlot(d, target.id, w, exclude) : null;
+      // The dragged layers draw on top, so a clipping frame never hides them on the way out.
+      extras.current = { dropTarget: g.drop, insertLine: slot?.line, lifted: g.ids };
       cache.invalidate();
       useStore.setState((s) => ({ rev: s.rev + 1 }));
     } else if (g.kind === 'resize') {
@@ -497,6 +499,11 @@ export function Canvas() {
         await commit('Reorder', ops);
         return;
       }
+      const target = g.drop ? d.require(g.drop) : null;
+      const auto = target?.type === 'frame' && target.layout !== 'none';
+      const w = toWorld(st.camera, pointer(e).sx, pointer(e).sy);
+      const slot = target && auto ? layoutSlot(d, target.id, w, new Set(g.ids)).index : undefined;
+      let placed = 0;
       for (const id of g.ids) {
         const n = d.require(id);
         if (n.type === 'connector') {
@@ -504,17 +511,21 @@ export function Canvas() {
           if (o && JSON.stringify({ s: n.start, e: n.end }) !== JSON.stringify({ s: o.start, e: o.end })) ops.push({ op: 'update', id, patch: { start: n.start, end: n.end } });
           continue;
         }
-        if (g.drop) {
-          const target = d.require(g.drop);
+        if (target) {
           const world = d.worldBounds(id);
-          const origin = originOf(d, g.drop);
-          ops.push({ op: 'move', id, parentId: g.drop });
-          if (!(target.type === 'frame' && target.layout !== 'none')) ops.push({ op: 'update', id, patch: { x: Math.round(world.x - origin.x), y: Math.round(world.y - origin.y) } });
+          const origin = originOf(d, target.id);
+          ops.push({ op: 'move', id, parentId: target.id, ...(slot !== undefined ? { index: slot + placed++ } : {}) });
+          if (auto) continue;
+          // Out of auto layout: keep the size it had there ("fill" means nothing in a free frame).
+          const fixed = n.sizing.horizontal === 'fill' || n.sizing.vertical === 'fill'
+            ? { sizing: { horizontal: n.sizing.horizontal === 'fill' ? 'fixed' : n.sizing.horizontal, vertical: n.sizing.vertical === 'fill' ? 'fixed' : n.sizing.vertical }, width: n.width, height: n.height }
+            : {};
+          ops.push({ op: 'update', id, patch: { x: Math.round(world.x - origin.x), y: Math.round(world.y - origin.y), ...fixed } });
         } else if (n.x !== g.orig.get(id)!.x || n.y !== g.orig.get(id)!.y) {
           ops.push({ op: 'update', id, patch: { x: n.x, y: n.y } });
         }
       }
-      await commit(g.drop ? 'Move into frame' : 'Move', ops);
+      await commit(!target ? 'Move' : target.type === 'page' ? 'Move out of frame' : 'Move into frame', ops);
       return;
     }
 
@@ -613,14 +624,31 @@ export function Canvas() {
     <div ref={wrap} className="absolute inset-0 overflow-hidden bg-canvas" style={{ cursor }}
       onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
       onPointerLeave={() => useStore.setState({ hover: null })} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
-      onDragOver={(e) => { if (e.dataTransfer.types.includes(ASSET_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(ASSET_MIME) && !e.dataTransfer.types.includes('Files')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        // Photo files show the frame they will land in.
+        if (e.dataTransfer.types.includes('Files') && useStore.getState().doc) {
+          const r = wrap.current!.getBoundingClientRect();
+          const w = toWorld(useStore.getState().camera, e.clientX - r.left, e.clientY - r.top);
+          const target = containerAt(useStore.getState().doc!, w.x, w.y);
+          const drop = target.type === 'frame' ? target.id : null;
+          if (extras.current.dropTarget !== drop) { extras.current = { dropTarget: drop }; redraw(); }
+        }
+      }}
+      onDragLeave={() => { if (extras.current.dropTarget) { extras.current = {}; redraw(); } }}
       onDrop={(e) => {
+        e.preventDefault();
+        extras.current = {};
+        redraw();
+        const r = wrap.current!.getBoundingClientRect();
+        const at = toWorld(useStore.getState().camera, e.clientX - r.left, e.clientY - r.top);
         // An icon dragged from the Assets panel lands where it is dropped.
         const ref = e.dataTransfer.getData(ASSET_MIME);
-        if (!ref) return;
-        e.preventDefault();
-        const r = wrap.current!.getBoundingClientRect();
-        void insertAsset(ref, assetStyle(), toWorld(useStore.getState().camera, e.clientX - r.left, e.clientY - r.top));
+        if (ref) { void insertAsset(ref, assetStyle(), at); return; }
+        // Photos and SVG files from Explorer land under the pointer, inside the frame there.
+        void dropFiles([...e.dataTransfer.files], at);
       }}>
       <canvas ref={content} className="absolute inset-0" />
       <canvas ref={overlay} className="absolute inset-0" />
@@ -628,7 +656,15 @@ export function Canvas() {
       <CommentsLayer />
       <canvas ref={cursorLayer} className="pointer-events-none absolute inset-0" />
       {doc && editingText && doc.get(editingText) && <TextEditor nodeId={editingText} camera={camera} />}
-      {tool !== 'select' && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-panel-2 px-3 py-1 text-xs text-fg-muted">{toolHint(tool)}</div>}
+      {bgJob && (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-panel-2 px-3 py-1 text-xs text-fg-muted shadow-lg">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+          {bgJob.phase === 'download'
+            ? `Downloading the background model (once) · ${Math.round(bgJob.progress * 100)}%`
+            : 'Removing background on this computer…'}
+        </div>
+      )}
+      {tool !== 'select' && !bgJob && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-panel-2 px-3 py-1 text-xs text-fg-muted">{toolHint(tool)}</div>}
     </div>
   );
 }
@@ -648,6 +684,31 @@ function rectOf(a: Pt, b: Pt, square = false) {
 
 const intersects = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
   a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
+const inside = (r: { x: number; y: number; width: number; height: number }, p: Pt) => p.x >= r.x && p.y >= r.y && p.x <= r.x + r.width && p.y <= r.y + r.height;
+
+/** Where layers dropped at `w` land among an auto-layout frame's children, and the insert line to show. */
+function layoutSlot(d: ArchaDocument, parentId: string, w: Pt, exclude: Set<string>): { index: number; line: { x1: number; y1: number; x2: number; y2: number } } {
+  const parent = d.require(parentId);
+  if (parent.type !== 'frame') return { index: 0, line: { x1: w.x, y1: w.y, x2: w.x, y2: w.y } };
+  const origin = originOf(d, parent.id);
+  const row = parent.layout === 'row';
+  const pos = row ? w.x - origin.x : w.y - origin.y;
+  const siblings = d.children(parent.id).filter((s) => !exclude.has(s.id) && !s.absolute);
+  let index = siblings.findIndex((s) => pos < (row ? s.x + s.width / 2 : s.y + s.height / 2));
+  if (index < 0) index = siblings.length;
+  const before = siblings[index - 1], after = siblings[index];
+  const at = after ? (row ? after.x : after.y) - parent.gap / 2 : before ? (row ? before.x + before.width : before.y + before.height) + parent.gap / 2 : (row ? parent.padding.left : parent.padding.top);
+  // The op index counts every child, absolute ones and the dragged layers included.
+  const all = d.children(parent.id).filter((s) => !exclude.has(s.id));
+  const opIndex = after ? all.findIndex((s) => s.id === after.id) : all.length;
+  return {
+    index: opIndex,
+    line: row
+      ? { x1: origin.x + at, y1: origin.y + parent.padding.top, x2: origin.x + at, y2: origin.y + parent.height - parent.padding.bottom }
+      : { x1: origin.x + parent.padding.left, y1: origin.y + at, x2: origin.x + parent.width - parent.padding.right, y2: origin.y + at },
+  };
+}
 
 function sizingAfterResize(n: Node, h: Handle): Partial<Node> {
   const horiz = h.includes('e') || h.includes('w');
@@ -672,6 +733,22 @@ function labelHit(d: NonNullable<ReturnType<typeof useStore.getState>['doc']>, c
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/** Dragged layers whose frame clips them are drawn again on top, whole, so they stay visible on their way out. */
+function drawLifted(ctx: CanvasRenderingContext2D, d: ArchaDocument, ids: string[], cam: Camera, dpr: number) {
+  for (const id of ids) {
+    const n = d.get(id);
+    if (!n?.parentId || n.type === 'connector') continue;
+    let clipped = false;
+    for (let p = d.get(n.parentId); p && p.type !== 'page'; p = p.parentId ? d.get(p.parentId) : undefined) if (p.type === 'frame' && p.clip) { clipped = true; break; }
+    if (!clipped) continue;
+    const o = originOf(d, n.parentId);
+    ctx.save();
+    ctx.setTransform(dpr * cam.zoom, 0, 0, dpr * cam.zoom, dpr * (cam.x + o.x * cam.zoom), dpr * (cam.y + o.y * cam.zoom));
+    drawNode(ctx, d, n);
+    ctx.restore();
+  }
+}
 
 /**
  * A connector end at page point `w`: stuck to the node under it, or free. The top-level node wins

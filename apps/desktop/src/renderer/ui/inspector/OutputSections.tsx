@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Check as CheckIcon, Component, Copy, Crosshair, Download, RefreshCw, Sparkles, Unlink } from 'lucide-react';
 import { componentMeta, contextOf, detachOps, instanceOf, instancesOf, makeComponentOps, syncInstanceOps } from '@archa/core';
 import type { Node } from '@archa/schema';
-import { commit, EXPORT_KINDS, exportNode, toast, useStore, type ExportKind } from '../../lib/store';
+import { commit, EXPORT_KINDS, exportEach, exportNode, exportPdf, readingOrder, toast, useStore, type ExportKind } from '../../lib/store';
 import { revealNode } from '../../lib/thumbs';
 import { cn, Section, Select } from '../controls';
 import { patchNodes } from './shared';
@@ -107,10 +107,19 @@ export function CodeSection({ nodeId }: { nodeId: string }) {
 
 const IMAGE_KINDS = EXPORT_KINDS.filter((k) => k.value !== 'html' && k.value !== 'tailwind');
 
-export function ExportSection({ nodeId }: { nodeId: string }) {
+/** One layer: one file. Several layers: PDF puts them in one file, a page each; other formats write one file per layer. */
+export function ExportSection({ ids }: { ids: string[] }) {
   const [opts, setOpts] = useState(lastExport);
   const update = (o: typeof opts) => { lastExport = o; setOpts(o); };
   const raster = opts.kind === 'png' || opts.kind === 'jpg';
+  const doc = useStore((s) => s.doc);
+  const pages = doc ? readingOrder(doc, ids).length : ids.length;
+  const many = pages > 1;
+  const run = () => {
+    if (opts.kind === 'pdf') return exportPdf(ids);
+    if (!many) return exportNode(ids[0]!, opts.kind, Number(opts.scale));
+    if (opts.kind !== 'html' && opts.kind !== 'tailwind') return exportEach(ids, opts.kind, Number(opts.scale));
+  };
   return (
     <Section title="Export">
       <div className="flex gap-2">
@@ -121,9 +130,14 @@ export function ExportSection({ nodeId }: { nodeId: string }) {
         )}
         <Select title="Format" value={opts.kind} onChange={(kind) => update({ ...opts, kind })} options={IMAGE_KINDS.map(({ value, label }) => ({ value, label }))} />
       </div>
-      {opts.kind === 'pdf' && <p className="mt-1.5 text-[11px] text-fg-subtle">One vector page; text stays selectable.</p>}
-      <button onClick={() => void exportNode(nodeId, opts.kind, Number(opts.scale))} className={cn(smallBtn, 'mt-2 w-full')}>
-        <Download size={13} />Export {IMAGE_KINDS.find((k) => k.value === opts.kind)?.label}
+      {opts.kind === 'pdf' && (
+        <p className="mt-1.5 text-[11px] text-fg-subtle">
+          {many ? `One file, ${pages} vector pages in canvas order (left to right, top to bottom); text stays selectable.` : 'One vector page; text stays selectable.'}
+        </p>
+      )}
+      {opts.kind !== 'pdf' && many && <p className="mt-1.5 text-[11px] text-fg-subtle">{pages} files, one per layer, into a folder you pick.</p>}
+      <button onClick={() => void run()} className={cn(smallBtn, 'mt-2 w-full')}>
+        <Download size={13} />Export {opts.kind === 'pdf' && many ? `PDF · ${pages} pages` : IMAGE_KINDS.find((k) => k.value === opts.kind)?.label}
       </button>
     </Section>
   );

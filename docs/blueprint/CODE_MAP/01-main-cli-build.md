@@ -15,7 +15,9 @@ Each row: file → what it does → the blueprint docs that govern it. Links are
 | [`main/browser-page.ts`](../../../apps/desktop/src/main/browser-page.ts) | `PAGE_LIB`: in-page helper (`window.__archa`) injected before each browser action | [BROWSER](../BROWSER.md) |
 | [`main/browser-url.ts`](../../../apps/desktop/src/main/browser-url.ts) | `normalizeUrl` / `addressToUrl`: host → http(s), path → file://, refuses `javascript:` | [BROWSER](../BROWSER.md) |
 | [`main/embed-shot.ts`](../../../apps/desktop/src/main/embed-shot.ts) | `embed:screenshot`: JPG of a canvas web page (`wide` at 1440 × 900 or `object` as shown) via the guest's CDP, then a save dialog | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) |
-| [`main/pdf.ts`](../../../apps/desktop/src/main/pdf.ts) | `printHtmlToPdf`: hidden window prints the core's standalone HTML of a node, one page sized to it | [RENDERING/03](../RENDERING/03-export.md), [DESIGN_SYSTEM/04](../DESIGN_SYSTEM/04-code-export.md) |
+| [`main/models.ts`](../../../apps/desktop/src/main/models.ts) | `ml:segment` behind the scenes: downloads the background model into `cache/models` (progress → `model:progress`), starts / idles out the ML host | [RENDERING/04](../RENDERING/04-background-removal.md) |
+| [`main/ml-host.ts`](../../../apps/desktop/src/main/ml-host.ts) | ML host `utilityProcess`: ONNX Runtime (CPU) runs BiRefNet on a 1024² RGB image, returns the mask | [RENDERING/04](../RENDERING/04-background-removal.md) |
+| [`main/pdf.ts`](../../../apps/desktop/src/main/pdf.ts) | `printPagesToPdf`: hidden window prints the core's standalone HTML of each node, one page sized to it; several pages are joined with pdf-lib | [RENDERING/03](../RENDERING/03-export.md), [DESIGN_SYSTEM/04](../DESIGN_SYSTEM/04-code-export.md) |
 
 ## Preload — `apps/desktop/src/preload/`
 

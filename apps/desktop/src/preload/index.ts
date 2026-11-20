@@ -10,10 +10,17 @@ contextBridge.exposeInMainWorld('archa', {
   showOpenDialog: (): Promise<string | null> => ipcRenderer.invoke('dialog:open'),
   showSaveDialog: (suggested: string): Promise<string | null> => ipcRenderer.invoke('dialog:save', suggested),
   showExportDialog: (suggested: string, ext: string): Promise<string | null> => ipcRenderer.invoke('dialog:export', suggested, ext),
-  /** Prints a self-contained HTML page to a one-page PDF; resolves to an error message or null. */
-  exportPdf: (args: { html: string; width: number; height: number; path: string }): Promise<string | null> => ipcRenderer.invoke('export:pdf', args),
+  /** Prints self-contained HTML pages into one PDF, a page each at its own size; resolves to an error message or null. */
+  exportPdf: (args: { pages: Array<{ html: string; width: number; height: number }>; path: string }): Promise<string | null> => ipcRenderer.invoke('export:pdf', args),
   /** JPG of a canvas web page: `wide` at desktop width or the `object` as shown; asks where to save. */
   embedScreenshot: (webContentsId: number, mode: 'wide' | 'object'): Promise<{ path?: string | null; error?: string }> => ipcRenderer.invoke('embed:screenshot', { webContentsId, mode }),
+  /** Foreground mask of a 1024×1024 RGB image (background removal); the model downloads on first use. */
+  segment: (rgb: Uint8Array): Promise<{ mask?: Uint8Array; error?: string }> => ipcRenderer.invoke('ml:segment', { rgb }),
+  onModelProgress: (cb: (p: { received: number; total: number }) => void) => {
+    const h = (_e: unknown, p: { received: number; total: number }) => cb(p);
+    ipcRenderer.on('model:progress', h);
+    return () => { ipcRenderer.off('model:progress', h); };
+  },
   pickFolder: (title: string): Promise<string | null> => ipcRenderer.invoke('dialog:folder', title),
   openFolder: (path: string): Promise<string> => ipcRenderer.invoke('shell:open-path', path),
   onOpenIntent: (cb: (intent: { kind: string; path?: string }) => void) => {

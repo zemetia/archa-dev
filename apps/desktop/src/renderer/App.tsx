@@ -18,6 +18,8 @@ import { SettingsDialog } from './ui/SettingsDialog';
 import { OrchestraView } from './ui/OrchestraView';
 import { BrowserPanel, toggleBrowser, useBrowserSync } from './ui/BrowserPanel';
 
+const blockFileDrop = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); };
+
 export function App() {
   const ready = useStore((s) => !!s.doc);
   const toasts = useStore((s) => s.toasts);
@@ -29,7 +31,13 @@ export function App() {
   useEffect(() => {
     window.addEventListener('keydown', onKey);
     window.addEventListener('paste', onPaste);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('paste', onPaste); };
+    // A file dropped anywhere the canvas or composer does not take it must not open in the window.
+    window.addEventListener('dragover', blockFileDrop);
+    window.addEventListener('drop', blockFileDrop);
+    return () => {
+      window.removeEventListener('keydown', onKey); window.removeEventListener('paste', onPaste);
+      window.removeEventListener('dragover', blockFileDrop); window.removeEventListener('drop', blockFileDrop);
+    };
   }, []);
 
   return (

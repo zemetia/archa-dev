@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeft, ArrowUp, Copy, Crosshair, FileText, Hexagon, History, Loader2, MessageSquare, Network, Settings, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
-import { chatThreads, threadOf, type ChatImage, type ChatMode, type ModelOption } from '@archa/protocol';
-import { runOfThread, select, toast, useStore } from '../lib/store';
+import { ArrowLeft, ArrowUp, BookOpen, Camera, Check, ChevronRight, Code2, Copy, Crosshair, FileText, Globe, Hexagon, History, ImagePlus, Layers, Loader2, MessageSquare, Network, ScanSearch, Settings, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
+import { chatThreads, GUIDES, threadOf, type ChatImage, type ChatMessage, type ChatMode, type ModelOption } from '@archa/protocol';
+import { loadSkills, runOfThread, select, toast, useStore } from '../lib/store';
 import { imageFiles, MAX_CHAT_IMAGES, toChatImage } from '../lib/chatImages';
 import { personaBg } from './persona';
 import { cn } from './controls';
@@ -147,16 +147,11 @@ export function ChatThread() {
                     {m.images.map((src, i) => <img key={i} src={src} alt="" className="h-16 max-w-[120px] rounded-md border border-line object-cover" />)}
                   </div>
                 ) : null}
-                {m.text}
+                <MentionText text={m.text} />
               </div>
             )}
             {m.role === 'agent' && <AgentText agent={m.agent} persona={m.persona} label={agentLabel(m.agent)} text={m.text} />}
-            {m.role === 'tool' && (
-              <button onClick={() => m.nodeIds.length && select(m.nodeIds.filter((id) => useStore.getState().doc?.get(id)).slice(0, 50))}
-                className="flex w-full items-center gap-1.5 truncate px-1 text-left text-[11.5px] text-fg-subtle hover:text-fg-muted">
-                <Wrench size={11} className="shrink-0" /><span className="truncate">{m.text}</span>
-              </button>
-            )}
+            {m.role === 'tool' && <ToolRow m={m} pending={!!running && 'callId' in m && !!m.callId && m.runId === running.runId && m.result === undefined} />}
             {m.role === 'status' && <div className="flex items-center gap-1.5 px-1 text-[11px] text-fg-subtle"><UserRound size={11} className="shrink-0" /><span className="truncate">{m.text}</span></div>}
             {m.role === 'error' && <div className="whitespace-pre-wrap rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{m.text}</div>}
           </div>
@@ -165,6 +160,73 @@ export function ChatThread() {
         {running && !live && <div className="flex items-center gap-2 px-1 text-[12px] text-agent"><Loader2 size={13} className="animate-spin" />{running.persona} is working on the canvas…</div>}
         <div ref={end} />
       </div>
+    </div>
+  );
+}
+
+/** `/skill` mentions in a sent message, tinted so the person sees which skills went with it. */
+function MentionText({ text }: { text: string }) {
+  const parts = text.split(/((?:^|\s)\/[a-z0-9][a-z0-9-]*)/gi);
+  return parts.map((p, i) => (i % 2 ? <span key={i} className="whitespace-nowrap font-medium text-accent-fg">{p}</span> : p));
+}
+
+const TOOL_ICON: Record<string, typeof Wrench> = {
+  execute: Code2, inspect: ScanSearch, screenshot: Camera, get_state: Layers, read_guide: BookOpen, browser: Globe,
+  export_svg: Code2, delegate: Network, wait_workers: Network, tell_worker: Network,
+};
+
+/**
+ * One tool call the agent made. Collapsed: what it did in one line. Expanded: the full input (the code an
+ * execute ran, the node an inspect looked at…) and what the tool returned.
+ */
+type ToolItem = Pick<ChatMessage, 'text' | 'detail' | 'result' | 'failed'> & { nodeIds: string[] };
+
+function ToolRow({ m, pending }: { m: ToolItem; pending: boolean }) {
+  const [open, setOpen] = useState(false);
+  const tool = m.text.split(' · ')[0]!.trim();
+  const Icon = TOOL_ICON[tool] ?? Wrench;
+  const expandable = !!(m.detail || m.result);
+  const selectNodes = () => select(m.nodeIds.filter((id) => useStore.getState().doc?.get(id)).slice(0, 50));
+  return (
+    <div className="px-0.5">
+      <button onClick={() => (expandable ? setOpen(!open) : m.nodeIds.length && selectNodes())} aria-expanded={expandable ? open : undefined}
+        title={expandable ? (open ? 'Hide details' : 'Show what this step did') : m.text}
+        className={cn('group flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-[11.5px] text-fg-subtle hover:bg-panel-2 hover:text-fg-muted', open && 'text-fg-muted')}>
+        {expandable
+          ? <ChevronRight size={11} className={cn('shrink-0 transition-transform', open && 'rotate-90')} />
+          : <span className="w-[11px] shrink-0" />}
+        <Icon size={11} className={cn('shrink-0', m.failed && 'text-danger')} />
+        <span className="min-w-0 flex-1 truncate">{m.text}</span>
+        {pending && <Loader2 size={10} className="shrink-0 animate-spin" />}
+        {m.failed && <span className="shrink-0 text-[10px] text-danger">failed</span>}
+      </button>
+      {open && (
+        <div className="mb-1 ml-[18px] mt-0.5 space-y-1.5 rounded-lg border border-line bg-panel-2/60 p-1.5">
+          {m.detail && <DetailBlock label={tool === 'execute' ? 'Code' : 'Input'} text={m.detail} />}
+          {m.result !== undefined
+            ? <DetailBlock label={m.failed ? 'Error' : 'Result'} text={m.result} danger={m.failed} />
+            : pending && <div className="flex items-center gap-1.5 px-1 text-[10.5px] text-fg-subtle"><Loader2 size={10} className="animate-spin" />Waiting for the result…</div>}
+          {m.nodeIds.length > 0 && (
+            <button onClick={selectNodes} className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] text-fg-muted hover:bg-panel-3 hover:text-fg">
+              <Crosshair size={10} />Select {m.nodeIds.length === 1 ? 'the layer' : `${m.nodeIds.length} layers`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailBlock({ label, text, danger }: { label: string; text: string; danger?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div>
+      <div className="flex h-5 items-center px-1 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
+        <span className="flex-1">{label}</span>
+        <button title="Copy" onClick={() => { void navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); }}
+          className="flex h-5 w-5 items-center justify-center rounded hover:bg-panel-3 hover:text-fg">{copied ? <Check size={10} /> : <Copy size={10} />}</button>
+      </div>
+      <pre className={cn('max-h-64 select-text overflow-auto whitespace-pre-wrap break-words rounded-md bg-panel px-2 py-1.5 font-mono text-[10.5px] leading-relaxed', danger ? 'text-danger' : 'text-fg-muted')}>{text}</pre>
     </div>
   );
 }
@@ -310,15 +372,69 @@ export function ChatComposer() {
   };
   useEffect(() => { reserved.current = null; }, [docId, agent, model, account]);
 
-  const onPaste = (e: React.ClipboardEvent) => {
-    const files = imageFiles(e.clipboardData);
-    if (!files.length) return;
-    e.preventDefault();
+  const addImages = (files: File[]) => {
     const room = MAX_CHAT_IMAGES - images.length;
     if (room <= 0) { toast(`Up to ${MAX_CHAT_IMAGES} images per message`, 'error'); return; }
     Promise.all(files.slice(0, room).map(toChatImage))
       .then((added) => setImages((list) => [...list, ...added].slice(0, MAX_CHAT_IMAGES)))
       .catch((err: Error) => toast(`Could not read the image: ${err.message}`, 'error'));
+  };
+  const onPaste = (e: React.ClipboardEvent) => {
+    const files = imageFiles(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    addImages(files);
+  };
+  // Photos dragged from Explorer onto the composer attach like pasted ones.
+  const [dropping, setDropping] = useState(false);
+  const onDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDropping(true);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    setDropping(false);
+    const files = imageFiles(e.dataTransfer);
+    if (files.length) addImages(files);
+    else toast('Only images can be attached', 'error');
+  };
+
+  // `/` opens a list of skills and guides; the picked one goes with the message (blueprint AGENT_BRIDGE/05).
+  const skills = useStore((s) => s.skills);
+  const [slash, setSlash] = useState<{ start: number; end: number; query: string } | null>(null);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const slashOptions = useMemo(() => {
+    if (!slash) return [];
+    const q = slash.query.toLowerCase();
+    const seen = new Set<string>();
+    const all: Array<{ name: string; description: string; source: string }> = [];
+    for (const s of skills?.skills ?? []) {
+      const name = s.name.toLowerCase();
+      if (s.error || seen.has(name) || !/^[a-z0-9][a-z0-9-]*$/.test(name)) continue;
+      seen.add(name);
+      all.push({ name, description: s.description, source: s.source === 'archadev' ? 'Skill' : s.source === 'builtin' ? 'Built-in' : `Skill · ${s.source}` });
+    }
+    for (const [name, g] of Object.entries(GUIDES)) if (!seen.has(name)) all.push({ name, description: `${g.title} — ${g.when}`, source: 'Guide' });
+    return all.filter((o) => o.name.includes(q)).sort((a, b) => Number(!a.name.startsWith(q)) - Number(!b.name.startsWith(q))).slice(0, 8);
+  }, [slash, skills]);
+  const readSlash = (el: HTMLTextAreaElement) => {
+    const caret = el.selectionStart ?? el.value.length;
+    const m = /(^|\s)\/([a-z0-9-]*)$/i.exec(el.value.slice(0, caret));
+    if (!m) { setSlash(null); return; }
+    if (!skills) void loadSkills();
+    setSlash({ start: caret - m[2]!.length - 1, end: caret, query: m[2]! });
+    setSlashIndex(0);
+  };
+  const pickSlash = (name: string) => {
+    if (!slash) return;
+    const next = `${prompt.slice(0, slash.start)}/${name} ${prompt.slice(slash.end)}`;
+    setPrompt(next);
+    setSlash(null);
+    const at = slash.start + name.length + 2;
+    requestAnimationFrame(() => { const el = input.current; if (el) { el.focus(); el.setSelectionRange(at, at); } });
   };
 
   const send = async (now = false) => {
@@ -343,7 +459,29 @@ export function ChatComposer() {
   const canSend = (!!prompt.trim() || images.length > 0) && !!available?.available && !sending;
 
   return (
-    <div className="shrink-0 rounded-2xl border border-line bg-panel p-2 transition-colors focus-within:border-accent/60">
+    <div onDragOver={onDragOver} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Element | null)) setDropping(false); }} onDrop={onDrop}
+      className={cn('relative shrink-0 rounded-2xl border border-line bg-panel p-2 transition-colors focus-within:border-accent/60', dropping && 'border-accent bg-accent-soft')}>
+      {dropping && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-2xl text-[12px] font-medium text-accent-fg">
+          <ImagePlus size={15} />Drop to attach
+        </div>
+      )}
+      {slash && slashOptions.length > 0 && (
+        <div role="listbox" className="absolute bottom-full left-0 right-0 z-20 mb-1.5 overflow-hidden rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/40">
+          <div className="px-2 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">Skills · goes with this message</div>
+          {slashOptions.map((o, i) => (
+            <button key={o.name} role="option" aria-selected={i === slashIndex} onMouseEnter={() => setSlashIndex(i)}
+              onMouseDown={(e) => { e.preventDefault(); pickSlash(o.name); }}
+              className={cn('flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left', i === slashIndex && 'bg-panel-3')}>
+              <Sparkles size={12} className="mt-0.5 shrink-0 text-accent-fg" />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5 text-[12px] text-fg">/{o.name}<span className="text-[10px] text-fg-subtle">{o.source}</span></span>
+                <span className="block truncate text-[11px] text-fg-subtle">{o.description}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-1.5 px-1 pb-1">
         <span title="The agent works on this document" className="flex h-6 max-w-[140px] shrink-0 items-center gap-1 rounded-md border border-line px-1.5 text-[11px] text-fg-muted">
           <FileText size={11} className="shrink-0" /><span className="truncate">{docName ?? 'Canvas'}</span>
@@ -368,10 +506,20 @@ export function ChatComposer() {
           ))}
         </div>
       )}
-      <textarea ref={input} value={prompt} onChange={(e) => setPrompt(e.target.value)} onFocus={warm} onPaste={onPaste} rows={3}
-        placeholder={running ? `${running.persona} is working — Enter queues a follow-up, Ctrl+Enter sends it now` : mode === 'orchestrate' ? 'Describe the job — the lead splits it across a team…' : 'Describe what to design…'}
+      <textarea ref={input} value={prompt} onChange={(e) => { setPrompt(e.target.value); readSlash(e.target); }} onFocus={warm} onPaste={onPaste} rows={3}
+        onBlur={() => setSlash(null)} onClick={(e) => readSlash(e.currentTarget)}
+        placeholder={running ? `${running.persona} is working — Enter queues a follow-up, Ctrl+Enter sends it now` : mode === 'orchestrate' ? 'Describe the job — the lead splits it across a team…' : 'Describe what to design… (/ for skills)'}
         onKeyDown={(e) => {
           e.stopPropagation();
+          if (slash && slashOptions.length) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              setSlashIndex((i) => (i + (e.key === 'ArrowDown' ? 1 : slashOptions.length - 1)) % slashOptions.length);
+              return;
+            }
+            if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickSlash(slashOptions[slashIndex]!.name); return; }
+            if (e.key === 'Escape') { e.preventDefault(); setSlash(null); return; }
+          }
           if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(e.ctrlKey || e.metaKey); }
           else if (e.key === 'Backspace' && !prompt && images.length) setImages((list) => list.slice(0, -1));
         }}
