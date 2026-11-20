@@ -1,0 +1,97 @@
+<!doctype html>
+<!--
+  Example: 2-page A4 studio profile (fictional architecture studio "Ruang Tropis").
+  Concept: "brand motif". The arch (a doorway seen in the studio's houses) is the one repeated shape:
+  the cover's hero window, the project frames, the bullet in the footer. Façade patterns (louvres,
+  breeze blocks, foliage) are drawn with CSS gradients, so the example needs no photos; swap in real
+  project photography with object-fit: cover inside the same arch frames.
+  Render: node ../scripts/render-pdf.mjs studio-profile.html profile.pdf --preview
+-->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Ruang Tropis: Profil Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --clay: #b5522c; --clay-deep: #8e3b1c; --sand: #f2e9dc; --bone: #faf6ef; --char: #1f1c19; --muted: #74695d; --leaf: #3f5a3a;
+    --display: "Syne", system-ui, sans-serif; --sans: "Inter", system-ui, sans-serif;
+    --shadow: 0 1mm 2mm rgb(31 28 25 / .1), 0 8mm 18mm -4mm rgb(31 28 25 / .35);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font: 400 9.6pt/1.55 var(--sans); color: var(--char); background: #888; }
+  .page { position: relative; width: 210mm; height: 297mm; overflow: hidden; break-after: page; background: var(--bone); }
+  .page:last-child { break-after: auto; }
+  .arch { border-radius: 999px 999px 0 0; overflow: hidden; position: relative; }
+  /* façade patterns */
+  .louvre { background: repeating-linear-gradient(90deg, #d9c6ad 0 3.2mm, #8a6a4c 3.2mm 4mm), #d9c6ad; }
+  .louvre::after { content: ""; position: absolute; inset: 0; background: linear-gradient(160deg, rgb(255 236 200 / .55), transparent 45%, rgb(31 28 25 / .35)); }
+  .breeze { background: radial-gradient(circle at 50% 50%, #f2e9dc 0 2.4mm, transparent 2.5mm) 0 0 / 7mm 7mm, #c2a383; }
+  .breeze::after { content: ""; position: absolute; inset: 0; background: linear-gradient(200deg, rgb(255 240 210 / .4), transparent 50%, rgb(31 28 25 / .3)); }
+  .foliage { background: radial-gradient(circle at 30% 30%, #6f8b5c 0 6mm, transparent 6.2mm) 0 0 / 15mm 13mm,
+                         radial-gradient(circle at 70% 70%, #2f4a2c 0 7mm, transparent 7.2mm) 0 0 / 17mm 15mm, var(--leaf); }
+
+  /* ---------- cover ---------- */
+  .cover .field { position: absolute; left: 0; right: 0; top: 0; height: 178mm; background: var(--clay); }
+  .cover h1 { position: absolute; left: 16mm; top: 20mm; font: 800 70pt/0.86 var(--display); letter-spacing: -.035em; color: var(--sand); }
+  .cover .hero { position: absolute; right: 18mm; top: 62mm; width: 104mm; height: 190mm; box-shadow: var(--shadow); }
+  .cover .sun { position: absolute; right: 100mm; top: 96mm; width: 42mm; height: 42mm; border-radius: 50%; background: #e9a46c; }
+  .cover .intro { position: absolute; left: 16mm; top: 196mm; width: 66mm; font-size: 11pt; line-height: 1.5; }
+  .cover .meta { position: absolute; left: 16mm; right: 16mm; bottom: 14mm; display: flex; justify-content: space-between; font-size: 8pt; color: var(--muted); }
+
+  /* ---------- page 2: work ---------- */
+  .p2 h2 { position: absolute; left: 16mm; top: 20mm; width: 100mm; font: 700 22pt/1.05 var(--display); letter-spacing: -.03em; }
+  .p2 .stat { position: absolute; right: 16mm; top: 14mm; text-align: right; }
+  .p2 .stat b { display: block; font: 800 56pt/0.9 var(--display); letter-spacing: -.05em; color: var(--clay); }
+  .p2 .stat span { margin-top: 2mm; font-size: 8pt; color: var(--muted); display: block; width: 62mm; margin-left: auto; }
+  .p2 .projects { position: absolute; left: 16mm; right: 16mm; top: 66mm; display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 6mm; align-items: end; }
+  .p2 .projects .arch { box-shadow: var(--shadow); }
+  .p2 figure figcaption { margin-top: 4mm; font-size: 8.5pt; color: var(--muted); }
+  .p2 figure figcaption strong { display: block; font: 700 11pt/1.2 var(--display); color: var(--char); letter-spacing: -.01em; }
+  .p2 .how { position: absolute; left: 16mm; right: 16mm; top: 206mm; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8mm; }
+  .p2 .how p.n { font: 800 22pt/1 var(--display); color: var(--clay); }
+  .p2 .how h3 { margin-top: 3mm; font-size: 10pt; font-weight: 600; }
+  .p2 .how p.t { margin-top: 1mm; color: #4a433b; font-size: 9pt; }
+  .p2 .band { position: absolute; left: 0; right: 0; bottom: 0; height: 40mm; background: var(--char); color: var(--sand); padding: 0 16mm;
+              display: flex; align-items: center; justify-content: space-between; }
+  .p2 .band p.big { font: 700 18pt/1.15 var(--display); letter-spacing: -.02em; max-width: 100mm; }
+  .p2 .band ul { list-style: none; font-size: 9pt; text-align: right; color: rgb(242 233 220 / .8); }
+  .p2 .band li::before { content: ""; display: inline-block; width: 2.2mm; height: 2.8mm; border-radius: 9mm 9mm 0 0; background: var(--clay); margin-right: 2mm; }
+</style>
+</head>
+<body>
+
+<section class="page cover">
+  <div class="field" aria-hidden="true"></div>
+  <h1>Ruang<br>Tropis</h1>
+  <div class="sun" aria-hidden="true"></div>
+  <div class="hero arch louvre" role="img" aria-label="Fasad kisi-kisi kayu dengan bayangan sore"></div>
+  <p class="intro">Studio arsitektur di Yogyakarta. Kami merancang rumah dan sekolah yang tetap sejuk di iklim panas lembap, dengan bayangan, angin, dan sedikit mesin.</p>
+  <div class="meta"><span>Profil studio 2026</span><span>Jl. Prawirotaman 21, Yogyakarta · ruangtropis.id</span></div>
+</section>
+
+<section class="page p2">
+  <h2>Rumah yang tetap sejuk tanpa pendingin ruangan.</h2>
+  <p class="stat"><b>−4°C</b><span>rata-rata suhu dalam ruang dibanding luar, diukur di 11 rumah kami, siang hari bulan Oktober</span></p>
+  <div class="projects">
+    <figure><div class="arch louvre" style="height:100mm"></div><figcaption><strong>Rumah Kisi</strong>Sleman · 180 m² · 2025</figcaption></figure>
+    <figure><div class="arch foliage" style="height:76mm"></div><figcaption><strong>SD Alam Lereng</strong>Magelang · 640 m² · 2024</figcaption></figure>
+    <figure><div class="arch breeze" style="height:88mm"></div><figcaption><strong>Rumah Roster</strong>Bantul · 120 m² · 2026</figcaption></figure>
+  </div>
+  <div class="how">
+    <div><p class="n">01</p><h3>Atap dulu, dinding kemudian</h3><p class="t">Teritis 1,5 m membayangi dinding dari matahari jam dua siang.</p></div>
+    <div><p class="n">02</p><h3>Angin masuk, panas keluar</h3><p class="t">Bukaan silang dan roster tinggi membuat udara bergerak tanpa kipas.</p></div>
+    <div><p class="n">03</p><h3>Material dari radius 50 km</h3><p class="t">Bata, kayu dan batu dari pengrajin sekitar lokasi proyek.</p></div>
+  </div>
+  <div class="band">
+    <p class="big">Punya lahan dan ingin rumah yang bernapas? Mari mulai dari satu kopi.</p>
+    <ul><li>halo@ruangtropis.id</li><li>+62 274 380 112</li><li>@ruangtropis</li></ul>
+  </div>
+</section>
+
+</body>
+</html>

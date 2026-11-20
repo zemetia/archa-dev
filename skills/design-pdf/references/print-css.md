@@ -32,6 +32,7 @@ p { orphans: 3; widows: 3; }
 | A blank last page | `break-after: page` on the last page | `.page:last-child { break-after: auto }` |
 | Fallback fonts (Times/Arial) | Printed before web fonts loaded | `--virtual-time-budget=8000` (the script does this), or local `@font-face` |
 | Backgrounds missing | Print colour adjust | `print-color-adjust: exact` on `html` |
+| A circle or giant number that bleeds off the **bottom** edge prints as a straight-sided arch or a stretched glyph | Print fragmentation cuts any box that crosses the page bottom (even with `overflow: hidden`) | Draw bottom-bleeding shapes and type in one full-page `<svg>` (`position:absolute; inset:0`). Bleeding off the top, left or right is fine |
 | A big number shows at body size | A generic rule (`.stats p`) beats the class (`.big`) | Scope the generic rule (`.stats p:not(.big)`) |
 | Grid items jump rows | Auto-placement with mixed explicit columns | Give each item an explicit `grid-row` |
 | Text clipped at the bottom of a fixed page | Too much content | Move it to a new page; never shrink body text below 9pt |

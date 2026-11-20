@@ -1,0 +1,130 @@
+<!doctype html>
+<!--
+  Example: 4 single Instagram posts, 1080×1350 (4:5), for a fictional coffee shop "Kopi Rana".
+  One brand system, four different jobs: a product launch, an event, a customer review, a milestone.
+  Each post has ONE message readable in under 2 seconds on a phone, one hero object at large scale,
+  one overlap that gives depth (sticker over glass, card over field), and the brand motif (the
+  coffee ring) placed differently every time. The same grid holds them together: 72px margins,
+  logo bottom-left, nothing important in the outer 72px.
+  Render: node ../../design-pdf/scripts/render-pdf.mjs posts-kopi.html posts.pdf --preview --dpi 30
+  Upload PNGs, exactly 1080×1350: pdftoppm -png -scale-to-x 1080 -scale-to-y 1350 posts.pdf posts
+-->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Kopi Rana: Post Instagram</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  @page { size: 1080px 1350px; margin: 0; }
+  :root { --esp: #2b1a12; --rust: #b4461c; --rust-d: #8e3412; --cream: #f6ecdf; --milk: #ead8bf; --aren: #6b3a1f;
+          --serif: "Instrument Serif", Georgia, serif; --sans: "DM Sans", system-ui, sans-serif;
+          --lift: 0 2px 4px rgb(43 26 18 / .12), 0 40px 70px -24px rgb(43 26 18 / .55); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: var(--sans); background: #444; }
+  .post { position: relative; width: 1080px; height: 1350px; overflow: hidden; break-after: page; }
+  .post:last-child { break-after: auto; }
+  svg.art { position: absolute; inset: 0; width: 100%; height: 100%; }   /* shapes that bleed off the bottom: SVG, never a div */
+  .logo { position: absolute; left: 72px; bottom: 64px; display: flex; align-items: center; gap: 14px; font: 700 28px var(--sans); letter-spacing: -.02em; }
+  .logo i { width: 34px; height: 34px; border-radius: 50%; border: 7px solid currentColor; display: block; }
+  .serif { font-family: var(--serif); font-weight: 400; letter-spacing: -.02em; }
+
+  /* 1 launch: glass + sticker on rust */
+  .p1 { background: var(--rust); color: var(--cream); }
+  .p1 h1 { position: absolute; left: 72px; top: 84px; width: 620px; font-size: 118px; line-height: .92; }
+  .p1 h1 em { color: var(--esp); }
+  .p1 .glass { position: absolute; left: 560px; top: 380px; width: 380px; height: 820px; border-radius: 40px 40px 80px 80px; overflow: hidden;
+               background: linear-gradient(180deg, rgb(255 255 255 / .18) 0 8%, var(--milk) 8% 38%, #c99a6b 46%, var(--aren) 70%, #3d1e0e 100%);
+               box-shadow: var(--lift), inset 14px 0 0 rgb(255 255 255 / .18), inset -10px 0 0 rgb(0 0 0 / .08); }
+  .p1 .glass i { position: absolute; width: 120px; height: 110px; border-radius: 22px; background: rgb(255 255 255 / .35); border: 3px solid rgb(255 255 255 / .5); }
+  .p1 .sticker { position: absolute; left: 420px; top: 760px; width: 250px; height: 250px; border-radius: 50%; background: var(--cream); color: var(--esp);
+                 display: grid; place-content: center; text-align: center; transform: rotate(-12deg); box-shadow: var(--lift); }
+  .p1 .sticker b { font: 400 104px/0.9 var(--serif); letter-spacing: -.03em; }
+  .p1 .sticker span { font: 500 24px var(--sans); }
+  .p1 .info { position: absolute; left: 72px; top: 520px; width: 330px; font-size: 30px; line-height: 1.35; color: rgb(246 236 223 / .85); }
+  .p1 .info strong { display: block; color: var(--cream); font-weight: 700; margin-bottom: 8px; }
+
+  /* 2 event: giant date */
+  .p2 { background: var(--cream); color: var(--esp); }
+  .p2 .day { position: absolute; left: 40px; top: 30px; font: 400 760px/0.8 var(--serif); letter-spacing: -.06em; color: var(--rust); }
+  .p2 .mon { position: absolute; right: 72px; top: 96px; text-align: right; font: 400 92px/0.9 var(--serif); }
+  .p2 .mon span { display: block; font: 500 28px var(--sans); margin-top: 14px; }
+  .p2 .card { position: absolute; left: 72px; right: 72px; top: 640px; background: #fff; border-radius: 36px; padding: 56px 56px 52px; box-shadow: var(--lift); }
+  .p2 .card h2 { font-size: 76px; line-height: .98; }
+  .p2 .card ul { list-style: none; margin-top: 34px; display: grid; gap: 14px; font-size: 30px; }
+  .p2 .card li { display: flex; gap: 18px; align-items: baseline; }
+  .p2 .card li b { width: 150px; flex-shrink: 0; font-weight: 500; color: #8a7462; }
+  .p2 .cta { position: absolute; right: 72px; bottom: 62px; font: 500 28px var(--sans); }
+  .p2 .cta strong { background: var(--esp); color: var(--cream); padding: 6px 16px; border-radius: 999px; font-weight: 700; }
+
+  /* 3 review on espresso */
+  .p3 { background: var(--esp); color: var(--cream); }
+  .p3 .stars { position: absolute; left: 72px; top: 96px; display: flex; gap: 10px; }
+  .p3 blockquote { position: absolute; left: 72px; right: 90px; top: 220px; font: 400 112px/1.0 var(--serif); letter-spacing: -.025em; }
+  .p3 blockquote em { color: #e9a07a; }
+  .p3 .who { position: absolute; left: 72px; top: 770px; font-size: 30px; line-height: 1.35; color: rgb(246 236 223 / .7); }
+  .p3 .who strong { color: var(--cream); font-weight: 700; }
+
+  /* 4 milestone */
+  .p4 { background: var(--milk); color: var(--esp); }
+  .p4 .n { position: absolute; left: 60px; top: 70px; font: 400 330px/0.85 var(--serif); letter-spacing: -.05em; }
+  .p4 .t { position: absolute; left: 72px; top: 380px; width: 560px; font-size: 40px; line-height: 1.25; }
+  .p4 .cups { position: absolute; left: 72px; right: 72px; bottom: 170px; height: 560px; }
+  .p4 .cup { position: absolute; bottom: 0; width: 270px; border-radius: 26px 26px 60px 60px; box-shadow: var(--lift); display: flex; align-items: flex-end; padding: 28px; font: 500 26px/1.25 var(--sans); }
+  .p4 .cup b { display: block; font: 400 64px/1 var(--serif); }
+  .p4 .since { position: absolute; left: 640px; bottom: 260px; width: 260px; height: 260px; border-radius: 50%; background: var(--esp); color: var(--cream);
+               display: grid; place-content: center; text-align: center; font: 500 24px/1.25 var(--sans); transform: rotate(8deg); box-shadow: var(--lift); }
+  .p4 .since b { font: 400 110px/0.85 var(--serif); }
+</style>
+</head>
+<body>
+
+<section class="post p1">
+  <h1 class="serif">Manisnya dari aren, <em>bukan sirup.</em></h1>
+  <div class="glass" aria-hidden="true"><i style="left:40px;top:70px;transform:rotate(-8deg)"></i><i style="left:190px;top:40px;transform:rotate(12deg)"></i><i style="left:120px;top:170px;transform:rotate(4deg)"></i></div>
+  <div class="sticker"><b>18rb</b><span>es kopi susu aren</span></div>
+  <p class="info"><strong>Mulai Senin, 2 Des</strong>di dua kedai: Ijen dan Soekarno-Hatta, Malang</p>
+  <p class="logo"><i></i>kopi rana</p>
+</section>
+
+<section class="post p2">
+  <p class="day">07</p>
+  <p class="mon serif">Des<span>Sabtu, 15.00</span></p>
+  <div class="card">
+    <h2 class="serif">Kelas seduh V60,<br>gratis untuk 12 orang.</h2>
+    <ul><li><b>Di mana</b>Kedai Ijen, lantai 2</li><li><b>Bawa</b>rasa penasaran, alat dari kami</li><li><b>Pulang</b>dengan 100 g biji Dampit</li></ul>
+  </div>
+  <p class="logo" style="color:var(--esp)"><i></i>kopi rana</p>
+  <p class="cta">DM kata <strong>SEDUH</strong></p>
+</section>
+
+<section class="post p3">
+  <svg class="art" viewBox="0 0 1080 1350" aria-hidden="true"><circle cx="930" cy="1240" r="300" fill="none" stroke="#3e2a1f" stroke-width="40"/><circle cx="930" cy="1240" r="240" fill="none" stroke="#3e2a1f" stroke-width="6"/></svg>
+  <div class="stars" aria-label="5 dari 5 bintang">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="#e9a07a"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="#e9a07a"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="#e9a07a"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="#e9a07a"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="#e9a07a"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+  </div>
+  <blockquote>“Saya pesan yang <em>biasa</em>, dan barista-nya sudah tahu yang biasa itu apa.”</blockquote>
+  <p class="who"><strong>Ayu Lestari</strong><br>pelanggan sejak 2021, ulasan Google Maps</p>
+  <p class="logo"><i></i>kopi rana</p>
+</section>
+
+<section class="post p4">
+  <p class="n">1.800</p>
+  <p class="t">cup setiap minggu, dari dua kedai kecil. Terima kasih, Malang.</p>
+  <div class="cups">
+    <!-- the two cups are data: heights in proportion (1.050 : 750); the sticker is not, so it is a different shape -->
+    <div class="cup" style="left:0; height:504px; background:var(--cream);"><p><b>1.050</b>Kedai Ijen</p></div>
+    <div class="cup" style="left:300px; height:360px; background:var(--rust); color:var(--cream);"><p><b>750</b>Kedai Soekarno-Hatta</p></div>
+    <div class="since"><b>3</b>tahun sejak<br>gelas pertama</div>
+  </div>
+  <p class="logo"><i></i>kopi rana</p>
+</section>
+
+</body>
+</html>
