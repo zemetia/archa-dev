@@ -14,6 +14,7 @@ Each row: file → what it does → the blueprint docs that govern it. Links are
 | [`main/browser.ts`](../../../apps/desktop/src/main/browser.ts) | `BrowserManager`: agent-driven browser tabs as `WebContentsView`s in their own session, driven over CDP | [BROWSER](../BROWSER.md) |
 | [`main/browser-page.ts`](../../../apps/desktop/src/main/browser-page.ts) | `PAGE_LIB`: in-page helper (`window.__archa`) injected before each browser action | [BROWSER](../BROWSER.md) |
 | [`main/browser-url.ts`](../../../apps/desktop/src/main/browser-url.ts) | `normalizeUrl` / `addressToUrl`: host → http(s), path → file://, refuses `javascript:` | [BROWSER](../BROWSER.md) |
+| [`main/embed-shot.ts`](../../../apps/desktop/src/main/embed-shot.ts) | `embed:screenshot`: JPG of a canvas web page (`wide` at 1440 × 900 or `object` as shown) via the guest's CDP, then a save dialog | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) |
 | [`main/pdf.ts`](../../../apps/desktop/src/main/pdf.ts) | `printHtmlToPdf`: hidden window prints the core's standalone HTML of a node, one page sized to it | [RENDERING/03](../RENDERING/03-export.md), [DESIGN_SYSTEM/04](../DESIGN_SYSTEM/04-code-export.md) |
 
 ## Preload — `apps/desktop/src/preload/`
