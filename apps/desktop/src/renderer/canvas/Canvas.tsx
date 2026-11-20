@@ -113,6 +113,8 @@ export function Canvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitRequest]);
 
+  // The text editor hides its node in the mirror without a new revision; drop memoised frame hashes so cached frame bitmaps stop showing the old text under the editor.
+  useEffect(() => cache.invalidate(), [editingText]);
   useEffect(redraw, [doc, rev, camera, selection, hover, editingText, size, pixelGrid]);
 
   useEffect(() => onImageLoaded(() => { cache.invalidate(); redraw(); }));
