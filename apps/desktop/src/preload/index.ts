@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('archa', {
   showExportDialog: (suggested: string, ext: string): Promise<string | null> => ipcRenderer.invoke('dialog:export', suggested, ext),
   /** Prints a self-contained HTML page to a one-page PDF; resolves to an error message or null. */
   exportPdf: (args: { html: string; width: number; height: number; path: string }): Promise<string | null> => ipcRenderer.invoke('export:pdf', args),
+  /** JPG of a canvas web page: `wide` at desktop width or the `object` as shown; asks where to save. */
+  embedScreenshot: (webContentsId: number, mode: 'wide' | 'object'): Promise<{ path?: string | null; error?: string }> => ipcRenderer.invoke('embed:screenshot', { webContentsId, mode }),
   pickFolder: (title: string): Promise<string | null> => ipcRenderer.invoke('dialog:folder', title),
   openFolder: (path: string): Promise<string> => ipcRenderer.invoke('shell:open-path', path),
   onOpenIntent: (cb: (intent: { kind: string; path?: string }) => void) => {

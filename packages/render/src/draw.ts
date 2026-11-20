@@ -278,18 +278,12 @@ function drawEmbed(ctx: Ctx, n: EmbedNode) {
   ctx.fillStyle = '#ffffff';
   ctx.fill();
   ctx.clip();
-  ctx.fillStyle = '#f4f4f5';
-  ctx.fillRect(0, 0, n.width, 36);
-  ctx.fillStyle = '#e4e4e7';
-  ctx.fillRect(0, 36, n.width, 1);
+  // The node is the page itself: no address strip, the URL stays out of the picture.
   ctx.font = '500 13px Inter, "Segoe UI", system-ui, sans-serif';
   ctx.textBaseline = 'middle';
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#52525b';
-  ctx.fillText(n.url || 'No URL', 14, 18, Math.max(1, n.width - 28));
   ctx.textAlign = 'center';
   ctx.fillStyle = '#a1a1aa';
-  ctx.fillText(n.url ? 'Live web page' : 'Set a URL in the design panel', n.width / 2, 36 + (n.height - 36) / 2, Math.max(1, n.width - 28));
+  ctx.fillText(n.url ? 'Web page' : 'Paste a link to load a page', n.width / 2, n.height / 2, Math.max(1, n.width - 28));
   ctx.restore();
 }
 

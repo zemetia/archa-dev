@@ -30,7 +30,7 @@ A–Z keyword → the doc that owns the rules → the code that implements it to
 | Core host (single writer) | [ARCHITECTURE/01](./ARCHITECTURE/01-processes.md), [ARCHITECTURE/04](./ARCHITECTURE/04-single-writer-sync.md) | `core-host/index.ts`, `core-host/workspace.ts` |
 | Design guides (`read_guide`) | [MCP/04](./MCP/04-local-skill.md) | `packages/protocol/src/design-guides.ts` |
 | Design panel / inspector | [APP_UI/04](./APP_UI/04-design-panel.md) | `renderer/ui/RightPanel.tsx`, `renderer/ui/inspector/` |
-| Embed / web page node | [DOCUMENT_MODEL/01](./DOCUMENT_MODEL/01-nodes-properties.md) | `renderer/canvas/EmbedLayer.tsx`, `main/index.ts` (`guardWebviews`) |
+| Embed / web page node | [DOCUMENT_MODEL/01](./DOCUMENT_MODEL/01-nodes-properties.md) | `renderer/canvas/EmbedLayer.tsx`, `main/index.ts` (`guardWebviews`), `main/embed-shot.ts` |
 | Entry points (open, file association) | [ENTRY_POINTS](./ENTRY_POINTS.md) | `main/index.ts` (`parseArgv`), `apps/desktop/electron-builder.yml` |
 | `execute` sandbox (QuickJS) | [MCP/02](./MCP/02-execute-api.md) | `core-host/execute.ts`, `packages/protocol/src/agent-docs.ts` |
 | Export (PNG / JPG / SVG / PDF) | [RENDERING/03](./RENDERING/03-export.md) | `packages/render/src/scene.ts`, `packages/formats/src/svg.ts`, `main/pdf.ts` |

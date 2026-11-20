@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Circle, CircleDashed, CornerDownRight, Eye, EyeOff, MoveUpRight, Minus, Plus, Square, SquareDashed, TextAlignCenter, TextAlignEnd, TextAlignStart } from 'lucide-react';
 import { hexToColor, type Effect, type EffectType, type Node, type Paint, type Stroke } from '@archa/schema';
 import { Check, ColorField, IconButton, MenuButton, NumberField, Section, Segmented, Select } from '../controls';
+import { EMBED_DEVICES } from '../../canvas/EmbedLayer';
 
 /* Style sections of the design panel: appearance, text, fill, stroke, effects and per-type extras. */
 
@@ -204,11 +205,11 @@ export function TypeExtras({ node: n, set }: { node: Node; set: SetProps }) {
           onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
           className="h-8 w-full rounded-lg bg-panel-2 px-2 font-mono text-[11.5px] ring-1 ring-transparent focus:ring-accent" />
         <div className="mt-2 grid grid-cols-3 gap-1.5">
-          {([['Desktop', 1440, 900], ['Tablet', 834, 1112], ['Phone', 390, 844]] as const).map(([label, width, height]) => (
+          {EMBED_DEVICES.map(({ label, width, height }) => (
             <button key={label} onClick={() => set({ width, height }, 'Resize web page')} className="h-7 rounded-lg bg-panel-2 text-[11.5px] text-fg-muted hover:bg-panel-3 hover:text-fg">{label}</button>
           ))}
         </div>
-        <p className="mt-2 text-[11px] text-fg-subtle">Double-click the page to scroll and click inside it. Esc or a click on the canvas leaves it.</p>
+        <p className="mt-2 text-[11px] text-fg-subtle">Select the page and scroll to scroll it. Double-click to click and type inside; Esc or a click on the canvas leaves it.</p>
       </Section>
     );
   }

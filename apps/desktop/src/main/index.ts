@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { browserCommandSchema, type MainBridgeResponse } from '@archa/protocol';
 import { BrowserManager } from './browser';
 import { printHtmlToPdf } from './pdf';
+import { embedShotArgs, saveEmbedShot } from './embed-shot';
 
 /* Main process: windows, argv, dialogs, core host lifecycle. Holds no document state (blueprint ARCHITECTURE/01). */
 
@@ -198,6 +199,11 @@ if (!app.requestSingleInstanceLock()) {
       const a = pdfArgs.safeParse(args);
       if (!a.success || !isAbsolute(a.data.path)) return 'Invalid PDF export request';
       try { await printHtmlToPdf(a.data.html, a.data.width, a.data.height, a.data.path); return null; } catch (err) { return (err as Error).message; }
+    });
+    ipcMain.handle('embed:screenshot', async (e, args: unknown) => {
+      const a = embedShotArgs.safeParse(args);
+      if (!a.success) return { error: 'Invalid screenshot request' };
+      try { return { path: await saveEmbedShot(e.sender, a.data) }; } catch (err) { return { error: (err as Error).message }; }
     });
     ipcMain.handle('dialog:folder', async (e, title: string) => {
       const win = BrowserWindow.fromWebContents(e.sender)!;

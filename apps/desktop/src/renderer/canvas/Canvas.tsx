@@ -8,7 +8,7 @@ import { drawOverlay, type OverlayExtras } from './overlay';
 import { cursorAlive, drawCursors } from './cursors';
 import * as changes from './changes';
 import { TextEditor } from './TextEditor';
-import { EmbedLayer } from './EmbedLayer';
+import { EmbedLayer, scrollEmbed } from './EmbedLayer';
 import { CommentsLayer } from './CommentsLayer';
 import { onImageLoaded } from '@archa/render';
 import { penBounds, penPath, type PenPoint } from './pen';
@@ -30,7 +30,7 @@ type Ends = { start: ConnectorEnd; end: ConnectorEnd };
 type CreateTool = 'frame' | 'rect' | 'ellipse' | 'polygon' | 'sticky' | 'embed';
 const CREATE_TOOLS: ReadonlySet<Tool> = new Set<Tool>(['frame', 'rect', 'ellipse', 'polygon', 'sticky', 'embed']);
 /** Size used when the person clicks instead of dragging (shapes centre on the click, the rest start there). */
-const CLICK_SIZE: Record<CreateTool, [number, number]> = { frame: [400, 300], rect: [100, 100], ellipse: [100, 100], polygon: [100, 100], sticky: [200, 200], embed: [1280, 800] };
+const CLICK_SIZE: Record<CreateTool, [number, number]> = { frame: [400, 300], rect: [100, 100], ellipse: [100, 100], polygon: [100, 100], sticky: [200, 200], embed: [390, 844] };
 const NAMES: Record<CreateTool, string> = { frame: 'Frame', rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', sticky: 'Sticky note', embed: 'Web page' };
 
 const cache = new FrameBitmapCache();
@@ -160,6 +160,14 @@ export function Canvas() {
     } else {
       const dx = e.shiftKey ? e.deltaY : e.deltaX;
       const dy = e.shiftKey ? 0 : e.deltaY;
+      // A wheel over the selected web page scrolls the page, not the canvas.
+      const st = useStore.getState();
+      const sel = st.selection.length === 1 ? st.doc?.get(st.selection[0]!) : undefined;
+      if (sel?.type === 'embed') {
+        const w = toWorld(cam, sx, sy);
+        const lx = w.x - sel.x, ly = w.y - sel.y;
+        if (lx >= 0 && ly >= 0 && lx <= sel.width && ly <= sel.height && scrollEmbed(sel.id, lx, ly, dx, dy)) return;
+      }
       useStore.setState({ camera: { ...cam, x: cam.x - dx, y: cam.y - dy } });
     }
   };
@@ -467,7 +475,7 @@ export function Canvas() {
       const name = g.tool === 'frame' ? `Frame ${frameCounter++}` : NAMES[g.tool];
       const extra: Record<string, unknown> = g.tool === 'sticky'
         ? { effects: [{ color: '#00000026', x: 0, y: 2, blur: 8 }] }
-        : g.tool === 'embed' ? { url: 'https://example.com' } : {};
+        : g.tool === 'embed' ? { url: '' } : {};
       const fills = DEFAULT_FILL[g.tool] ? { fills: [DEFAULT_FILL[g.tool]] } : {};
       const input = { type: g.tool, name, x: Math.round(r.x - origin.x), y: Math.round(r.y - origin.y), width: Math.round(r.width), height: Math.round(r.height), ...fills, ...extra } as unknown as NodeInput;
       const { ops, rootId } = insertOpsFor(input, g.parentId);
