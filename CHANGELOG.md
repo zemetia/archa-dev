@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-21
+
+### Pictures from the web
+- **Agents research and fetch images inside ArchaDev**, no Python: the browser tool can `search` Google (web or Images), list the `images` on a page, and `download` one (by URL, from the page, or as a screenshot of an element) — the agent sees a preview to choose from.
+- **`place_image`** puts a real photo or logo straight on the canvas; the file is also saved under `~/.archadev/downloads`.
+
+### Rotation
+- **Any layer can be rotated**, text included: drag the round knob above the selection (Shift snaps to 15°) or type the angle in the ↻ field. Resizing a rotated layer keeps its opposite corner in place; exports keep the rotation.
+
+### Text like Canva
+- The Text tool makes a text box with a set width: long text wraps instead of widening it, also when you edit existing text.
+- Drag a **corner** to scale the text with its box; drag a **side** to change the width. Text no longer has top/bottom handles.
+- **Text toolbar** over the canvas: font, size − / +, colour, **B** / *I* / U / S, aA case, alignment, bullet / numbered lists, letter and line spacing, transparency.
+- **Effects panel**: Drop, Glow, Echo, Outline, Background, Splice, Hollow, Neon, Glitch — each with its own sliders and colour — and **Curve** to bend text into an arc.
+
+### Agents
+- **`done`** tool: an agent calls it when it finishes, and its cursor leaves the canvas instead of idling.
+
 ## [1.4.2] - 2026-11-21
 
 ### Social posts
