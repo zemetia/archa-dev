@@ -158,6 +158,36 @@ describe('execute helpers', () => {
     void ({} as ChatMessage);
   });
 
+  it('svg() places AI-written markup as vectors or as an image, and SVG text becomes a drawing', async () => {
+    const ws = new Workspace();
+    ws.attach(fakeChannel().channel, { kind: 'renderer', name: 'window' });
+    ws.requestRender = async () => ({ png: 'AAAA' });
+    const agent = ws.attach(fakeChannel().channel, { kind: 'mcp', name: 'claude', agentId: 'claude' });
+    const docId = ws.summaries()[0]!.id;
+    const r = await ws.handlers['agent.execute']({ docId, code: `
+      card = insert(null, { type: 'frame', name: 'Card', width: 320, height: 200, fills: ['#ffffff'] });
+      svg(\`<svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>\`, card, { width: 96, x: 16, y: 16, name: 'Badge' });
+      svg('<svg width="40" height="20"><text x="0" y="15">Hi</text></svg>', card, { name: 'Word' });
+      insert(card, { type: 'text', name: 'Raw', text: '<svg width="10" height="10"><rect width="10" height="10" fill="red"/></svg>' });
+    ` }, agent) as ExecuteResult;
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const doc = ws.session(docId).doc;
+    const badge = doc.findByName('Badge')[0]!;
+    expect(badge).toMatchObject({ type: 'frame', width: 96, height: 96, x: 16, y: 16 });
+    expect(doc.children(badge.id).map((n) => n.type)).toEqual(['path', 'path']);
+    expect(doc.findByName('Word')[0]!.type).toBe('image');
+    expect(doc.findByName('Raw')[0]!.type).toBe('frame');
+    const out = r.output.join('\n');
+    expect(out).toMatch(/"Badge" placed as 2 editable vector layers/);
+    expect(out).toMatch(/"Word" placed as an image \(vectors cannot keep text\)/);
+    expect(out).toMatch(/text was SVG markup/);
+
+    const bad = await ws.handlers['agent.execute']({ docId, code: `svg('<svg><defs><linearGradient id="g"/></defs><rect width="4" height="4" fill="url(#g)"/></svg>', 'Card', { mode: 'vector' })` }, agent) as ExecuteResult;
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.reason).toMatch(/gradients/);
+  });
+
   it('icon() reaches every set, brand logos keep their colour, and uploaded icons work as my:<name>', async () => {
     const ws = new Workspace();
     ws.attach(fakeChannel().channel, { kind: 'renderer', name: 'window' });

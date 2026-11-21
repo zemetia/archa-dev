@@ -1,11 +1,12 @@
 import { insertOpsFor } from '@archa/core';
-import { hexToColor, type NodeInput } from '@archa/schema';
+import { importSvg } from '@archa/formats';
+import type { NodeInput } from '@archa/schema';
 import { commit, select, setTool, toast, useStore } from './store';
 import { containerAt, originOf, toWorld } from './geometry';
 
 /*
- * Image / SVG import and SVG → vector conversion (blueprint FILE_FORMATS/04, v1 subset).
- * Runs in the renderer because it needs the DOM (image decode, SVG geometry); the result is ordinary insert ops.
+ * Image / SVG import (blueprint FILE_FORMATS/04). Runs in the renderer for image decoding; SVG goes
+ * through the shared DOM-free parser. The result is ordinary insert ops.
  */
 
 const MAX_IMAGE_SIDE = 2048;
@@ -40,8 +41,7 @@ export async function importFile(file: File, at?: { x: number; y: number }) {
 async function fileInput(file: File): Promise<NodeInput> {
   const name = baseName(file);
   if (isSvg(file)) {
-    const text = await file.text();
-    return svgToNodes(text, name) ?? imageInput(`data:image/svg+xml;base64,${b64(text)}`, name);
+    return svgInput(await file.text(), name);
   }
   if (!file.type.startsWith('image/')) throw new Error(`${file.name} is not an image`);
   return imageInput(await readDataUrl(file), name);
@@ -127,107 +127,12 @@ const readDataUrl = (file: File) => new Promise<string>((res, rej) => {
   r.readAsDataURL(file);
 });
 
-const b64 = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
-
-/* ------------------------------- SVG → vectors ------------------------------ */
-
-const SHAPES = 'path, rect, circle, ellipse, line, polyline, polygon';
-
-/** SVG path data for one basic shape, in its own user space. */
-export function shapeToD(el: Element): string {
-  const n = (a: string) => Number(el.getAttribute(a) ?? 0) || 0;
-  switch (el.tagName.toLowerCase()) {
-    case 'path': return el.getAttribute('d') ?? '';
-    case 'line': return `M${n('x1')} ${n('y1')}L${n('x2')} ${n('y2')}`;
-    case 'polyline':
-    case 'polygon': {
-      const pts = (el.getAttribute('points') ?? '').trim().split(/[\s,]+/).map(Number);
-      let d = '';
-      for (let i = 0; i + 1 < pts.length; i += 2) d += `${i ? 'L' : 'M'}${pts[i]} ${pts[i + 1]}`;
-      return el.tagName.toLowerCase() === 'polygon' ? `${d}Z` : d;
-    }
-    case 'circle':
-    case 'ellipse': {
-      const cx = n('cx'), cy = n('cy');
-      const rx = el.tagName.toLowerCase() === 'circle' ? n('r') : n('rx'), ry = el.tagName.toLowerCase() === 'circle' ? n('r') : n('ry');
-      return `M${cx - rx} ${cy}A${rx} ${ry} 0 1 0 ${cx + rx} ${cy}A${rx} ${ry} 0 1 0 ${cx - rx} ${cy}Z`;
-    }
-    case 'rect': {
-      const x = n('x'), y = n('y'), w = n('width'), h = n('height');
-      const rx = Math.min(w / 2, n('rx') || n('ry')), ry = Math.min(h / 2, n('ry') || n('rx'));
-      if (!rx) return `M${x} ${y}H${x + w}V${y + h}H${x}Z`;
-      return `M${x + rx} ${y}H${x + w - rx}A${rx} ${ry} 0 0 1 ${x + w} ${y + ry}V${y + h - ry}A${rx} ${ry} 0 0 1 ${x + w - rx} ${y + h}H${x + rx}A${rx} ${ry} 0 0 1 ${x} ${y + h - ry}V${y + ry}A${rx} ${ry} 0 0 1 ${x + rx} ${y}Z`;
-    }
-  }
-  return '';
-}
+/* ---------------------------------- SVG ----------------------------------- */
 
 /**
- * Converts an SVG into a frame of vector nodes, one per shape, with their fills and strokes.
- * Returns null when the SVG uses something this converter cannot keep (rotation/skew, text, gradients,
- * images) — the caller then imports it as an image instead.
+ * SVG markup → a node: editable vectors when every shape converts, else an exact image of it (the
+ * shared parser in `@archa/formats`, the same one the agent `svg()` call uses). Throws on non-SVG.
  */
-export function svgToNodes(svgText: string, name: string): NodeInput | null {
-  const parsed = new DOMParser().parseFromString(svgText, 'image/svg+xml');
-  const root = parsed.documentElement;
-  if (root.tagName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) return null;
-  if (root.querySelector('text, image, foreignObject, linearGradient, radialGradient, pattern, filter, mask, use')) return null;
-  const host = document.createElement('div');
-  host.style.cssText = 'position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none';
-  const svg = document.importNode(root, true) as unknown as SVGSVGElement;
-  host.appendChild(svg);
-  document.body.appendChild(host);
-  try {
-    const vb = svg.viewBox.baseVal;
-    const width = Number.parseFloat(svg.getAttribute('width') ?? '') || vb?.width || 100;
-    const height = Number.parseFloat(svg.getAttribute('height') ?? '') || vb?.height || 100;
-    svg.setAttribute('width', String(width));
-    svg.setAttribute('height', String(height));
-    const base = svg.getScreenCTM();
-    if (!base) return null;
-    const inv = base.inverse();
-    const children: NodeInput[] = [];
-    for (const el of svg.querySelectorAll<SVGGraphicsElement>(SHAPES)) {
-      if (el.closest('defs, clipPath, symbol, marker')) continue;
-      const d = shapeToD(el);
-      if (!d) continue;
-      const m = el.getScreenCTM();
-      if (!m) continue;
-      const t = inv.multiply(m);
-      if (Math.abs(t.b) > 1e-6 || Math.abs(t.c) > 1e-6) return null;
-      const bb = el.getBBox();
-      const style = getComputedStyle(el);
-      const fill = cssColor(style.fill), stroke = cssColor(style.stroke);
-      const strokeWidth = (Number.parseFloat(style.strokeWidth) || 1) * Math.abs(t.a);
-      children.push({
-        type: 'path', name: el.getAttribute('id') ?? el.tagName.toLowerCase(), d,
-        viewBox: { x: bb.x, y: bb.y, width: bb.width, height: bb.height },
-        x: round(t.a * bb.x + t.e), y: round(t.d * bb.y + t.f), width: round(Math.max(0.01, bb.width * Math.abs(t.a))), height: round(Math.max(0.01, bb.height * Math.abs(t.d))),
-        fills: fill ? [{ color: withAlpha(fill, Number(style.fillOpacity) * Number(style.opacity)) }] : [],
-        strokes: stroke && strokeWidth > 0 ? [{ color: withAlpha(stroke, Number(style.strokeOpacity) * Number(style.opacity)), width: round(strokeWidth), align: 'center' }] : [],
-        fillRule: style.fillRule === 'evenodd' ? 'evenodd' : 'nonzero',
-        lineCap: (['butt', 'round', 'square'].includes(style.strokeLinecap) ? style.strokeLinecap : 'butt') as never,
-        lineJoin: (['miter', 'round', 'bevel'].includes(style.strokeLinejoin) ? style.strokeLinejoin : 'miter') as never,
-      } as NodeInput);
-    }
-    if (!children.length) return null;
-    return { type: 'frame', name, width: round(width), height: round(height), fills: [], clip: false, children };
-  } finally {
-    host.remove();
-  }
-}
-
-const round = (v: number) => Math.round(v * 100) / 100;
-
-function cssColor(v: string): string | null {
-  const m = /rgba?\(([^)]+)\)/.exec(v);
-  if (!m) return null;
-  const [r, g, b, a] = m[1]!.split(/[\s,/]+/).map(Number);
-  if (a === 0) return null;
-  const h = (x: number | undefined) => Math.round(x ?? 0).toString(16).padStart(2, '0');
-  return `#${h(r)}${h(g)}${h(b)}`;
-}
-
-function withAlpha(hex: string, a: number) {
-  return { ...hexToColor(hex), a: Number.isFinite(a) ? Math.max(0, Math.min(1, a)) : 1 };
+export function svgInput(svgText: string, name: string): NodeInput {
+  return importSvg(svgText, { name }).node;
 }

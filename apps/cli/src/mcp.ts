@@ -40,6 +40,20 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
     },
   }, (args) => guard(async (c) => formatExecute(await c.call('agent.execute', { docId, ...args }))));
 
+  // Same as execute's svg(): the markup goes in as a tool argument, so the agent never escapes it inside JS.
+  server.registerTool('place_svg', {
+    description: 'Place SVG markup you wrote (logo, illustration, chart, icon, pattern) on the canvas as a drawing — never as text. Shapes become editable vector layers; gradients, text, filters or masks make it an exact image instead (the reply says which). Replies like execute (ids, screenshot, issues).',
+    inputSchema: {
+      svg: z.string().describe('Complete SVG markup: <svg viewBox="…">…</svg>'),
+      parent: z.string().optional().describe('Frame id or unique name to place it in; default the page (an empty spot)'),
+      x: z.number().optional(), y: z.number().optional(),
+      width: z.number().optional().describe('Size on the canvas; one side alone keeps the aspect ratio'),
+      height: z.number().optional(),
+      name: z.string().optional().describe('Layer name'),
+      mode: z.enum(['auto', 'vector', 'image']).optional().describe('auto (default) | vector (fail if not editable) | image'),
+    },
+  }, ({ svg, parent, ...opts }) => guard(async (c) => formatExecute(await c.call('agent.execute', { docId, code: `svg(${JSON.stringify(svg)}, ${JSON.stringify(parent ?? null)}, ${JSON.stringify(opts)})` }))));
+
   server.registerTool('inspect', {
     description: 'Compact outline of layers as the design panel shows them: type, size, sizing, auto layout (gap/padding/align/justify), fills, strokes, effects, text and context notes people left on layers. No node = the current selection (else the page). Cheaper than get() for reading an existing design before editing it.',
     inputSchema: { node: z.string().optional().describe('Node id or unique name'), depth: z.number().int().min(0).max(12).optional().describe('Levels of children (default 3)') },

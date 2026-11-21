@@ -34,13 +34,14 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 |---|---|---|
 | `get_state` | `{ docId? }` | Active doc/page, selection, top-level frames (max 30 + "N more"), components id→name, variables summary, pending comments/decisions, issues count |
 | `execute` | `{ code } \| { editId, edits: [{find, replace}] }` | Run a snippet as one transaction → [02](./02-execute-api.md) |
+| `place_svg` | `{ svg, parent?, x?, y?, width?, height?, name?, mode? }` | **Built 1.4:** SVG the agent wrote, placed as a drawing. Runs `svg(…)` through `agent.execute` (same reply contract); the markup is a plain argument, no escaping in JS → [02](./02-execute-api.md) |
 | `inspect` | `{ node?, depth? }` | **Built 0.5:** compact outline (core `outline.ts`) of a node, else the selection, else the page: sizes, sizing, auto layout, paints, effects, text, context notes. RPC `agent.outline` |
 | `screenshot` | `{ nodeId, scale? }` | Image or `unchanged` → [RENDERING/03](../RENDERING/03-export.md) |
 | `export_svg` | `{ node }` | **Built:** SVG of a node subtree (`agent.exportSvg`, `packages/formats/src/svg.ts`) |
 | `browser` | `{ action, … }` | **Built:** drive the in-app browser → [BROWSER](../BROWSER.md) |
 | `export` | `{ nodeId?, format, options? }` | png/jpeg/webp/svg/pdf/html/react/tokens; returns path or content |
 | `get_style` | `{ name?, params? }` | Style profiles, two-step load → [DESIGN_SYSTEM/03](../DESIGN_SYSTEM/03-style-profiles.md) |
-| `read_guide` | `{ topic }` | **Built:** compiled-in guides (`@archa/protocol` `design-guides.ts`: process, layout, taste, type-color, components, icons, landing, web-app, mobile). Chat runs also get the matching guides on their first turn. Target: `skills/archadev/references/**` |
+| `read_guide` | `{ topic }` | **Built:** compiled-in guides (`@archa/protocol` `design-guides.ts`: process, layout, taste, type-color, components, icons, svg, landing, web-app, mobile). Chat runs also get the matching guides on their first turn. Target: `skills/archadev/references/**` |
 | `comments` | `{ action: list\|reply\|resolve, … }` | Comment threads |
 | `review_wait` | `{ timeoutSec? }` | Block until a round is sent → [AGENT_BRIDGE/04](../AGENT_BRIDGE/04-review-loop.md) |
 | `review_done` | `{ roundId, summary }` | Close a round |

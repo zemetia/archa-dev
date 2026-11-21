@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### SVG
+- **AI-written SVG lands on the canvas as a drawing.** Agents get a `place_svg` tool and an `svg(markup, parent, opts)` helper in `execute`: shapes become editable vector layers; SVG with gradients, text, filters or masks is placed as an exact image (the agent is told which). SVG markup put into a text layer is placed as a drawing instead of showing the code.
+- **SVG in chat replies shows as a picture** with **Place on canvas**, Copy and the source — for ```svg blocks, bare `<svg>` markup and every `place_svg` step.
+- **One SVG parser everywhere** (file import, drag and drop, paste, My icons, chat, agents), now without the DOM: rotated and skewed shapes, arcs and `<style>` class rules stay vectors. Pasting SVG with gradients or text no longer does nothing — it lands as an image.
+- New built-in design guide `svg` and skill **design-svg** (logo marks, spot illustrations, charts, patterns).
+
 ## [1.3.0] - 2026-11-20
 
 ### Text

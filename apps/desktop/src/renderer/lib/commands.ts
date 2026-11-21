@@ -3,7 +3,8 @@ import { isContainer, type Node, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, toast, useStore } from './store';
 import { containerAt, originOf, pageRoot, toWorld } from './geometry';
 import type { ArchaDocument } from '@archa/core';
-import { importFile, place, svgToNodes } from './importers';
+import { importFile, place, svgInput } from './importers';
+import { isSvgMarkup } from '@archa/formats';
 
 /* Editing commands shared by shortcuts and menus. Every change is one transaction. */
 
@@ -118,9 +119,12 @@ export async function pasteFrom(data: DataTransfer | null) {
     return;
   }
   const svg = text.trim();
-  if (/^(<\?xml[^>]*>\s*)?<svg[\s>]/i.test(svg)) {
-    const vector = svgToNodes(svg, 'Pasted SVG');
-    if (vector) return place(vector, undefined, 'Paste SVG');
+  if (isSvgMarkup(svg)) {
+    try {
+      return void await place(svgInput(svg, 'Pasted SVG'), undefined, 'Paste SVG');
+    } catch (e) {
+      return toast(`Paste failed: ${(e as Error).message}`, 'error');
+    }
   }
   return paste();
 }

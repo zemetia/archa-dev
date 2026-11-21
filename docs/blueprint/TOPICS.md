@@ -41,7 +41,8 @@ A–Z keyword → the doc that owns the rules → the code that implements it to
 | Format version / migrations | [FILE_FORMATS/03](./FILE_FORMATS/03-migrations-validation.md) | `packages/formats/src/migrations/archa/`, fixtures in `packages/formats/test/fixtures/` |
 | Hit testing / selection | [RENDERING/02](./RENDERING/02-layers-hit-testing.md) | `renderer/lib/geometry.ts`, `renderer/canvas/overlay.ts` |
 | Icons, logos, Assets panel, My icons | [DESIGN_SYSTEM/05](./DESIGN_SYSTEM/05-icons-assets.md), [MCP/02](./MCP/02-execute-api.md) | `packages/icons/`, `scripts/gen-icon-sets.mjs`, `ui/AssetsPanel.tsx`, `core-host/icons.ts` |
-| Import (image, SVG, `.pen`) | [FILE_FORMATS/04](./FILE_FORMATS/04-importers.md) | `renderer/lib/importers.ts`; `.pen` not built |
+| Import (image, SVG, `.pen`) | [FILE_FORMATS/04](./FILE_FORMATS/04-importers.md) | `renderer/lib/importers.ts`, `packages/formats/src/import/svg.ts`; `.pen` not built |
+| SVG written by agents (`svg()`, `place_svg`, chat preview) | [MCP/02](./MCP/02-execute-api.md), [FILE_FORMATS/04](./FILE_FORMATS/04-importers.md) | `core-host/execute.ts`, `packages/formats/src/import/svg.ts`, `renderer/ui/SvgBlock.tsx`, `skills/design-svg/` |
 | IPC / RPC protocol | [ARCHITECTURE/02](./ARCHITECTURE/02-protocol-ipc.md), [CODE_MAP/05](./CODE_MAP/05-interfaces.md) | `packages/protocol/src/index.ts`, `apps/desktop/src/preload/index.ts` |
 | Knowledge files (THIS / LEARN) | [KNOWLEDGE](./KNOWLEDGE.md) | `docs/knowledge/` |
 | Layers panel | [RENDERING/02](./RENDERING/02-layers-hit-testing.md) | `renderer/ui/LayersPanel.tsx` |

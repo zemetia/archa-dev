@@ -86,6 +86,7 @@ Saves the agent from regenerating kilobytes of code to fix one typo.
 | Helper | Detail |
 |---|---|
 | `icon(ref, parent, { size?, color?, strokeWidth?, index?, x?, y?, name? })` | Icon as a `path` node from `@archa/icons`: plain name = lucide, prefixes `tabler:` `tabler-filled:` `ph(-thin/-light/-bold/-fill):` `hero(-solid/-mini/-micro):` `logos:` (brand colour kept) `my:` (uploaded). Unknown name → close names; unknown set → list of sets. Colour defaults to readable ink for the parent → [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md) |
+| `svg(markup, parent, { width?, height?, x?, y?, index?, name?, mode? })` | 1.4: SVG markup → nodes via `@archa/formats` `importSvg`: a frame of editable `path` layers, or one exact `image` when vectors cannot keep it (gradients, text, filters…). `mode: 'vector'` fails instead. `output` says which. `insert` of a text node whose text is SVG markup is redirected here → [FILE_FORMATS/04](../FILE_FORMATS/04-importers.md) |
 | `icons(query, { set?, limit? })` | Matching refs across every set and My icons, best first (typo-tolerant) |
 | Auto-fix | New text with no visible fill gets readable ink before the transaction; reported under "Auto-fixed" in `output` |
 | `align(refs, edge, { to? })` · `distribute(refs, axis, { gap? })` · `wrap(refs, frame)` | 0.5: the design panel's arrange commands (core `arrange.ts`); notes such as "set the parent's justify" go to `output` |
@@ -100,5 +101,5 @@ Saves the agent from regenerating kilobytes of code to fix one typo.
 
 **Linked from:** [APP_UI/04](../APP_UI/04-design-panel.md) · [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md) · [MCP/01](./01-transports-tools.md) · [REFERENCE](../REFERENCE.md)
 
-**Code:** [`apps/desktop/src/core-host/execute.ts`](../../../apps/desktop/src/core-host/execute.ts) · [`apps/desktop/test/warm.test.ts`](../../../apps/desktop/test/warm.test.ts) · [`packages/core/src/factory.ts`](../../../packages/core/src/factory.ts) · [`packages/core/src/space.ts`](../../../packages/core/src/space.ts) · [`packages/icons/src/index.ts`](../../../packages/icons/src/index.ts) · [`packages/protocol/src/agent-docs.ts`](../../../packages/protocol/src/agent-docs.ts)
+**Code:** [`apps/desktop/src/core-host/execute.ts`](../../../apps/desktop/src/core-host/execute.ts) · [`apps/desktop/test/warm.test.ts`](../../../apps/desktop/test/warm.test.ts) · [`packages/core/src/factory.ts`](../../../packages/core/src/factory.ts) · [`packages/core/src/space.ts`](../../../packages/core/src/space.ts) · [`packages/formats/src/import/svg.ts`](../../../packages/formats/src/import/svg.ts) · [`packages/icons/src/index.ts`](../../../packages/icons/src/index.ts) · [`packages/protocol/src/agent-docs.ts`](../../../packages/protocol/src/agent-docs.ts)
 <!-- backlinks:end -->
