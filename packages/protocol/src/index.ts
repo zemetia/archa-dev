@@ -1,5 +1,5 @@
 import type { Author, DocumentData, Issue, NodeInput, Op } from '@archa/schema';
-import type { BrowserCommand, BrowserReply } from './browser';
+import type { BrowserCommand, BrowserReply, PlaceImageParams } from './browser';
 import type { McpImportCandidate, McpImportSource, McpServer, McpServerInput, McpTestResult, SkillsOverview, Skill } from './settings';
 
 
@@ -63,8 +63,12 @@ export interface CoreMethods {
   /** Compact text tree of a node (default: the selection, else the page) — what the design panel shows, per layer. */
   'agent.outline': { params: { docId?: string; node?: string; depth?: number }; result: string };
   'agent.say': { params: { docId?: string; text: string; nodeId?: string }; result: void };
+  /** The agent finished its turn: its canvas cursor stops and fades (blueprint RENDERING/02, Agent presence). */
+  'agent.done': { params: { docId?: string; summary?: string }; result: void };
   /** Drive the in-app browser (blueprint BROWSER). */
   'agent.browser': { params: BrowserCommand; result: BrowserReply };
+  /** A picture from a URL, file or the browser page onto the canvas (blueprint BROWSER, "Images"). */
+  'agent.placeImage': { params: PlaceImageParams; result: ExecuteResult };
   /** Orchestrate mode (blueprint AGENT_BRIDGE/06): a lead thread starts worker threads and collects their reports. */
   'orchestra.delegate': { params: { tasks: OrchestraTask[] }; result: { workers: OrchestraWorker[] } };
   'orchestra.wait': { params: { workers?: string[]; timeoutSec?: number }; result: { workers: OrchestraReport[]; timedOut: boolean } };
@@ -237,6 +241,8 @@ export interface CoreEvents {
   'chat.run': ChatRunEvent;
   /** Where an agent session just worked; the canvas moves its cursor along the steps. */
   'agent.trail': AgentTrail;
+  /** An agent session called done(): its cursor fades now instead of idling until the process exits. */
+  'agent.done': { docId: string; author: Author; runId?: string };
   /** Accounts or a sign-in changed; clients re-read `accounts.overview`. */
   'accounts.changed': { accountId?: string };
   /** Skills or MCP servers changed; clients re-read `skills.list` / `mcp.list`. */

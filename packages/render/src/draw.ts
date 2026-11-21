@@ -1,6 +1,7 @@
-import { colorToCss, isContainer, type ConnectorNode, type EmbedNode, type ImageNode, type Node, type PathNode, type StickyNode, type TextNode, type VisualNode } from '@archa/schema';
+import { colorToCss, isContainer, type ConnectorNode, type EmbedNode, type ImageNode, type Node, type PathNode, type StickyNode, type VisualNode } from '@archa/schema';
 import { connectorGeometry, connectorStroke, polygonPoints, viewBoxMatrix, type ArchaDocument } from '@archa/core';
 import { imageFor } from './images';
+import { drawText } from './text';
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -16,6 +17,12 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node, anim?: AnimMa
   if (!node.visible || node.type === 'page') return;
   ctx.save();
   ctx.translate(node.x, node.y);
+  // Rotation turns the box (and its subtree) about its centre; connectors route in page space instead.
+  if (node.rotation && node.type !== 'connector') {
+    ctx.translate(node.width / 2, node.height / 2);
+    ctx.rotate((node.rotation * Math.PI) / 180);
+    ctx.translate(-node.width / 2, -node.height / 2);
+  }
   if (node.opacity < 1) ctx.globalAlpha *= node.opacity;
   const a = anim?.get(node.id);
   if (a) {
@@ -54,7 +61,7 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node, anim?: AnimMa
       drawChildren(ctx, doc, node, anim);
       break;
     case 'text':
-      drawText(ctx, node);
+      drawText(ctx, node, deviceScale(ctx));
       break;
     case 'polygon': {
       const pts = polygonPoints(node.sides, node.width, node.height);
@@ -202,7 +209,7 @@ function clipTo(ctx: Ctx, node: VisualNode, p: Path2D | void) {
   if (p) ctx.clip(p, rule); else ctx.clip(rule);
 }
 
-/** Canvas units → device pixels (zoom × DPR × export scale); rotation is not supported, so one factor fits both axes. */
+/** Canvas units → device pixels (zoom × DPR × export scale); scaling is uniform, so the length of one turned axis fits both. */
 function deviceScale(ctx: Ctx): number {
   const m = ctx.getTransform();
   return Math.hypot(m.a, m.b) || 1;
@@ -310,38 +317,3 @@ export function roundRect(ctx: Ctx, x: number, y: number, w: number, h: number, 
   else ctx.roundRect(x, y, w, h, r);
 }
 
-export const fontString = (n: TextNode) => `${n.fontWeight} ${n.fontSize}px "${n.fontFamily}", Inter, system-ui, sans-serif`;
-
-/** Wraps text into lines for fixed / auto-height boxes; auto-width keeps hard breaks only. */
-export function layoutLines(ctx: Ctx, n: TextNode): string[] {
-  ctx.font = fontString(n);
-  const hard = n.text.split('\n');
-  if (n.textSizing === 'auto-width') return hard;
-  const out: string[] = [];
-  for (const para of hard) {
-    const words = para.split(/(\s+)/);
-    let line = '';
-    for (const w of words) {
-      const next = line + w;
-      if (line && ctx.measureText(next).width > n.width) {
-        out.push(line.trimEnd());
-        line = w.trimStart();
-      } else line = next;
-    }
-    out.push(line);
-  }
-  return out;
-}
-
-function drawText(ctx: Ctx, n: TextNode) {
-  const fill = n.fills.find((f) => f.visible);
-  if (!fill) return;
-  ctx.font = fontString(n);
-  ctx.fillStyle = colorToCss(fill.color);
-  ctx.textBaseline = 'middle';
-  if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D).letterSpacing = `${n.letterSpacing}px`;
-  const lh = n.fontSize * n.lineHeight;
-  const x = n.textAlign === 'center' ? n.width / 2 : n.textAlign === 'right' ? n.width : 0;
-  ctx.textAlign = n.textAlign;
-  layoutLines(ctx, n).forEach((line, i) => ctx.fillText(line, x, lh * i + lh / 2));
-}

@@ -30,7 +30,7 @@ const KEYWORDS: Record<string, Record<string, string>> = {
 const PREFIX: Record<string, string> = {
   left: 'left', top: 'top', width: 'w', height: 'h', gap: 'gap', 'border-radius': 'rounded',
   'background-color': 'bg', color: 'text', 'font-size': 'text', 'line-height': 'leading',
-  'letter-spacing': 'tracking', opacity: 'opacity', 'box-shadow': 'shadow',
+  'letter-spacing': 'tracking', opacity: 'opacity', 'box-shadow': 'shadow', rotate: 'rotate',
 };
 
 export function tailwindClasses(decls: Array<[string, string]>): string[] {

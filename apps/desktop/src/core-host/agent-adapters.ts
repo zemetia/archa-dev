@@ -75,7 +75,7 @@ export type Adapter = {
   models: (bin: string | null, env: Record<string, string>) => Promise<{ models: ModelOption[]; source: string }>;
 };
 
-export const MCP_TOOLS = ['get_state', 'execute', 'place_svg', 'inspect', 'screenshot', 'export_svg', 'say', 'browser', 'read_guide', 'delegate', 'wait_workers', 'tell_worker'];
+export const MCP_TOOLS = ['get_state', 'execute', 'place_svg', 'inspect', 'screenshot', 'export_svg', 'say', 'browser', 'place_image', 'done', 'read_guide', 'delegate', 'wait_workers', 'tell_worker'];
 /** Windows caps a command line near 32 KiB. */
 const MAX_ARG_PROMPT = 28_000;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/[\]@+-]{0,127}$/;
@@ -372,10 +372,12 @@ export function toolSummary(name: string, input: unknown): string {
   if (short === 'export_svg') return `export_svg · ${String(i.node ?? '')}`;
   if (short === 'screenshot') return `screenshot · ${String(i.node ?? '')}`;
   if (short === 'say') return String(i.text ?? '');
+  if (short === 'done') return `done${i.summary ? ` · ${String(i.summary)}` : ''}`;
   if (short === 'delegate' && Array.isArray(i.tasks)) return `delegate · ${(i.tasks as Array<{ title?: unknown }>).map((t) => String(t.title ?? '')).join(' · ')}`;
   if (short === 'wait_workers') return 'waiting for the team';
   if (short === 'tell_worker') return `tell ${String(i.worker ?? '')} · ${String(i.message ?? '').slice(0, 80)}`;
-  if (short === 'browser') return `browser · ${String(i.action ?? '')}${i.url ? ` ${String(i.url)}` : i.ref ? ` ${String(i.ref)}` : ''}`;
+  if (short === 'browser') return `browser · ${String(i.action ?? '')}${i.query ? ` "${String(i.query)}"` : i.url ? ` ${String(i.url).slice(0, 120)}` : i.ref ? ` ${String(i.ref)}` : ''}`;
+  if (short === 'place_image') return `place_image · ${String(i.name ?? (i.url ? String(i.url).slice(0, 120) : i.ref ?? i.selector ?? ''))}`;
   return short;
 }
 
@@ -387,7 +389,7 @@ const toml = (v: unknown) => JSON.stringify(v); // JSON strings/arrays are valid
  * agy does not put MCP tool descriptions in the model's context: it reads them from schema files,
  * which costs minutes of shell/file probing per run. Hand it the tools and the execute API up front.
  */
-const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, place_svg { svg, parent?, x?, y?, width?, height?, name?, mode? }, inspect { node?, depth? }, screenshot { node }, export_svg { node }, say { text }, read_guide { topic }. The canvas state is at the end of this message, so start designing right away; nothing outside the canvas is needed (no shell, files or browsing).
+const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, place_svg { svg, parent?, x?, y?, width?, height?, name?, mode? }, inspect { node?, depth? }, screenshot { node }, export_svg { node }, say { text }, read_guide { topic }, browser { action, … } (the built-in web browser: search, open, screenshot, images, download), place_image { url | ref, parent?, x?, y?, width?, height?, fit? } (a real photo or logo onto the canvas), done { summary? } (call once when finished — it puts your canvas cursor away). The canvas state is at the end of this message, so start designing right away; use browser and place_image for web research and pictures — never a shell, Python or file tools.
 
 execute tool documentation:
 ${EXECUTE_API_DOC}`;

@@ -80,7 +80,7 @@ const KEY_ALIASES: Array<[string, string]> = [
   ['alignItems', 'align'], ['counterAxisAlignItems', 'align'], ['justifyContent', 'justify'], ['primaryAxisAlignItems', 'justify'],
   ['flexDirection', 'layout'], ['direction', 'layout'], ['layoutMode', 'layout'], ['itemSpacing', 'gap'], ['spacing', 'gap'],
   ['radius', 'cornerRadius'], ['borderRadius', 'cornerRadius'], ['clipContent', 'clip'], ['clipsContent', 'clip'],
-  ['shadows', 'effects'],
+  ['shadows', 'effects'], ['rotate', 'rotation'], ['angle', 'rotation'],
 ];
 const EFFECT_TYPES: Record<string, string> = {
   shadow: 'drop-shadow', 'box-shadow': 'drop-shadow', drop: 'drop-shadow', dropshadow: 'drop-shadow', 'drop_shadow': 'drop-shadow',

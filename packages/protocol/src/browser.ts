@@ -6,8 +6,8 @@ import { z } from 'zod';
  * ------------------------------------------------------------------------- */
 
 export const BROWSER_ACTIONS = [
-  'open', 'back', 'forward', 'reload',
-  'snapshot', 'screenshot', 'element', 'console',
+  'open', 'search', 'back', 'forward', 'reload',
+  'snapshot', 'screenshot', 'images', 'element', 'console', 'download',
   'click', 'hover', 'type', 'press', 'scroll', 'select', 'drag', 'upload',
   'wait', 'evaluate', 'resize', 'tabs', 'cdp',
 ] as const;
@@ -16,8 +16,10 @@ export type BrowserAction = (typeof BROWSER_ACTIONS)[number];
 /** Flat shape so MCP clients get one simple input object; each action reads the fields it needs. */
 export const browserInputShape = {
   action: z.enum(BROWSER_ACTIONS),
-  url: z.string().max(4096).optional().describe('open, tabs(op:new): URL, "localhost:3000", a domain, or a file path'),
-  ref: z.string().max(32).optional().describe('Target element ref from snapshot, e.g. "e12"'),
+  url: z.string().max(8_000_000).optional().describe('open, tabs(op:new): URL, "localhost:3000", a domain, or a file path. download: image URL, data: URL or file path'),
+  query: z.string().max(500).optional().describe('search: what to search for'),
+  kind: z.enum(['web', 'images']).optional().describe('search: web results (default) or Google Images'),
+  ref: z.string().max(32).optional().describe('Target element ref from snapshot or images, e.g. "e12"'),
   selector: z.string().max(1000).optional().describe('Target CSS selector (searches open shadow roots too)'),
   text: z.string().max(20_000).optional().describe('type: the text to type. click/hover/scroll/element: target by visible text. wait: text to appear'),
   x: z.number().optional().describe('Target viewport x in CSS px (as in a 1:1 screenshot)'),
@@ -40,6 +42,9 @@ export const browserInputShape = {
   timeout: z.number().int().min(100).max(60_000).optional().describe('wait: give up after this many ms (default 10000)'),
   gone: z.boolean().optional().describe('wait: wait for selector/text to disappear instead'),
   expression: z.string().max(100_000).optional().describe('evaluate: JS expression run in the page; promises are awaited; result returned as JSON'),
+  minSize: z.number().int().min(0).max(4000).optional().describe('images: skip images smaller than this on screen, in CSS px (default 48)'),
+  path: z.string().max(4096).optional().describe('download: absolute file or folder to save to (default ARCHA_HOME/downloads)'),
+  capture: z.boolean().optional().describe('download: save a screenshot of the target element instead of its file (CSS backgrounds, canvas, formats that will not decode)'),
   fullPage: z.boolean().optional().describe('screenshot: whole scrollable page instead of the viewport'),
   labels: z.boolean().optional().describe('screenshot: draw element refs on the image (set-of-marks)'),
   interactiveOnly: z.boolean().optional().describe('snapshot: only interactive elements'),
@@ -58,8 +63,42 @@ export const browserInputShape = {
 export const browserCommandSchema = z.object(browserInputShape);
 export type BrowserCommand = z.infer<typeof browserCommandSchema>;
 
+/** `place_image`: a picture from the web, a file, or the browser page, onto the canvas. */
+export const placeImageInputShape = {
+  url: z.string().max(8_000_000).optional().describe('http(s) image URL, data: URL, or absolute file path (e.g. one download saved)'),
+  ref: z.string().max(32).optional().describe('Or: an image on the open browser page, by ref from browser images/snapshot'),
+  selector: z.string().max(1000).optional().describe('Or: an image on the open browser page, by CSS selector'),
+  capture: z.boolean().optional().describe('With ref/selector: place a screenshot of the element instead of its file'),
+  parent: z.string().max(200).optional().describe('Frame id or unique name to place it in; default the page (an empty spot)'),
+  x: z.number().optional(), y: z.number().optional(),
+  width: z.number().positive().max(20_000).optional().describe('Size on the canvas; one side alone keeps the aspect ratio'),
+  height: z.number().positive().max(20_000).optional(),
+  fit: z.enum(['crop', 'fit', 'fill']).optional().describe('How the picture fills the box (default crop)'),
+  cornerRadius: z.number().min(0).max(10_000).optional(),
+  name: z.string().max(200).optional().describe('Layer name'),
+  path: z.string().max(4096).optional().describe('Also save the file here (absolute file or folder; default ARCHA_HOME/downloads)'),
+};
+export const placeImageSchema = z.object({ docId: z.string().optional(), ...placeImageInputShape });
+export type PlaceImageParams = z.infer<typeof placeImageSchema>;
+
+export const PLACE_IMAGE_DOC = 'Put a real picture (photo, logo, screenshot) on the canvas as an image layer: from an http(s) URL, a data: URL, a local file, or an image on the open browser page (ref/selector; capture:true for a screenshot of the element). ArchaDev downloads it with the browser\'s session, saves the file, and replies like execute (id, screenshot, issues). Use the original, large file — not a search thumbnail.';
+
+/** A downloaded image (blueprint BROWSER, "Images"): where it was saved, and a canvas-ready copy. */
+export type BrowserImage = {
+  path: string;
+  mime: string;
+  /** Pixel size of the file (0 when it could not be decoded). */
+  width: number;
+  height: number;
+  bytes: number;
+  /** Where it came from: a URL, or "screenshot of …". */
+  source: string;
+  /** data: URL for an image node, longest side ≤ 2048 px; absent when the format cannot be shown. */
+  embed?: string;
+};
+
 /** What the agent gets back: text that steers the next step, plus an optional PNG. */
-export type BrowserReply = { text: string; png?: string };
+export type BrowserReply = { text: string; png?: string; image?: BrowserImage };
 
 export type BrowserTabInfo = { id: string; title: string; url: string; loading: boolean; canGoBack: boolean; canGoForward: boolean };
 export type BrowserState = {
@@ -80,6 +119,7 @@ Loop: open → snapshot (or screenshot) → act on a ref → check the reply →
 
 Actions:
   open {url}                         load a page (opens the panel and a tab if needed). back / forward / reload
+  search {query, kind?: "web"|"images"}   Google search; lists the top results (web) or the images on the page (images)
   snapshot {ref?|selector?, interactiveOnly?, viewportOnly?}
                                      text tree of the page; interactive elements carry [ref=eN] for targeting. Refs reset when the page changes.
   screenshot {fullPage?, labels?, ref?|selector?}
@@ -92,9 +132,14 @@ Actions:
   wait {selector?|text?, gone?, timeout?} or {ms}
   evaluate {expression}              run JS in the page, get JSON back
   element {target}                   outerHTML + computed styles + box of one element
+  images {minSize?, viewportOnly?}   pictures on the page: ref, file size in px, size on screen, alt, URL
+  download {url | target, path?, capture?}
+                                     save an image (http(s), data: URL, or an <img>/background by ref) to disk and see it.
+                                     capture:true saves a screenshot of the target instead. To put it on the canvas use place_image.
   console {all?, clear?}             page console messages and errors
   resize {width, height, mobile?} | {reset:true}   emulate a device viewport
   tabs {op: list|new|switch|close, url?, tabId?}
   cdp {method, params}               raw Chrome DevTools Protocol command (escape hatch)
-Target = ref (best, from snapshot) | selector | text (visible text) | x+y (viewport CSS px from a 1:1 screenshot).
+Images: search {kind:"images"} → screenshot to look → click a thumbnail for the large preview → images → download or place_image the big one. Thumbnails are small; prefer the preview's original URL.
+Target = ref (best, from snapshot or images) | selector | text (visible text) | x+y (viewport CSS px from a 1:1 screenshot).
 Every reply reports URL changes and new console errors. Input is real (trusted) mouse and keyboard events.`;

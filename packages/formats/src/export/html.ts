@@ -1,5 +1,5 @@
-import { colorToHex, isContainer, type Color, type Node, type TextNode } from '@archa/schema';
-import type { ArchaDocument } from '@archa/core';
+import { colorToHex, hexToColor, isContainer, type Color, type Node, type TextNode } from '@archa/schema';
+import { displayParagraphs, type ArchaDocument } from '@archa/core';
 import { exportSvg } from '../svg';
 import { tailwindClasses } from './tailwind';
 
@@ -95,6 +95,8 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
   if (!parent) s.push(['position', 'relative']);
   else if (!flexParent) s.push(['position', 'absolute'], ['left', px(n.x)], ['top', px(n.y)]);
   else if (isContainer(n)) s.push(['position', 'relative']); // contains its own absolutely placed children
+  // CSS turns about the box centre by default, like the canvas. The exported root stays upright.
+  if (parent && n.rotation && n.type !== 'connector') s.push(['rotate', `${Math.round(n.rotation * 100) / 100}deg`]);
 
   // Size per axis: auto (hug / auto text), fill (flex item), or fixed px.
   const autoW = (n.type === 'frame' && n.layout !== 'none' && n.sizing.horizontal === 'hug') || (n.type === 'text' && n.textSizing === 'auto-width');
@@ -158,7 +160,7 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
     case 'text':
       textStyle(ctx, n, s);
       el.tag = 'p';
-      el.text = n.text;
+      el.text = displayParagraphs(n).join('\n');
       break;
     case 'sticky':
       ctx.font('Inter', 500);
@@ -199,6 +201,34 @@ function textStyle(ctx: Ctx, n: TextNode, s: Decl[]) {
   if (n.textAlign !== 'left') s.push(['text-align', n.textAlign]);
   if (fill) s.push(['color', hex(fill.color)]);
   s.push(['white-space', n.textSizing === 'auto-width' ? 'pre' : 'pre-wrap']);
+  if (n.fontStyle === 'italic') s.push(['font-style', 'italic']);
+  const lines = [n.underline && 'underline', n.strikethrough && 'line-through'].filter(Boolean);
+  if (lines.length) s.push(['text-decoration', lines.join(' ')]);
+  s.push(...textEffectCss(n, fill?.color ?? hexToColor('#000000')));
+}
+
+/** Canva-style text effects as CSS (blueprint DOCUMENT_MODEL/01). Curves have no CSS form and stay straight. */
+function textEffectCss(n: TextNode, ink: Color): Decl[] {
+  const fx = n.textEffect;
+  if (!fx) return [];
+  const fs = n.fontSize;
+  const a = (c: Color, k = 1) => hex({ ...c, a: c.a * k });
+  const rad = (fx.direction * Math.PI) / 180, dist = (fx.offset / 100) * fs * 0.25;
+  const dx = Math.cos(rad) * dist, dy = Math.sin(rad) * dist;
+  const opaque = 1 - fx.transparency / 100;
+  const width = Math.max(0.5, (fx.thickness / 100) * fs * 0.16);
+  const shadow = (x: number, y: number, blur: number, c: string) => `${px(x)} ${px(y)} ${px(blur)} ${c}`;
+  switch (fx.type) {
+    case 'drop': return [['text-shadow', shadow(dx, dy, (fx.blur / 100) * fs * 0.8, a(fx.color ?? hexToColor('#000000'), opaque))]];
+    case 'glow': { const r = fs * (0.12 + (fx.spread / 100) * 0.6); const c = a(fx.color ?? ink, opaque); return [['text-shadow', `${shadow(0, 0, r, c)}, ${shadow(0, 0, r / 2, c)}`]]; }
+    case 'echo': { const c = fx.color ?? ink; return [['text-shadow', `${shadow(dx, dy, 0, a(c, 0.5))}, ${shadow(dx * 2, dy * 2, 0, a(c, 0.25))}`]]; }
+    case 'outline': return [['-webkit-text-stroke', `${px(width * 2)} ${a(fx.color ?? hexToColor('#000000'))}`], ['paint-order', 'stroke fill']];
+    case 'background': return [['background-color', a(fx.color ?? hexToColor('#fde047'), opaque)], ['padding', `0 ${px((fx.spread / 100) * fs * 0.5)}`], ['border-radius', px((fs * n.lineHeight) / 2 * (fx.roundness / 100))], ['box-decoration-break', 'clone']];
+    case 'splice': return [['color', 'transparent'], ['-webkit-text-stroke', `${px(width)} ${a(ink)}`], ['text-shadow', shadow(dx, dy, 0, a(fx.color ?? ink, 0.45))]];
+    case 'hollow': return [['color', 'transparent'], ['-webkit-text-stroke', `${px(width)} ${a(ink)}`]];
+    case 'neon': { const c = fx.color ?? ink; const p = 0.4 + (fx.intensity / 100) * 0.8; return [['color', a({ ...c, l: Math.min(1, c.l + (1 - c.l) * 0.75), c: c.c * 0.5 })], ['text-shadow', `${shadow(0, 0, fs * 0.25 * p, a(c))}, ${shadow(0, 0, fs * 0.7 * p, a(c, 0.9))}`]]; }
+    case 'glitch': return [['text-shadow', `${shadow(-dx, -dy, 0, '#00e5ffe6')}, ${shadow(dx, dy, 0, fx.color ? a(fx.color, 0.9) : '#ff2bd6e6')}`]];
+  }
 }
 
 function print(el: El, depth: number, cls: (el: El) => string): string {

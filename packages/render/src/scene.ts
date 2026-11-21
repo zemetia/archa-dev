@@ -29,9 +29,12 @@ export function drawPage(
   ctx.imageSmoothingQuality = 'high';
   for (const node of doc.children(pageRootId)) {
     if (!node.visible) continue;
-    if (node.x > view.x + view.w || node.y > view.y + view.h || node.x + node.width < view.x || node.y + node.height < view.y) continue;
+    // A turned box reaches past its own rect: cull by the circle around it.
+    const m = node.rotation ? (Math.hypot(node.width, node.height) - Math.min(node.width, node.height)) / 2 : 0;
+    if (node.x - m > view.x + view.w || node.y - m > view.y + view.h || node.x + node.width + m < view.x || node.y + node.height + m < view.y) continue;
     if (fx?.live.has(node.id)) { drawNode(ctx, doc, node, fx.anim); continue; }
-    const bmp = node.type === 'frame' || node.type === 'group' ? cache.get(doc, node.id, bucket) : null;
+    // The bitmap cache holds the upright box, so turned frames draw directly.
+    const bmp = (node.type === 'frame' || node.type === 'group') && !node.rotation ? cache.get(doc, node.id, bucket) : null;
     if (bmp) ctx.drawImage(bmp, node.x, node.y, bmp.width / bucket, bmp.height / bucket);
     else drawNode(ctx, doc, node);
   }

@@ -7,6 +7,7 @@ import { alignOps, distributeOps, inAutoLayout, placementOf, placementPatch, typ
 import type { FrameNode, Node } from '@archa/schema';
 import { commit, toast, useStore } from '../../lib/store';
 import { wrapInFrame } from '../../lib/commands';
+import { normalizeAngle } from '../../lib/geometry';
 import { Check, cn, IconButton, NumberField, Section } from '../controls';
 import { patchNodes } from './shared';
 
@@ -67,6 +68,9 @@ export function PositionSection({ node: n }: { node: Node }) {
       <div className="grid grid-cols-2 gap-2">
         <NumberField label="X" value={n.x} disabled={flow} onCommit={(x) => set({ x }, 'Move')} />
         <NumberField label="Y" value={n.y} disabled={flow} onCommit={(y) => set({ y }, 'Move')} />
+        {n.type !== 'connector' && (
+          <NumberField label="↻" value={n.rotation} min={-180} max={180} suffix="°" onCommit={(r) => set({ rotation: normalizeAngle(r) }, 'Rotate')} />
+        )}
       </div>
       {inLayoutParent && (
         <div className="mt-1.5">

@@ -17,7 +17,8 @@ A–Z keyword → the doc that owns the rules → the code that implements it to
 | `ARCHA_HOME` / runtime dirs | [STRUCTURE/03](./STRUCTURE/03-runtime-dirs.md), [CODE_MAP/05](./CODE_MAP/05-interfaces.md) | `packages/protocol/src/node.ts` |
 | Auto layout (hug / fill / gap / padding) | [DOCUMENT_MODEL/03](./DOCUMENT_MODEL/03-layout.md) | `packages/core/src/layout.ts` |
 | Background removal (on-device) | [RENDERING/04](./RENDERING/04-background-removal.md) | `main/models.ts`, `main/ml-host.ts`, `renderer/lib/removeBackground.ts` |
-| Browser (agent-driven, in-app) | [BROWSER](./BROWSER.md) | `main/browser.ts`, `main/browser-page.ts`, `packages/protocol/src/browser.ts`, `renderer/ui/BrowserPanel.tsx` |
+| Browser (agent-driven, in-app) | [BROWSER](./BROWSER.md) | `main/browser.ts`, `main/browser-page.ts`, `main/browser-image.ts`, `packages/protocol/src/browser.ts`, `renderer/ui/BrowserPanel.tsx` |
+| Images from the web (search, download, place_image) | [BROWSER](./BROWSER.md#images) | `main/browser-image.ts`, `core-host/workspace.ts` `agent.placeImage` |
 | Cache (bitmap, thumbnails, hashing) | [CACHE](./CACHE.md), [DOCUMENT_MODEL/04](./DOCUMENT_MODEL/04-hashing.md) | `packages/render/src/cache.ts`, `renderer/lib/thumbs.ts`, `packages/core/src/hash.ts` |
 | Canvas drawing | [RENDERING/01](./RENDERING/01-canvaskit-pipeline.md) | `packages/render/src/draw.ts`, `scene.ts`, `renderer/canvas/Canvas.tsx` |
 | Changelog / release / branches | [BEST_PRACTICE/03](./BEST_PRACTICE/03-git-changelog-release.md) | `CHANGELOG.md`, `apps/desktop/electron-builder.yml` |

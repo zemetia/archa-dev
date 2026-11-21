@@ -4,7 +4,7 @@
  * Plain JS in a string: it runs in the page, not in Node. No backticks or `${` inside.
  */
 export const PAGE_LIB = String.raw`(() => {
-  if (window.__archa && window.__archa.v === 1) return;
+  if (window.__archa && window.__archa.v === 2) return;
   const refs = new Map();
   let seq = 0;
   const INTERACTIVE_ROLES = new Set(['button','link','checkbox','radio','switch','tab','menuitem','menuitemcheckbox','menuitemradio','option','textbox','searchbox','combobox','listbox','slider','spinbutton','treeitem','file']);
@@ -324,6 +324,66 @@ export const PAGE_LIB = String.raw`(() => {
     if (old) old.remove();
   }
 
+  const shortUrl = (u) => u.startsWith('data:') ? u.slice(0, u.indexOf(',') > 0 ? u.indexOf(',') : 30) + ',… (' + Math.round(u.length * 0.75 / 1024) + ' KB inline)' : clean(u, 300);
+  function bgUrl(el) {
+    const m = /url\(["']?([^"')]+)["']?\)/.exec(getComputedStyle(el).backgroundImage || '');
+    return m ? new URL(m[1], location.href).href : '';
+  }
+
+  /** Pictures on the page: <img>, video posters and CSS backgrounds big enough to matter — with refs to download them. */
+  function images(opts) {
+    const min = opts.minSize === undefined ? 48 : opts.minSize;
+    const out = [];
+    const seen = new Set();
+    for (const el of document.querySelectorAll('*')) {
+      if (out.length >= 80) break;
+      const t = el.tagName.toLowerCase();
+      if (t !== 'img' && t !== 'video' && el.childElementCount > 3) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < min || r.height < min) continue;
+      if (opts.viewportOnly && !inViewport(r)) continue;
+      let src = '', natural = '';
+      if (t === 'img') { src = el.currentSrc || el.src; natural = el.naturalWidth ? el.naturalWidth + '×' + el.naturalHeight + ' px file' : 'not loaded yet'; }
+      else if (t === 'video') src = el.poster;
+      else src = bgUrl(el);
+      if (!src || seen.has(src) || hidden(el)) continue;
+      seen.add(src);
+      const alt = t === 'img' ? clean(el.alt || el.title, 80) : clean(el.getAttribute('aria-label') || el.title, 80);
+      const kind = t === 'img' ? 'img' : t === 'video' ? 'video poster' : 'background';
+      out.push('[ref=' + refFor(el) + '] ' + kind + (natural ? ' ' + natural : '') + ' · shown ' + Math.round(r.width) + '×' + Math.round(r.height) + (inViewport(r) ? '' : ' (off-screen)') + (alt ? ' · "' + alt + '"' : '') + '\n    ' + shortUrl(src));
+    }
+    return out;
+  }
+
+  /** Where a target's picture comes from: the <img> file, a CSS background, or nothing (capture it instead). */
+  function imageSource(t) {
+    const el = resolve(t);
+    const tag = el.tagName.toLowerCase();
+    let src = '';
+    if (tag === 'img') src = el.currentSrc || el.src;
+    else if (tag === 'video') src = el.poster;
+    else if (tag === 'image') src = new URL(el.getAttribute('href') || el.getAttribute('xlink:href') || '', location.href).href;
+    else {
+      const img = el.querySelector('img');
+      src = img ? img.currentSrc || img.src : bgUrl(el);
+    }
+    return { src, desc: describe(el) };
+  }
+
+  /** Google results: title, link and snippet of each organic hit. */
+  function searchResults() {
+    const out = [];
+    for (const h of document.querySelectorAll('a h3')) {
+      if (out.length >= 10) break;
+      const a = h.closest('a');
+      if (!a || !a.href || hidden(h)) continue;
+      const box = a.closest('[data-hveid], .g') || a.parentElement;
+      const snippet = box ? clean((box.innerText || '').replace(h.innerText, ''), 220) : '';
+      out.push('[ref=' + refFor(a) + '] ' + clean(h.innerText, 120) + '\n    ' + clean(a.href, 200) + (snippet ? '\n    ' + snippet : ''));
+    }
+    return out;
+  }
+
   /** Visual cue for the person watching: a ripple where the agent clicked. */
   function ripple(x, y) {
     const d = document.createElement('div');
@@ -333,5 +393,5 @@ export const PAGE_LIB = String.raw`(() => {
     setTimeout(() => d.remove(), 500);
   }
 
-  window.__archa = { v: 1, info, snapshot, resolve, point, rectOf, details, prepareClear, valueOf, focused, selectOption, present, scrollEdge, scrollIntoView, showLabels, hideLabels, ripple, describe };
+  window.__archa = { v: 2, info, snapshot, resolve, point, rectOf, details, prepareClear, valueOf, focused, selectOption, present, scrollEdge, scrollIntoView, showLabels, hideLabels, ripple, describe, images, imageSource, searchResults };
 })()`;
