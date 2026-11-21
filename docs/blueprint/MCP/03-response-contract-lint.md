@@ -62,7 +62,7 @@ editId: e_7Qx2 — fix with execute({ editId, edits: [{ find, replace }] }) inst
 | `token/raw-color` | Raw colour where a token exists | Use `{ $var: … }` |
 | `token/off-scale` | Spacing/radius not on the scale | Snap to scale value |
 | `token/unknown-variable` | Reference to a missing variable | Create it or fix the name |
-| `a11y/contrast` | Text contrast below WCAG AA on its surface | Use the profile's foreground token |
+| `a11y/contrast` | Text contrast below WCAG AA on its surface: the topmost solid shape drawn before it under its centre (a sticker, a card), else its parent | Use the profile's foreground token |
 | `icon/unknown` | Icon name not in the icon set | Pick from `library list icons` |
 | `naming/missing` | Node without a name | Name it |
 | `component/rebuilt` | Hand-built subtree matching an existing component | Use `instance()` |

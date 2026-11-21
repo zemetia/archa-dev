@@ -98,4 +98,18 @@ describe('lint', () => {
     expect(rules).toContain('text/no-fill');
     expect(rules).toContain('layout/clipped');
   });
+
+  it('reads text contrast against the shape behind it, and accepts a marked bleed', () => {
+    const { s, root } = setup();
+    const { ops, rootId } = insertOpsFor({ type: 'frame', name: 'Post', width: 1080, height: 1350, fill: '#f6efe4', children: [
+      { type: 'text', name: 'Hero', text: '3', absolute: true, x: 600, y: 600, fontSize: 1100, fill: '#c8553d' },
+      { type: 'frame', name: 'Sticker art', x: 400, y: 700, width: 300, height: 300, children: [{ type: 'ellipse', name: 'Disc', width: 300, height: 300, fill: '#c8553d' }] },
+      { type: 'text', name: 'Price', text: '18K', x: 450, y: 800, fontSize: 92, fill: '#f6efe4' },
+      { type: 'text', name: 'Ghost', text: 'faint', x: 72, y: 72, fontSize: 30, fill: '#efe6d8' },
+    ] } as never, root);
+    s.apply({ author: user, label: 'x', baseRevision: 0, ops });
+    const issues = lint(s.doc, [rootId]);
+    expect(issues.filter((i) => i.rule === 'a11y/contrast').map((i) => i.nodeName)).toEqual(['Ghost']); // Price sits on the disc, not the cream post
+    expect(issues.some((i) => i.rule === 'layout/clipped')).toBe(false); // the hero bleed is marked absolute
+  });
 });

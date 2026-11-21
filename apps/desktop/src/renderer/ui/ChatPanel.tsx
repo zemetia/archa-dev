@@ -422,7 +422,9 @@ export function ChatComposer() {
       all.push({ name, description: s.description, source: s.source === 'archadev' ? 'Skill' : s.source === 'builtin' ? 'Built-in' : `Skill · ${s.source}` });
     }
     for (const [name, g] of Object.entries(GUIDES)) if (!seen.has(name)) all.push({ name, description: `${g.title} — ${g.when}`, source: 'Guide' });
-    return all.filter((o) => o.name.includes(q)).sort((a, b) => Number(!a.name.startsWith(q)) - Number(!b.name.startsWith(q))).slice(0, 8);
+    // Names first (prefix, then anywhere), then descriptions: "/instagram" finds design-social.
+    const rank = (o: { name: string; description: string }) => (o.name.startsWith(q) ? 0 : o.name.includes(q) ? 1 : o.description.toLowerCase().includes(q) ? 2 : 3);
+    return all.map((o) => [o, rank(o)] as const).filter(([, r]) => r < 3).sort((a, b) => a[1] - b[1]).map(([o]) => o).slice(0, 12);
   }, [slash, skills]);
   const readSlash = (el: HTMLTextAreaElement) => {
     const caret = el.selectionStart ?? el.value.length;
@@ -471,10 +473,11 @@ export function ChatComposer() {
         </div>
       )}
       {slash && slashOptions.length > 0 && (
-        <div role="listbox" className="absolute bottom-full left-0 right-0 z-20 mb-1.5 overflow-hidden rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/40">
+        <div role="listbox" className="absolute bottom-full left-0 right-0 z-20 mb-1.5 max-h-80 overflow-y-auto rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/40">
           <div className="px-2 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">Skills · goes with this message</div>
           {slashOptions.map((o, i) => (
             <button key={o.name} role="option" aria-selected={i === slashIndex} onMouseEnter={() => setSlashIndex(i)}
+              ref={i === slashIndex ? (el) => { el?.scrollIntoView({ block: 'nearest' }); } : undefined}
               onMouseDown={(e) => { e.preventDefault(); pickSlash(o.name); }}
               className={cn('flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left', i === slashIndex && 'bg-panel-3')}>
               <Sparkles size={12} className="mt-0.5 shrink-0 text-accent-fg" />

@@ -3,7 +3,7 @@
  * pre-loaded into chat runs (blueprint MCP/04). All text is ours — written for ArchaDev's API.
  */
 
-export type GuideTopic = 'process' | 'layout' | 'taste' | 'type-color' | 'components' | 'icons' | 'svg' | 'landing' | 'web-app' | 'mobile';
+export type GuideTopic = 'process' | 'layout' | 'taste' | 'type-color' | 'components' | 'icons' | 'svg' | 'social' | 'landing' | 'web-app' | 'mobile';
 
 export const GUIDES: Record<GuideTopic, { title: string; when: string; body: string }> = {
   process: {
@@ -78,6 +78,18 @@ Use icon() for icons and logos:<brand> for brand logos — write SVG only for th
 Charts: draw bars/lines/areas from the real values with exact coordinates; keep axis labels and numbers as text nodes beside the svg so they stay editable.
 Look at the screenshot in the reply; fix by placing a corrected SVG and removing the old one, or edit the vector layers with update().`,
   },
+  social: {
+    title: 'Social posts (Instagram feed, carousel, story)',
+    when: 'Instagram / IG posts, feed content, carousels, stories, konten IG, 4:5 or 1:1 graphics',
+    body: `A post is not a web page or a slide: it is seen for under two seconds, on a phone, as a thumbnail. These sizes OVERRIDE the web/UI sizes in the other guides.
+Frames: feed 1080×1350 (4:5, default), square 1080×1080, story 1080×1920 (keep text inside y 250–1580). Carousel = one frame per slide in a row, 80 apart, named "01 Hook", "02 …". Frame layout "none", clip true; place everything with x/y so things can overlap and bleed. Margin 72.
+Type on a 1080 canvas: headline 96–130 / 800, at most 8 words, letterSpacing about -2; body 30–36, at most 3 short lines; logo, page count, "geser →" 26–28. Nothing smaller than 26. A 13–18px label is invisible on a phone.
+One message, one hero at extreme scale: a 600–1100px numeral or date, a product filling half the frame, a 110px quote. Crop the hero at an edge (set absolute: true on it so the checker knows the crop is meant). Everything else is small.
+Depth through ONE overlap: a sticker or card crossing the hero. Tilt via svg() (rotation inside the SVG). Draw products and illustrations with svg(); words stay text nodes on top. Centred text on a sticker needs textSizing "fixed" + width + height.
+Do NOT: eyebrow labels or badges above the headline, pill tags, a grid of 4 feature cards, empty bordered cards, UI mockups with tiny labels, small text blocks, more than 1 accent, a header row of tags. If it looks like a landing page section or a pitch-deck slide, start over.
+Carousel: slide 1 = the hook in the reader's words + "1/5 · geser →"; one point per slide (huge numeral, 2–4 word name, one sentence); last slide asks to save/share/DM. Alternate grounds (light, dark, light…) and change the layout each slide; same logo spot, margin and fonts on all.
+Check every screenshot at thumbnail size: if the headline is not readable when the post is 300px wide, make it bigger or shorter. The design-social skill has worked examples.`,
+  },
   landing: {
     title: 'Landing page',
     when: 'marketing sites, heroes, pricing',
@@ -120,12 +132,14 @@ const KEYWORDS: Array<[GuideTopic, RegExp]> = [
   ['web-app', /\b(dashboard|admin|analytics|table|crm|settings page|web ?app|saas|console|form|kanban|inbox|sidebar)\b/i],
   ['mobile', /\b(mobile|phone|ios|android|app screen|onboarding|splash|tab bar)\b/i],
   ['svg', /\b(svg|vector|illustrations?|ilustrasi|logo ?marks?|chart|graph|grafik|diagram|pattern|drawing)\b/i],
+  ['social', /\b(instagram|insta|ig|feeds?|carousels?|karosel|ig stor(y|ies)|insta stor(y|ies)|reels?|tiktok|postingan|social media|sosmed|sosial media|1080 ?[x×] ?1350)\b|\b4 ?: ?5\b|\b9 ?: ?16\b/i],
 ];
 
 /** Guides worth pre-loading for a request (saves the agent a `read_guide` call on the first turn). */
 export function guidesFor(request: string): GuideTopic[] {
   const picked = KEYWORDS.filter(([, re]) => re.test(request)).map(([t]) => t);
-  return picked.length ? picked : [];
+  // A social post is not a page or a screen: their sizes would fight the social ones.
+  return picked.includes('social') ? picked.filter((t) => t !== 'landing' && t !== 'web-app' && t !== 'mobile') : picked;
 }
 
 /** Guides every design run needs, sent once in the (cached) system prompt so the agent never has to fetch them. */
