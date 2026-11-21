@@ -1,6 +1,6 @@
 {
   "name": "@archa/desktop",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "description": "ArchaDev desktop app",
   "main": "./out/main/index.js",
