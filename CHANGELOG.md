@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-21
+
+### Brand
+- **New ArchaDev logo** (gold "A"): in the title bar, the chat welcome, and as the app, installer and taskbar icon.
+
 ## [1.4.0] - 2026-11-21
 
 ### SVG
