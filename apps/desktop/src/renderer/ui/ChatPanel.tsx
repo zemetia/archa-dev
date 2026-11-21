@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeft, ArrowUp, BookOpen, Camera, Check, ChevronRight, Code2, Copy, Crosshair, FileText, Globe, Hexagon, History, ImagePlus, Layers, Loader2, MessageSquare, Network, ScanSearch, Settings, Shapes, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowUp, BookOpen, Camera, Check, ChevronRight, Code2, Copy, Crosshair, FileText, Globe, History, ImagePlus, Layers, Loader2, MessageSquare, Network, ScanSearch, Settings, Shapes, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
 import { chatThreads, GUIDES, threadOf, type ChatImage, type ChatMessage, type ChatMode, type ModelOption } from '@archa/protocol';
 import { loadSkills, runOfThread, select, toast, useStore } from '../lib/store';
 import { imageFiles, MAX_CHAT_IMAGES, toChatImage } from '../lib/chatImages';
@@ -7,6 +7,7 @@ import { personaBg } from './persona';
 import { cn } from './controls';
 import { Dropdown, type DropdownOption } from './Dropdown';
 import { Markdown } from './Markdown';
+import { ArchaLogo } from './ArchaLogo';
 import { SvgBlock } from './SvgBlock';
 import { extractSvg, isSvgMarkup } from '@archa/formats';
 
@@ -112,7 +113,7 @@ export function ChatThread() {
           <div className="space-y-5 px-1 pt-6">
             <div>
               <div className="mb-3 flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft text-accent-fg"><Hexagon size={15} strokeWidth={2.4} /></span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft"><ArchaLogo size={20} /></span>
                 <span className="text-[14px] font-semibold tracking-tight">{mode === 'orchestrate' ? 'What should your team build?' : 'What should your agent design?'}</span>
               </div>
               {mode === 'orchestrate' && (

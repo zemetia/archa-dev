@@ -1,0 +1,40 @@
+<svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gold-grad-left" x1="50" y1="24" x2="100" y2="160" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FCEEAC"/>
+      <stop offset="50%" stop-color="#D4AF37"/>
+      <stop offset="100%" stop-color="#8B6508"/>
+    </linearGradient>
+    <linearGradient id="gold-grad-right" x1="150" y1="24" x2="100" y2="160" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFF5C0"/>
+      <stop offset="50%" stop-color="#F3C644"/>
+      <stop offset="100%" stop-color="#AA7C11"/>
+    </linearGradient>
+    <linearGradient id="gold-core" x1="100" y1="70" x2="100" y2="130" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFDF0"/>
+      <stop offset="50%" stop-color="#FFD700"/>
+      <stop offset="100%" stop-color="#B8860B"/>
+    </linearGradient>
+  </defs>
+  <!-- Background Glow Aura -->
+  <circle cx="100" cy="100" r="75" fill="#D4AF37" opacity="0.08"/>
+  
+  <!-- Outer Alur Loops / Arch 'A' -->
+  <!-- Left Ascending Ribbon -->
+  <path id="left-ribbon" d="M 100 24 C 90 40 62 88 52 120 C 44 142 56 158 76 158 C 88 158 96 148 98 136 L 86 136 C 76 136 70 126 74 114 L 100 48 Z" fill="url(#gold-grad-left)"/>
+  
+  <!-- Right Ascending Ribbon -->
+  <path id="right-ribbon" d="M 100 24 L 100 48 L 126 114 C 130 126 124 136 114 136 L 102 136 C 104 148 112 158 124 158 C 144 158 156 142 148 120 C 138 88 110 40 100 24 Z" fill="url(#gold-grad-right)"/>
+  
+  <!-- Top Keystone Peak -->
+  <path id="keystone" d="M 100 24 L 88 52 L 100 66 L 112 52 Z" fill="#FFF8D6"/>
+  
+  <!-- Inner Faceted Diamond / Gold Ingot Core -->
+  <path id="core-left" d="M 100 70 L 84 102 L 100 128 Z" fill="#D4AF37"/>
+  <path id="core-right" d="M 100 70 L 116 102 L 100 128 Z" fill="url(#gold-core)"/>
+  <path id="core-highlight" d="M 100 70 L 93 102 L 100 114 L 107 102 Z" fill="#FFFFF0"/>
+  
+  <!-- Base Foundation Ingot Bar -->
+  <path id="base-bar" d="M 68 166 L 132 166 L 124 176 L 76 176 Z" fill="#916B16"/>
+  <path id="base-accent" d="M 76 166 L 124 166 L 120 170 L 80 170 Z" fill="#FCEEAC"/>
+</svg>

@@ -47,6 +47,7 @@
 
 | File | Does | Governed by |
 |---|---|---|
+| [`ui/ArchaLogo.tsx`](../../../apps/desktop/src/renderer/ui/ArchaLogo.tsx) | The ArchaDev mark (`assets/archa-logo.svg`) in the title bar and chat welcome; app/installer icon is `apps/desktop/build/icon.ico` | [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
 | [`ui/TitleBar.tsx`](../../../apps/desktop/src/renderer/ui/TitleBar.tsx) | Document tabs (unsaved dot, close), New / Open / Save, Browser toggle, Settings | [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
 | [`ui/ToolRail.tsx`](../../../apps/desktop/src/renderer/ui/ToolRail.tsx) | Tool families, `TOOL_KEYS` shortcuts | [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
 | [`ui/AssetsPanel.tsx`](../../../apps/desktop/src/renderer/ui/AssetsPanel.tsx) | Assets panel: collections, styles, search, size / colour, logos, My icons upload | [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md), [APP_UI/01](../APP_UI/01-shell-tools-panels.md) |
