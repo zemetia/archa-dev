@@ -28,7 +28,12 @@ export function describeNode(doc: ArchaDocument, n: Node): string {
     if (!n.clip) parts.push('no clip');
   }
   if ('cornerRadius' in n && n.cornerRadius) parts.push(`r${n.cornerRadius}`);
+  if (n.rotation && n.type !== 'connector') parts.push(`rot ${n.rotation}°`);
   if (n.type === 'text') parts.push(`"${short(n.text.replace(/\n/g, '⏎'), 60)}" ${n.fontSize}/${n.fontWeight} ${n.fontFamily}${n.textAlign !== 'left' ? ` ${n.textAlign}` : ''}${n.textSizing !== 'auto-width' ? ` ${n.textSizing}` : ''}`);
+  if (n.type === 'text') {
+    const style = [n.fontStyle === 'italic' && 'italic', n.underline && 'underline', n.strikethrough && 'strike', n.textCase !== 'none' && n.textCase, n.list !== 'none' && `${n.list} list`, n.curve && `curve ${n.curve}`, n.textEffect && `effect ${n.textEffect.type}`].filter(Boolean);
+    if (style.length) parts.push(style.join(' '));
+  }
   if (n.type === 'sticky') parts.push(`"${short(n.text, 60)}"`);
   if (n.type === 'embed') parts.push(n.url || 'no url');
   if (n.type === 'image') parts.push(`fit ${n.fit}`);

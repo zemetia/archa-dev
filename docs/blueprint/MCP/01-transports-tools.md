@@ -38,7 +38,8 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 | `inspect` | `{ node?, depth? }` | **Built 0.5:** compact outline (core `outline.ts`) of a node, else the selection, else the page: sizes, sizing, auto layout, paints, effects, text, context notes. RPC `agent.outline` |
 | `screenshot` | `{ nodeId, scale? }` | Image or `unchanged` → [RENDERING/03](../RENDERING/03-export.md) |
 | `export_svg` | `{ node }` | **Built:** SVG of a node subtree (`agent.exportSvg`, `packages/formats/src/svg.ts`) |
-| `browser` | `{ action, … }` | **Built:** drive the in-app browser → [BROWSER](../BROWSER.md) |
+| `browser` | `{ action, … }` | **Built:** drive the in-app browser (incl. `search`, `images`, `download`) → [BROWSER](../BROWSER.md) |
+| `place_image` | `{ url \| ref \| selector, capture?, parent?, x?, y?, width?, height?, fit?, cornerRadius?, name?, path? }` | **Built 1.5:** a real picture onto the canvas. RPC `agent.placeImage` downloads it through the browser bridge, then `AgentExecutor.placeImage` inserts an image node (same reply contract) → [BROWSER](../BROWSER.md#images) |
 | `export` | `{ nodeId?, format, options? }` | png/jpeg/webp/svg/pdf/html/react/tokens; returns path or content |
 | `get_style` | `{ name?, params? }` | Style profiles, two-step load → [DESIGN_SYSTEM/03](../DESIGN_SYSTEM/03-style-profiles.md) |
 | `read_guide` | `{ topic }` | **Built:** compiled-in guides (`@archa/protocol` `design-guides.ts`: process, layout, taste, type-color, components, icons, svg, social, landing, web-app, mobile). Chat runs also get the matching guides on their first turn; a social request (Instagram, feed, carousel, 4:5…) gets `social` instead of landing / web-app / mobile. Target: `skills/archadev/references/**` |
@@ -48,6 +49,7 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 | `ask` | `{ question, options[] }` | Block until the person answers |
 | `variants` | `{ nodeId, takes: [{ label, code }] }` | Build takes on forks; block until one is chosen |
 | `say` | `{ text, nodeId? }` | One-line status in Activity, moves the agent cursor |
+| `done` | `{ summary? }` | **Built 1.5:** call once when finished; RPC `agent.done` logs it and broadcasts `agent.done` so the canvas puts the agent's cursor away → [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
 | `library` | `{ action: list\|import\|remove, … }` | Component libraries |
 | `delegate` / `wait_workers` / `tell_worker` | `{ tasks[] }` / `{ workers?, timeoutSec? }` / `{ worker, message }` | **Built:** orchestrate-mode team tools, lead threads only → [AGENT_BRIDGE/06](../AGENT_BRIDGE/06-orchestrate.md) |
 | `plugin_<id>_<tool>` | Plugin-defined | Added by enabled plugins → [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md) |

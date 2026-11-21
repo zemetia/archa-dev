@@ -54,11 +54,17 @@ var find = (visitor, opts) => {
 `;
 
 type Pending = { code: string; createdAt: number };
+export type ImagePlacement = {
+  parent?: string; x?: number; y?: number; width?: number; height?: number; index?: number;
+  name?: string; fit?: 'crop' | 'fit' | 'fill'; cornerRadius?: number; naturalWidth?: number; naturalHeight?: number;
+};
 
 export class AgentExecutor {
   private ctx: QuickJSContext | null = null;
   private failed = new Map<string, Pending>();
-  private state = { working: null as ArchaDocument | null, ops: [] as Op[], created: [] as Array<{ name: string; id: string }>, changed: new Map<string, string>(), output: [] as string[], shots: [] as Array<{ id: string; scale: number }>, pageRoot: '', selection: [] as string[], steps: [] as TrailStep[] };
+  /** Large data URLs handed to a snippet by key, so megabytes never pass through the JS source. */
+  private blobs = new Map<string, string>();
+  private state ={ working: null as ArchaDocument | null, ops: [] as Op[], created: [] as Array<{ name: string; id: string }>, changed: new Map<string, string>(), output: [] as string[], shots: [] as Array<{ id: string; scale: number }>, pageRoot: '', selection: [] as string[], steps: [] as TrailStep[] };
 
   constructor(private ws: Workspace, private conn: Connection) {}
 
@@ -83,6 +89,17 @@ export class AgentExecutor {
     ctx.unwrapResult(ctx.evalCode(PRELUDE, 'prelude.js')).dispose();
     this.ctx = ctx;
     return ctx;
+  }
+
+  /** place_image (blueprint BROWSER, "Images"): puts a fetched picture on the canvas with the usual execute reply. */
+  async placeImage(session: DocumentSession, embed: string, opts: ImagePlacement): Promise<ExecuteResult> {
+    const key = `archa-blob:${newId(10)}`;
+    this.blobs.set(key, embed);
+    try {
+      return await this.run(session, { code: `__call('image', [${JSON.stringify(key)}, ${JSON.stringify(opts)}])` });
+    } finally {
+      this.blobs.delete(key);
+    }
   }
 
   async run(session: DocumentSession, params: { code?: string; editId?: string; edits?: Array<{ find: string; replace: string }> }): Promise<ExecuteResult> {
@@ -384,6 +401,31 @@ export class AgentExecutor {
         st.output.push(r.mode === 'vector'
           ? `svg: "${created[0]!.name}" placed as ${r.shapes} editable vector layer${r.shapes === 1 ? '' : 's'}`
           : `svg: "${created[0]!.name}" placed as an image${r.reason ? ` (vectors cannot keep ${r.reason})` : ''} — it looks exact but its shapes are not editable layers`);
+        step('create', rootId);
+        return rootId;
+      }
+      case 'image': {
+        const [key, o] = args as [string, ImagePlacement];
+        const src = this.blobs.get(key);
+        if (!src) throw new Error('That image is no longer available — call place_image again.');
+        const parentId = o.parent ? ref(o.parent) : st.pageRoot;
+        const nw = o.naturalWidth || 300, nh = o.naturalHeight || 200;
+        let w = Number(o.width) || 0, h = Number(o.height) || 0;
+        if (w && !h) h = Math.round(w * nh / nw);
+        else if (h && !w) w = Math.round(h * nw / nh);
+        else if (!w && !h) {
+          // Like a pasted image: big pictures land at a comfortable size; the pixels stay full resolution.
+          const fit = Math.min(1, 800 / Math.max(nw, nh));
+          w = Math.round(nw * fit); h = Math.round(nh * fit);
+        }
+        const input = { type: 'image', name: o.name || 'Image', src, fit: o.fit ?? 'crop', width: w, height: h, ...(o.cornerRadius ? { cornerRadius: o.cornerRadius } : {}) } as NodeInput & { x?: number; y?: number };
+        if (o.x !== undefined) input.x = Number(o.x);
+        if (o.y !== undefined) input.y = Number(o.y);
+        if (o.x === undefined && o.y === undefined && parentId === st.pageRoot) Object.assign(input, findEmptySpace(doc, parentId, w, h));
+        const { ops, rootId, created } = insertOpsFor(input, parentId, o.index ?? undefined);
+        commit(ops);
+        st.created.push(...created.slice(0, 1));
+        st.output.push(`image: "${created[0]!.name}" placed at ${w}×${h}${o.naturalWidth ? ` (file ${o.naturalWidth}×${o.naturalHeight} px)` : ''}, fit ${input.fit as string}`);
         step('create', rootId);
         return rootId;
       }

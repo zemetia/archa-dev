@@ -1,6 +1,7 @@
 import type { FrameNode, Node, TextNode } from '@archa/schema';
 import type { ArchaDocument } from './document';
 import { routeConnectors } from './connectors';
+import { curveBox, displayParagraphs } from './text';
 
 export type TextMeasure = (node: TextNode, maxWidth?: number) => { width: number; height: number };
 
@@ -23,7 +24,9 @@ export const approxMeasure: TextMeasure = (node, maxWidth) => {
   const weight = 1 + (node.fontWeight - 400) / 3000;
   const width = (s: string) => [...s].reduce((w, ch) => w + charEm(ch) * node.fontSize * weight + node.letterSpacing, 0);
   const lineH = node.fontSize * node.lineHeight;
-  const paras = node.text.split('\n');
+  const paras = displayParagraphs(node);
+  // Curved text is one line bent into an arc; its box is the arc's.
+  if (node.curve) { const b = curveBox(width(paras[0]!), lineH, node.curve); return { width: b.width, height: b.height }; }
   if (maxWidth === undefined) {
     return { width: Math.ceil(Math.max(1, ...paras.map(width))), height: Math.ceil(paras.length * lineH) };
   }
@@ -68,7 +71,8 @@ function sizeText(node: TextNode, forcedWidth?: number) {
     if (node.textSizing !== 'fixed') m.height = measure(node, forcedWidth).height;
     return;
   }
-  if (node.textSizing === 'auto-width') Object.assign(m, measure(node));
+  // A curve sizes the box to its arc whatever the text sizing.
+  if (node.textSizing === 'auto-width' || node.curve) Object.assign(m, measure(node));
   else if (node.textSizing === 'auto-height') m.height = measure(node, node.width).height;
 }
 

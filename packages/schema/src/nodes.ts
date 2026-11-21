@@ -52,6 +52,7 @@ const base = {
   visible: z.boolean().default(true),
   locked: z.boolean().default(false),
   opacity: z.number().min(0).max(1).default(1),
+  rotation: z.number().min(-360).max(360).default(0).describe('Degrees, clockwise, about the centre of the box. x/y/width/height stay the unrotated box'),
   sizing: z.object({ horizontal: sizingModeSchema, vertical: sizingModeSchema }).default({ horizontal: 'fixed', vertical: 'fixed' }),
   absolute: z.boolean().default(false).describe('Opt out of the parent auto-layout and keep x/y'),
   meta: z.record(z.string(), z.unknown()).default({}),
@@ -85,6 +86,26 @@ export const rectNodeSchema = z.object({ ...base, ...visual, type: z.literal('re
 
 export const ellipseNodeSchema = z.object({ ...base, ...visual, type: z.literal('ellipse') });
 
+/**
+ * Canva-style text effect (one at a time). Sliders are 0–100 and scale with the font size, so an
+ * effect looks the same at any size; `direction` is degrees (0 = right, 90 = down).
+ */
+export const TEXT_EFFECTS = ['drop', 'glow', 'echo', 'outline', 'background', 'splice', 'hollow', 'neon', 'glitch'] as const;
+export const textEffectSchema = z.object({
+  type: z.enum(TEXT_EFFECTS),
+  color: colorSchema.optional().describe('Effect colour (shadow, outline, background…); default depends on the effect'),
+  offset: z.number().min(0).max(100).default(50).describe('drop, echo, splice, glitch: distance'),
+  direction: z.number().min(-180).max(180).default(45).describe('drop, echo, splice, glitch: degrees, 0 = right, 90 = down'),
+  blur: z.number().min(0).max(100).default(0).describe('drop: softness'),
+  transparency: z.number().min(0).max(100).default(60).describe('drop, glow, background: how see-through the effect is (0 = solid)'),
+  thickness: z.number().min(0).max(100).default(50).describe('outline, splice, hollow: stroke width'),
+  roundness: z.number().min(0).max(100).default(50).describe('background: corner rounding'),
+  spread: z.number().min(0).max(100).default(50).describe('background: padding around the words; glow, neon: reach'),
+  intensity: z.number().min(0).max(100).default(50).describe('neon: brightness of the glow'),
+});
+export type TextEffect = z.infer<typeof textEffectSchema>;
+export type TextEffectType = TextEffect['type'];
+
 export const textNodeSchema = z.object({
   ...base, ...visual,
   type: z.literal('text'),
@@ -96,6 +117,13 @@ export const textNodeSchema = z.object({
   letterSpacing: z.number().default(0),
   textAlign: z.enum(['left', 'center', 'right']).default('left'),
   textSizing: z.enum(['fixed', 'auto-width', 'auto-height']).default('auto-width'),
+  fontStyle: z.enum(['normal', 'italic']).default('normal'),
+  underline: z.boolean().default(false),
+  strikethrough: z.boolean().default(false),
+  textCase: z.enum(['none', 'upper', 'lower', 'title']).default('none').describe('Shown in this case; `text` keeps what was typed'),
+  list: z.enum(['none', 'bullet', 'number']).default('none').describe('Each line (paragraph) becomes a list item'),
+  textEffect: textEffectSchema.nullable().default(null),
+  curve: z.number().min(-100).max(100).default(0).describe('Bends the text along an arc on one line: + arches up, − sags down'),
 });
 
 export const polygonNodeSchema = z.object({ ...base, ...visual, type: z.literal('polygon'), sides: z.number().int().min(3).max(64).default(3).describe('Regular polygon inscribed in the box; 3 = triangle') });

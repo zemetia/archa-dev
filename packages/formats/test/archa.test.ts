@@ -64,6 +64,22 @@ describe('.archa', () => {
     expect(card?.type === 'frame' && card.effects[0]?.type).toBe('drop-shadow');
   });
 
+  it('reads the v3 fixture: nodes without rotation get 0', () => {
+    const dir = join(__dirname, 'fixtures/archa-v3');
+    const file = (p: string) => new Uint8Array(readFileSync(join(dir, p)));
+    const data = decodeArcha(zipSync({ 'manifest.json': file('manifest.json'), 'document.json': file('document.json'), 'pages/page00001.json': file('pages/page00001.json') }));
+    expect(data.meta.formatVersion).toBe(FORMAT_VERSION);
+    expect(data.nodes.text000001).toMatchObject({ type: 'text', rotation: 0, textSizing: 'auto-height' });
+  });
+
+  it('round-trips a rotation', () => {
+    const doc = ArchaDocument.create('rot');
+    const s = new DocumentSession(doc);
+    s.apply({ author: { id: 't', kind: 'user' }, label: 'x', baseRevision: 0, ops: insertOpsFor({ type: 'text', name: 'Tilted', text: 'Hi', rotation: -12.5 } as never, doc.pages[0]!.rootId).ops });
+    const back = decodeArcha(encodeArcha(s.doc.toData()));
+    expect(Object.values(back.nodes).find((n) => n.name === 'Tilted')?.rotation).toBe(-12.5);
+  });
+
   it('rejects garbage with a clear error', () => {
     expect(() => decodeArcha(new Uint8Array([1, 2, 3]))).toThrow(FormatError);
   });

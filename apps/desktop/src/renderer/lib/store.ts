@@ -4,7 +4,7 @@ import { RpcClient, threadOf, type AccountsOverview, type ChatMode, type CustomI
 import type { Op } from '@archa/schema';
 import { renderNodeImage, renderNodePng } from '@archa/render';
 import { onChatRun } from './comments';
-import { pushTrail, type AgentCursor } from '../canvas/cursors';
+import { markDone, pushTrail, type AgentCursor } from '../canvas/cursors';
 import * as changes from '../canvas/changes';
 import { readingOrder } from './geometry';
 
@@ -51,6 +51,8 @@ type State = {
   /** One cursor per agent session on the active document, by author id (canvas/cursors.ts). */
   cursors: Record<string, AgentCursor>;
   editingText: string | null;
+  /** Text Effects panel (Canva-like) open beside the canvas. */
+  textEffectsOpen: boolean;
   toasts: Toast[];
   fitRequest: number;
   settingsOpen: boolean;
@@ -87,7 +89,7 @@ export const useStore = create<State>(() => ({
   client: null, info: null, docs: [], activeDocId: null, doc: null, rev: 0,
   selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, orchestraView: null, chatMode: readMode(), library: null,
   leftOpen: readFlag('archa.leftOpen'), rightOpen: readFlag('archa.rightOpen'), chatDraft: '',
-  agents: [], activity: [], chat: [], runs: {}, chatLive: {}, cursors: {}, editingText: null, toasts: [], fitRequest: 0,
+  agents: [], activity: [], chat: [], runs: {}, chatLive: {}, cursors: {}, editingText: null, textEffectsOpen: false, toasts: [], fitRequest: 0,
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
   browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
   railPanel: null, showComments: true, openComment: null, commentDraft: null, interactEmbed: null,
@@ -206,6 +208,10 @@ export async function init() {
   client.on('agent.trail', (t) => {
     if (t.docId !== get().activeDocId) return;
     set((s) => ({ cursors: { ...s.cursors, [t.author.id]: pushTrail(s.cursors[t.author.id], t, performance.now()) } }));
+  });
+  client.on('agent.done', (e) => {
+    const c = get().cursors[e.author.id];
+    if (e.docId === get().activeDocId && c) set((s) => ({ cursors: { ...s.cursors, [e.author.id]: markDone(c) } }));
   });
   let accountsTimer: ReturnType<typeof setTimeout> | undefined;
   client.on('accounts.changed', () => { clearTimeout(accountsTimer); accountsTimer = setTimeout(() => void loadAccounts(), 120); });

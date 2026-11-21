@@ -36,7 +36,7 @@ Effects (format 3): `drop-shadow` / `inner-shadow` `{ x, y, blur, color }`, `lay
 | `rect` `ellipse` `line` `polygon` `star` | ✗ | Primitives |
 | `path` | ✗ | Vector network / SVG path data |
 | `boolean` | ✓ | Live union/subtract/intersect/exclude of children |
-| `text` | ✗ | Rich runs; `sizing: 'fixed' \| 'auto-width' \| 'auto-height'` |
+| `text` | ✗ | Rich runs; `sizing: 'fixed' \| 'auto-width' \| 'auto-height'`. **Built:** `fontStyle`, `underline`, `strikethrough`, `textCase` (display only; `text` keeps what was typed), `list` (bullet/number per line), `curve` (−100…100, one line on an arc; box = `curveBox`), `textEffect` (one of drop, glow, echo, outline, background, splice, hollow, neon, glitch; sliders 0–100 scale with the font size). Helpers `core/src/text.ts`, drawn by `render/src/text.ts`; CSS/SVG export maps them (curves stay straight in HTML) |
 | `instance` | ✓ | `componentId` + `overrides` keyed by node-id path |
 | `sticky` | ✗ | Board note |
 | `code-frame` | ✗ | `source: { url } \| { html }`, viewport, snapshot asset → [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
@@ -74,7 +74,8 @@ Renderer, SVG and HTML export all draw from `connectorGeometry` (one path + fill
 | `name` | string | Required. Agents are pushed to name everything |
 | `parentId` | `NodeId \| null` | |
 | `children` | `NodeId[]` | Containers only; order = z-order |
-| `x`, `y`, `rotation` | number | Ignored (lint) inside auto-layout parents |
+| `x`, `y` | number | Ignored (lint) inside auto-layout parents |
+| `rotation` | number | **Built:** degrees clockwise about the box centre (−360…360, default 0); `x/y/width/height` stay the upright box, children turn with it, connectors ignore it. Optional → no `formatVersion` bump. Agents: `rotation` (aliases `rotate`, `angle`) |
 | `width`, `height` | number | Plus `sizing` per axis → [03](./03-layout.md) |
 | `visible`, `locked` | boolean | |
 | `opacity`, `blendMode` | | |
@@ -113,5 +114,5 @@ gap:  { $var: 'space/4' }
 
 **Linked from:** [MCP/02](../MCP/02-execute-api.md)
 
-**Code:** [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`packages/core/src/connectors.ts`](../../../packages/core/src/connectors.ts) · [`packages/core/src/document.ts`](../../../packages/core/src/document.ts) · [`packages/core/test/connectors.test.ts`](../../../packages/core/test/connectors.test.ts) · [`packages/schema/src/color.ts`](../../../packages/schema/src/color.ts) · [`packages/schema/src/ids.ts`](../../../packages/schema/src/ids.ts) · [`packages/schema/src/index.ts`](../../../packages/schema/src/index.ts) · [`packages/schema/src/nodes.ts`](../../../packages/schema/src/nodes.ts)
+**Code:** [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`packages/core/src/connectors.ts`](../../../packages/core/src/connectors.ts) · [`packages/core/src/document.ts`](../../../packages/core/src/document.ts) · [`packages/core/src/text.ts`](../../../packages/core/src/text.ts) · [`packages/core/test/connectors.test.ts`](../../../packages/core/test/connectors.test.ts) · [`packages/formats/src/export/html.ts`](../../../packages/formats/src/export/html.ts) · [`packages/formats/test/text.test.ts`](../../../packages/formats/test/text.test.ts) · [`packages/render/src/text.ts`](../../../packages/render/src/text.ts) · [`packages/schema/src/color.ts`](../../../packages/schema/src/color.ts) · [`packages/schema/src/ids.ts`](../../../packages/schema/src/ids.ts) · [`packages/schema/src/index.ts`](../../../packages/schema/src/index.ts) · [`packages/schema/src/nodes.ts`](../../../packages/schema/src/nodes.ts)
 <!-- backlinks:end -->

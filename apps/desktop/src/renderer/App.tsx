@@ -13,6 +13,8 @@ import { RightPanel } from './ui/RightPanel';
 import { ToolRail, TOOL_KEYS } from './ui/ToolRail';
 import { RailPanels } from './ui/RailPanels';
 import { ZoomBar } from './ui/ZoomBar';
+import { TextToolbar } from './ui/TextToolbar';
+import { TextEffectsPanel } from './ui/TextEffectsPanel';
 import { cn } from './ui/controls';
 import { SettingsDialog } from './ui/SettingsDialog';
 import { OrchestraView } from './ui/OrchestraView';
@@ -52,6 +54,9 @@ export function App() {
           <div className="pointer-events-none absolute inset-y-3 left-3 z-30 flex items-center"><ToolRail /></div>
           <RailPanels />
           <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2"><ZoomBar /></div>
+          {/* Canva-like text tools while one text layer is selected. */}
+          <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2"><TextToolbar /></div>
+          <TextEffectsPanel />
           {!rightOpen && (
             <button title="Show design panel (Ctrl+Shift+\)" onClick={() => togglePanel('right', true)}
               className="absolute right-3 top-3 flex h-9 items-center gap-1.5 rounded-xl border border-line bg-panel pl-2.5 pr-3 text-[12px] text-fg-muted shadow-xl shadow-black/30 hover:text-fg">

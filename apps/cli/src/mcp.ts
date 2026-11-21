@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BROWSER_TOOL_DOC, browserInputShape, EXECUTE_API_DOC, GUIDE_INDEX, guideText, type ExecuteResult, type RpcClient } from '@archa/protocol';
+import { BROWSER_TOOL_DOC, browserInputShape, EXECUTE_API_DOC, PLACE_IMAGE_DOC, placeImageInputShape, GUIDE_INDEX, guideText, type ExecuteResult, type RpcClient } from '@archa/protocol';
 import { connectCore } from './connect';
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
@@ -88,6 +88,14 @@ ${GUIDE_INDEX}`,
     return [{ type: 'text', text: 'ok' }];
   }));
 
+  server.registerTool('done', {
+    description: 'Call once when you have finished the request (after your last canvas change): your cursor on the canvas stops and disappears. Optional one-line summary for the activity feed.',
+    inputSchema: { summary: z.string().max(300).optional() },
+  }, ({ summary }) => guard(async (c) => {
+    await c.call('agent.done', { docId, summary });
+    return [{ type: 'text', text: 'Done — your cursor is put away. Now reply to the person with a 2-3 line summary.' }];
+  }));
+
   // Orchestrate mode (blueprint AGENT_BRIDGE/06): only a lead thread may use these; others get an error.
   server.registerTool('delegate', {
     description: 'Orchestrate mode only: start one worker agent per task, in parallel on this canvas. Returns their names.',
@@ -133,6 +141,11 @@ ${GUIDE_INDEX}`,
     const r = await c.call('agent.browser', args);
     return r.png ? [{ type: 'image', data: r.png, mimeType: 'image/png' }, { type: 'text', text: r.text }] : [{ type: 'text', text: r.text }];
   }));
+
+  server.registerTool('place_image', {
+    description: PLACE_IMAGE_DOC,
+    inputSchema: placeImageInputShape,
+  }, (args) => guard(async (c) => formatExecute(await c.call('agent.placeImage', { docId, ...args }))));
 
   await server.connect(new StdioServerTransport());
 }

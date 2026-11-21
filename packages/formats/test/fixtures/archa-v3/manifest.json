@@ -1,0 +1,8 @@
+{
+  "format": "archa",
+  "formatVersion": 3,
+  "id": "fixtureDoc3",
+  "name": "Fixture v3",
+  "createdWith": "archadev",
+  "pages": [{ "id": "page00001", "name": "Page 1", "rootId": "root000001", "entry": "pages/page00001.json" }]
+}

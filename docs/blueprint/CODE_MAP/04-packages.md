@@ -37,6 +37,7 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 | [`session.ts`](../../../packages/core/src/session.ts) | `DocumentSession`: revisions, `baseRevision` check, per-author undo / redo, listeners | [DOCUMENT_MODEL/02](../DOCUMENT_MODEL/02-ops-transactions-undo.md), [ARCHITECTURE/04](../ARCHITECTURE/04-single-writer-sync.md) |
 | [`factory.ts`](../../../packages/core/src/factory.ts) | `insertOpsFor` (friendly input → ordered inserts), `normaliseInput` (CSS / Figma spellings) | [MCP/02](../MCP/02-execute-api.md), [DOCUMENT_MODEL/02](../DOCUMENT_MODEL/02-ops-transactions-undo.md) |
 | [`layout.ts`](../../../packages/core/src/layout.ts) | Auto layout (own flexbox subset, not Yoga yet), approximate text metrics, `setTextMeasure` | [DOCUMENT_MODEL/03](../DOCUMENT_MODEL/03-layout.md) |
+| [`text.ts`](../../../packages/core/src/text.ts) | `displayParagraphs` (case + list markers; curve = one line), `applyCase`, `curveAngle`, `curveBox` — shared by layout, renderer and exporters | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
 | [`arrange.ts`](../../../packages/core/src/arrange.ts) | Align / distribute / wrap ops; auto-layout children move the parent's align / justify | [DOCUMENT_MODEL/03](../DOCUMENT_MODEL/03-layout.md), [APP_UI/04](../APP_UI/04-design-panel.md) |
 | [`connectors.ts`](../../../packages/core/src/connectors.ts) | Connector routing (elbow / straight, run at the end of `runLayout`) and the shared line + cap geometry for render and export | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
 | [`components.ts`](../../../packages/core/src/components.ts) | Components v1 via `meta.component` / `meta.instanceOf`: make, instance, sync, detach, library refs | [DESIGN_SYSTEM/02](../DESIGN_SYSTEM/02-components-libraries.md) |
@@ -59,6 +60,7 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 | File | Does | Governed by |
 |---|---|---|
 | [`draw.ts`](../../../packages/render/src/draw.ts) | `drawNode` per type, text wrapping, sticky layout, per-node animation transform | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) |
+| [`text.ts`](../../../packages/render/src/text.ts) | `drawText`: lines or curved letters, underline/strike, the 9 text effects; `fontString`, `layoutLines` | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
 | [`scene.ts`](../../../packages/render/src/scene.ts) | `drawPage` (top-level frames from cache, animating ones live), `renderNodePng` / `renderNodeImage` | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md), [RENDERING/03](../RENDERING/03-export.md) |
 | [`cache.ts`](../../../packages/render/src/cache.ts) | `FrameBitmapCache` keyed by subtree hash + zoom bucket (L4) | [CACHE/01](../CACHE/01-layers-keys.md), [CACHE/02](../CACHE/02-render-tiles.md) |
 | [`images.ts`](../../../packages/render/src/images.ts) | Decoded image cache; placeholder until loaded | [CACHE/01](../CACHE/01-layers-keys.md) |

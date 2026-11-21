@@ -3,7 +3,7 @@ import { attachedBox, connectorRoute, insertOpsFor, routeConnectors, runLayout, 
 import { drawNode, drawPage, FrameBitmapCache } from '@archa/render';
 import { isContainer, type ConnectorEnd, type ConnectorNode, type Node, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, setTool, useStore, type Camera, type Tool } from '../lib/store';
-import { connectorEnds, containerAt, fitCamera, handleCursor, handlePoint, HANDLES, hitPath, originOf, pageRoot, pickFromPath, selectionBounds, toWorld, type Handle } from '../lib/geometry';
+import { applyMat, connectorEnds, containerAt, fitCamera, handlesFor, hitPath, nodeHandlePoint, nodeMatrix, normalizeAngle, originOf, pageRoot, pageRotation, pickFromPath, resizedBox, resizeFrame, rotateHandlePoint, toWorld, turnedCursor, type Handle, type ResizeFrame } from '../lib/geometry';
 import { drawOverlay, type OverlayExtras } from './overlay';
 import { cursorAlive, drawCursors } from './cursors';
 import * as changes from './changes';
@@ -22,7 +22,9 @@ type Gesture =
   | { kind: 'move'; start: Pt; ids: string[]; orig: Map<string, Pt>; ends: Map<string, Ends>; moved: boolean; reorder: { parentId: string; index: number } | null; drop: string | null }
   /** Drawing a new connector (id null) or dragging one end of an existing one. */
   | { kind: 'connect'; id: string | null; which: 'start' | 'end'; fixed: ConnectorEnd; start: Pt; end: ConnectorEnd | null }
-  | { kind: 'resize'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt }
+  /** `text`: a corner drag on text scales it (font size with the box), Canva-like. */
+  | { kind: 'resize'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt; frame: ResizeFrame; text: { fontSize: number; letterSpacing: number } | null }
+  | { kind: 'rotate'; id: string; center: Pt; startAngle: number; orig: number }
   | { kind: 'marquee'; start: Pt; cur: Pt }
   | { kind: 'create'; tool: CreateTool; start: Pt; cur: Pt; parentId: string }
   | { kind: 'scale'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt; cur: { x: number; y: number; width: number; height: number } }
@@ -36,6 +38,10 @@ const CLICK_SIZE: Record<CreateTool, [number, number]> = { frame: [400, 300], re
 const NAMES: Record<CreateTool, string> = { frame: 'Frame', rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', sticky: 'Sticky note', embed: 'Web page' };
 
 const cache = new FrameBitmapCache();
+/** Drops cached frame bitmaps after a live (uncommitted) edit of the view model, e.g. a slider preview. */
+export const invalidateCanvas = () => cache.invalidate();
+/** Width of a text box placed with the text tool. */
+const TEXT_BOX_WIDTH = 240;
 const DEFAULT_FILL: Record<string, string> = { frame: '#ffffff', rect: '#d4d4d8', ellipse: '#d4d4d8', polygon: '#d4d4d8', sticky: '#fde68a' };
 let frameCounter = 1;
 /** Line style of connectors drawn with the tool. */
@@ -249,18 +255,20 @@ export function Canvas() {
 
     // Resize handle of a single selection.
     if (st.selection.length === 1 && selConn?.type !== 'connector') {
-      const r = selectionBounds(d, st.selection)!;
-      const tol = 6 / st.camera.zoom;
-      for (const h of HANDLES) {
-        const p = handlePoint(r, h);
-        if (Math.abs(p.x - w.x) <= tol && Math.abs(p.y - w.y) <= tol) {
-          const n = d.require(st.selection[0]!);
-          const orig = { x: n.x, y: n.y, width: n.width, height: n.height };
-          gesture.current = st.tool === 'scale'
-            ? { kind: 'scale', id: n.id, handle: h, orig, start: w, cur: d.worldBounds(n.id) }
-            : { kind: 'resize', id: n.id, handle: h, orig, start: w };
-          return;
-        }
+      const n = d.require(st.selection[0]!);
+      const handle = handleAt(d, n, w, st.camera.zoom);
+      if (handle === 'rotate') {
+        const m = nodeMatrix(d, n.id);
+        const center = applyMat(m, n.width / 2, n.height / 2);
+        gesture.current = { kind: 'rotate', id: n.id, center, startAngle: angleOf(center, w), orig: n.rotation };
+        return;
+      }
+      if (handle) {
+        const orig = { x: n.x, y: n.y, width: n.width, height: n.height };
+        gesture.current = st.tool === 'scale'
+          ? { kind: 'scale', id: n.id, handle, orig, start: w, cur: d.worldBounds(n.id) }
+          : { kind: 'resize', id: n.id, handle, orig, start: w, frame: resizeFrame(d, n.id, handle), text: n.type === 'text' && handle.length === 2 ? { fontSize: n.fontSize, letterSpacing: n.letterSpacing } : null };
+        return;
       }
     }
 
@@ -301,10 +309,9 @@ export function Canvas() {
       if (hovered?.type === 'connector') {
         if (connectorHandleAt(d, hovered, w, st.camera.zoom)) { setCursor('crosshair'); return; }
       } else if (st.selection.length === 1) {
-        const r = selectionBounds(d, st.selection)!;
-        const tol = 6 / st.camera.zoom;
-        const h = HANDLES.find((hh) => { const p = handlePoint(r, hh); return Math.abs(p.x - w.x) <= tol && Math.abs(p.y - w.y) <= tol; });
-        if (h) { setCursor(handleCursor[h]); return; }
+        const n = d.require(st.selection[0]!);
+        const h = handleAt(d, n, w, st.camera.zoom);
+        if (h) { setCursor(h === 'rotate' ? 'grab' : turnedCursor(h, pageRotation(d, n.id))); return; }
       }
       setCursor('default');
       const label = labelHit(d, st.camera, sx, sy);
@@ -404,22 +411,27 @@ export function Canvas() {
       useStore.setState((s) => ({ rev: s.rev + 1 }));
     } else if (g.kind === 'resize') {
       const n = d.require(g.id);
-      const o = g.orig;
-      const dx = w.x - g.start.x, dy = w.y - g.start.y;
-      let { x, y, width, height } = o;
-      if (g.handle.includes('e')) width = o.width + dx;
-      if (g.handle.includes('s')) height = o.height + dy;
-      if (g.handle.includes('w')) { width = o.width - dx; x = o.x + dx; }
-      if (g.handle.includes('n')) { height = o.height - dy; y = o.y + dy; }
-      if (e.shiftKey && o.width && o.height) {
-        const ratio = o.width / o.height;
-        if (g.handle === 'n' || g.handle === 's') width = height * ratio; else height = width / ratio;
+      // Corners scale text (font with the box); Shift keeps the ratio for everything else.
+      const b = resizedBox(g.frame, g.handle, g.orig, w.x - g.start.x, w.y - g.start.y, !!g.text || e.shiftKey);
+      const turned = !!pageRotation(d, g.id);
+      const snap = (v: number) => (turned ? round2(v) : Math.round(v));
+      const patch: Record<string, unknown> = { x: snap(b.x), y: snap(b.y), width: Math.max(1, snap(b.width)), height: Math.max(1, snap(b.height)) };
+      let sizing = sizingAfterResize(n, g.handle);
+      if (g.text && n.type === 'text') {
+        const k = b.width / (g.orig.width || 1);
+        Object.assign(patch, { fontSize: round2(Math.max(1, g.text.fontSize * k)), letterSpacing: round2(g.text.letterSpacing * k) });
+        // Scaling keeps how the text sizes itself: auto-width stays auto-width, everything else wraps at the new width.
+        sizing = n.textSizing === 'auto-width' ? {} : { sizing: { ...n.sizing, horizontal: 'fixed' }, textSizing: 'auto-height' } as Partial<Node>;
       }
-      width = Math.max(1, Math.round(width));
-      height = Math.max(1, Math.round(height));
-      const patch: Partial<Node> = { x: Math.round(x), y: Math.round(y), width, height };
-      d.nodes.set(g.id, { ...n, ...patch, ...sizingAfterResize(n, g.handle) } as Node);
+      d.nodes.set(g.id, { ...n, ...patch, ...sizing } as Node);
       runLayout(d);
+      cache.invalidate();
+      useStore.setState((s) => ({ rev: s.rev + 1 }));
+    } else if (g.kind === 'rotate') {
+      const n = d.require(g.id);
+      let deg = g.orig + angleOf(g.center, w) - g.startAngle;
+      if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+      d.nodes.set(g.id, { ...n, rotation: normalizeAngle(deg) } as Node);
       cache.invalidate();
       useStore.setState((s) => ({ rev: s.rev + 1 }));
     }
@@ -534,8 +546,13 @@ export function Canvas() {
     if (g.kind === 'resize') {
       const n = d.require(g.id);
       const patch: Record<string, unknown> = { x: n.x, y: n.y, width: n.width, height: n.height, sizing: n.sizing };
-      if (n.type === 'text') patch.textSizing = n.textSizing;
-      await commit('Resize', [{ op: 'update', id: g.id, patch }]);
+      if (n.type === 'text') Object.assign(patch, { textSizing: n.textSizing, fontSize: n.fontSize, letterSpacing: n.letterSpacing });
+      await commit(g.text ? 'Scale text' : 'Resize', [{ op: 'update', id: g.id, patch }]);
+    }
+
+    if (g.kind === 'rotate') {
+      const n = d.require(g.id);
+      if (n.rotation !== g.orig) await commit('Rotate', [{ op: 'update', id: g.id, patch: { rotation: n.rotation } }]);
     }
   };
 
@@ -601,7 +618,8 @@ export function Canvas() {
     const d = useStore.getState().doc!;
     const parent = containerAt(d, w.x, w.y);
     const origin = originOf(d, parent.id);
-    const { ops, rootId } = insertOpsFor({ type: 'text', name: 'Text', text: 'Text', x: Math.round(w.x - origin.x), y: Math.round(w.y - origin.y - 10), fills: ['#111111'] } as unknown as NodeInput, parent.id);
+    // A text box like Canva's: a set width that long text wraps inside, never grows past.
+    const { ops, rootId } = insertOpsFor({ type: 'text', name: 'Text', text: 'Text', x: Math.round(w.x - origin.x), y: Math.round(w.y - origin.y - 10), width: TEXT_BOX_WIDTH, textSizing: 'auto-height', fills: ['#111111'] } as unknown as NodeInput, parent.id);
     if (await commit('Create text', ops)) {
       select([rootId]);
       useStore.setState({ editingText: rootId });
@@ -711,6 +729,18 @@ function layoutSlot(d: ArchaDocument, parentId: string, w: Pt, exclude: Set<stri
       : { x1: origin.x + parent.padding.left, y1: origin.y + at, x2: origin.x + parent.width - parent.padding.right, y2: origin.y + at },
   };
 }
+
+/** The handle of a single selected node under page point `w`: a resize handle, the rotate knob, or none. */
+function handleAt(d: ArchaDocument, n: Node, w: Pt, zoom: number): Handle | 'rotate' | null {
+  const tol = 6 / zoom;
+  const h = handlesFor(n).find((hh) => { const p = nodeHandlePoint(d, n.id, hh); return Math.abs(p.x - w.x) <= tol && Math.abs(p.y - w.y) <= tol; });
+  if (h) return h;
+  const k = rotateHandlePoint(d, n.id, zoom);
+  return Math.hypot(k.x - w.x, k.y - w.y) <= 7 / zoom ? 'rotate' : null;
+}
+
+/** Angle of `p` around `c`, in degrees (clockwise on screen, 0 = right). */
+const angleOf = (c: Pt, p: Pt) => (Math.atan2(p.y - c.y, p.x - c.x) * 180) / Math.PI;
 
 function sizingAfterResize(n: Node, h: Handle): Partial<Node> {
   const horiz = h.includes('e') || h.includes('w');

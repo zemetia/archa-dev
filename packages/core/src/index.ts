@@ -11,3 +11,4 @@ export * from './shapes';
 export * from './arrange';
 export * from './outline';
 export * from './connectors';
+export * from './text';

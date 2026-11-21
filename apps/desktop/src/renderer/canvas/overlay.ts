@@ -1,6 +1,6 @@
 import type { ArchaDocument } from '@archa/core';
 import { isContainer } from '@archa/schema';
-import { connectorEnds, handlePoint, HANDLES, pageRoot, selectionBounds, toScreen } from '../lib/geometry';
+import { connectorEnds, handlesFor, nodeCorners, nodeHandlePoint, pageRoot, pageRotation, rotateHandlePoint, selectionBounds, toScreen } from '../lib/geometry';
 import type { Camera } from '../lib/store';
 
 export type OverlayExtras = {
@@ -82,13 +82,17 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
     return true;
   };
 
-  // Hover.
-  if (v.hover && !v.selection.includes(v.hover) && doc.get(v.hover) && !route(v.hover, 1.5)) {
-    const b = box(doc.worldBounds(v.hover));
+  // A node's outline: its box, turned with it when it (or a parent) is rotated.
+  const outline = (id: string, width: number) => {
     ctx.strokeStyle = ACCENT;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
-  }
+    ctx.lineWidth = width;
+    if (!pageRotation(doc, id)) { const b = box(doc.worldBounds(id)); ctx.strokeRect(b.x, b.y, b.w, b.h); return; }
+    polyline(ctx, [...nodeCorners(doc, id), nodeCorners(doc, id)[0]!].map((p) => toScreen(cam, p.x, p.y)));
+    ctx.stroke();
+  };
+
+  // Hover.
+  if (v.hover && !v.selection.includes(v.hover) && doc.get(v.hover) && !route(v.hover, 1.5)) outline(v.hover, 1.5);
 
   // Drop target while dragging.
   if (x.dropTarget && doc.get(x.dropTarget)?.type === 'frame') {
@@ -118,14 +122,35 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
   } else if (sel.length && !v.editingText) {
     ctx.strokeStyle = ACCENT;
     ctx.lineWidth = 1;
-    if (sel.length > 1) for (const id of sel) { const b = box(doc.worldBounds(id)); ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w, b.h); }
+    if (sel.length > 1) {
+      for (const id of sel) outline(id, 1);
+      const b = box(selectionBounds(doc, sel)!);
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(b.x, b.y, b.w, b.h);
+    }
     const r = selectionBounds(doc, sel)!;
     const b = box(r);
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    let size = `${fmt(r.width)} × ${fmt(r.height)}`;
     if (sel.length === 1) {
-      for (const h of HANDLES) {
-        const p = handlePoint(r, h);
+      const id = sel[0]!;
+      const n = doc.require(id);
+      outline(id, 1.5);
+      // Rotate knob above the top edge, joined to it by a short stem.
+      const top = toScreen(cam, nodeHandlePoint(doc, id, 'n').x, nodeHandlePoint(doc, id, 'n').y);
+      const knob = rotateHandlePoint(doc, id, cam.zoom);
+      const k = toScreen(cam, knob.x, knob.y);
+      polyline(ctx, [top, k]);
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(k.x, k.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      for (const h of handlesFor(n)) {
+        const p = nodeHandlePoint(doc, id, h);
         const s = toScreen(cam, p.x, p.y);
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = ACCENT;
@@ -133,8 +158,9 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
         ctx.fillRect(s.x - 4, s.y - 4, 8, 8);
         ctx.strokeRect(s.x - 4, s.y - 4, 8, 8);
       }
+      size = `${fmt(n.width)} × ${fmt(n.height)}${n.rotation ? ` · ${fmt(n.rotation)}°` : ''}`;
     }
-    tag(ctx, `${fmt(r.width)} × ${fmt(r.height)}`, b.x + b.w / 2, b.y + b.h + 8, ACCENT, false, true);
+    tag(ctx, size, b.x + b.w / 2, b.y + b.h + 8, ACCENT, false, true);
   }
 
   if (x.connect) {

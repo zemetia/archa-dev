@@ -20,5 +20,10 @@ export function normalizeUrl(input: string): string {
 export function addressToUrl(input: string): string {
   const u = input.trim();
   const looksLikeAddress = !/\s/.test(u) && (/[.:/\\]/.test(u) || /^localhost$/i.test(u));
-  return looksLikeAddress ? normalizeUrl(u) : `https://www.google.com/search?q=${encodeURIComponent(u)}`;
+  return looksLikeAddress ? normalizeUrl(u) : searchUrl(u);
+}
+
+/** Google search URL; `images` opens the Images tab. */
+export function searchUrl(query: string, images = false): string {
+  return `https://www.google.com/search?q=${encodeURIComponent(query.trim())}${images ? '&udm=2' : ''}`;
 }

@@ -2,8 +2,9 @@ import { existsSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { nativeImage, session, WebContentsView, type BrowserWindow, type Rectangle } from 'electron';
 import type { BrowserCommand, BrowserReply, BrowserState } from '@archa/protocol';
+import { fetchImage, prepareImage, saveImage, type Fetched } from './browser-image';
 import { PAGE_LIB } from './browser-page';
-import { addressToUrl, normalizeUrl } from './browser-url';
+import { addressToUrl, normalizeUrl, searchUrl } from './browser-url';
 
 /*
  * In-app browser the agent drives (blueprint BROWSER). Pages live in WebContentsViews on the
@@ -350,7 +351,8 @@ export class BrowserManager {
 
   async run(cmd: BrowserCommand, agentName: string): Promise<BrowserReply> {
     this.agent = { name: agentName, action: cmd.action, ts: Date.now() };
-    await this.reveal();
+    // Fetching a picture by URL needs no page, so it does not pop the panel open.
+    if (!(cmd.action === 'download' && cmd.url && !cmd.capture)) await this.reveal();
     this.pushState();
     try {
       return await this.dispatch(cmd);
@@ -387,6 +389,8 @@ export class BrowserManager {
         'Next: snapshot for refs, or screenshot to look at it.',
       ].join('\n') };
     }
+    if (cmd.action === 'search') return this.search(cmd);
+    if (cmd.action === 'download' && !(cmd.ref || cmd.selector || cmd.text || cmd.capture)) return this.download(cmd, this.active());
 
     const tab = this.requireTab();
     const wc = tab.view.webContents;
@@ -439,6 +443,20 @@ export class BrowserManager {
           if (cmd.labels) await this.page(tab, 'A.hideLabels()').catch(() => {});
         }
         break;
+      }
+      case 'images': {
+        const list = await this.page<string[]>(tab, `A.images(${JSON.stringify({ minSize: cmd.minSize, viewportOnly: cmd.viewportOnly })})`);
+        out.push(list.length ? `${list.length} image${list.length === 1 ? '' : 's'} on the page${list.length >= 80 ? ' (first 80)' : ''}:` : 'No images on the page at that size — scroll to load more, lower minSize, or screenshot.');
+        out.push(...list);
+        if (list.length) out.push('Next: download {ref} to save one and see it, or place_image {ref} to put it on the canvas.');
+        break;
+      }
+      case 'download': {
+        const r = await this.download(cmd, tab);
+        out.push(r.text);
+        png = r.png;
+        out.push(...(await this.footer(tab, before)));
+        return { text: out.join('\n'), png, image: r.image };
       }
       case 'element': {
         if (!hasTarget) throw new Error('element needs a target: ref, selector or text.');
@@ -605,6 +623,64 @@ export class BrowserManager {
 
     out.push(...(await this.footer(tab, before)));
     return { text: out.join('\n'), png };
+  }
+
+  /** Google search in the active tab; lists the hits (web) or the pictures (images). */
+  private async search(cmd: BrowserCommand): Promise<BrowserReply> {
+    const query = (cmd.query ?? cmd.text ?? '').trim();
+    if (!query) throw new Error('search needs query.');
+    const images = cmd.kind === 'images';
+    const tab = this.active() ?? this.createTab();
+    this.activate(tab.id);
+    const note = await this.load(tab, searchUrl(query, images));
+    await this.settle(tab, images ? 600 : 300);
+    const out = [`Searched ${images ? 'Google Images' : 'Google'} for "${query}" (tab ${tab.id}).`];
+    if (note) out.push(note);
+    const list = await this.page<string[]>(tab, images ? 'A.images({ minSize: 60 })' : 'A.searchResults()').catch(() => []);
+    if (!list.length) out.push('Could not read results — screenshot to see the page (a consent screen or a captcha needs the person).');
+    else if (images) {
+      out.push(`${list.length} thumbnail${list.length === 1 ? '' : 's'}:`, ...list.slice(0, 40));
+      out.push('Thumbnails are small. Screenshot to look, click one for the large preview, then images again and download/place_image the big one.');
+    } else out.push(...list, 'Next: click a ref (or open its URL) to read the page.');
+    out.push(...(await this.footer(tab)));
+    return { text: out.join('\n') };
+  }
+
+  /** Saves a picture (URL, an element's image, or a screenshot of the element) and shows it to the agent. */
+  private async download(cmd: BrowserCommand, tab: Tab | null): Promise<BrowserReply> {
+    const target: Target = { ref: cmd.ref, selector: cmd.selector, text: cmd.text };
+    const hasTarget = !!(cmd.ref || cmd.selector || cmd.text);
+    let f: Fetched;
+    if (cmd.capture) {
+      if (!tab || !hasTarget) throw new Error('download capture needs a target on the open page: ref, selector or text.');
+      const r = await this.page<{ x: number; y: number; width: number; height: number; desc: string }>(tab, `A.rectOf(${JSON.stringify(target)})`);
+      if (r.width < 1 || r.height < 1) throw new Error(`${r.desc} has no size to capture.`);
+      const shot = await withTimeout(
+        this.cdp<{ data: string }>(tab, 'Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: true, clip: { x: r.x, y: r.y, width: r.width, height: r.height, scale: 1 } }),
+        15_000, 'Screenshot timed out — the page did not paint. Make sure the ArchaDev window is not minimised.',
+      );
+      f = { buf: Buffer.from(shot.data, 'base64'), mime: 'image/png', name: 'screenshot.png', source: `screenshot of ${r.desc} on ${tab.view.webContents.getURL()}` };
+    } else {
+      let src = cmd.url;
+      if (!src) {
+        if (!tab || !hasTarget) throw new Error('download needs url, or a target (ref from images/snapshot, selector or text) on the open page.');
+        const r = await this.page<{ src: string; desc: string }>(tab, `A.imageSource(${JSON.stringify(target)})`);
+        if (!r.src) throw new Error(`${r.desc} has no image file (drawn with CSS or canvas?). Use download {ref, capture: true} to save what it shows.`);
+        src = r.src;
+      }
+      this.setupSession();
+      f = await fetchImage(src, session.fromPartition(PARTITION), tab?.view.webContents.getURL());
+    }
+    const path = await saveImage(f, cmd.path);
+    const { image, preview } = await prepareImage(f, path);
+    const size = image.width ? `${image.width}×${image.height} px` : 'size unknown';
+    const text = [
+      `Saved ${path}`,
+      `${f.mime} · ${size} · ${(image.bytes / 1024).toFixed(0)} KB · from ${f.source.slice(0, 300)}`,
+      image.embed ? `Next: place_image {url: ${JSON.stringify(path)}} puts it on the canvas.` : `ArchaDev cannot show ${f.mime} on the canvas — use download {ref, capture: true} for a PNG of it instead.`,
+      ...(image.width && Math.max(image.width, image.height) < 400 ? ['This is small (a thumbnail?) — look for a larger version before using it in a design.'] : []),
+    ].join('\n');
+    return { text, png: preview, image };
   }
 
   private tabsCommand(cmd: BrowserCommand): BrowserReply {

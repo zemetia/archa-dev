@@ -14,7 +14,7 @@
 | 2 | Content | CanvasKit WebGL, tiled | `cache.invalidated` |
 | 3 | Code frames | Snapshot images; one live `<webview>` when focused | Snapshot change, focus |
 | 4 | Overlays: selection, hover, guides, measure, layout handles | Canvas 2D | Pointer, selection |
-| 5 | Presence: agent session cursors (human-like strokes, clicks, idle fidgets; `pose()` is tested for no frame jumps), name + action tags (`canvas/cursors.ts`, own Canvas 2D layer + rAF loop while a cursor is visible); comment pins, review markup | Canvas 2D / DOM | `agent.trail`, comments |
+| 5 | Presence: agent session cursors (human-like strokes, clicks, idle fidgets; `pose()` is tested for no frame jumps), name + action tags (`canvas/cursors.ts`, own Canvas 2D layer + rAF loop while a cursor is visible). An agent's `done` tool (`agent.done` event) marks its cursor done: it plays its last steps, lingers and fades even while the agent process stays warm; its next trail brings it back. Comment pins, review markup | Canvas 2D / DOM | `agent.trail`, `agent.done`, comments |
 | 6 | Editing UI: text caret, inline inputs, context menus | DOM | Editing |
 
 Each layer is its own element stacked with CSS; a change in one never repaints the others.
@@ -59,6 +59,8 @@ Top-level nodes with an animating subtree skip the frame bitmap cache while they
 
 Runs in the renderer against the view model (node bounds + paths sent by the core), never round-trips to the core.
 
+**Rotation** (`lib/geometry.ts`): each node's step is translate(x, y) then a turn about its centre; `hitPath` carries the pointer into each node's own box, so turned frames hit-test their children. The overlay draws the turned outline, handles at turned points and a rotate knob 22 px above the top edge (drag; Shift = 15° steps); resize reads the pointer along the node's own axes and keeps the opposite handle fixed on the page (`resizeFrame` / `resizedBox`). Turned top-level frames skip the bitmap cache and cull by their circumscribed circle. Exports: SVG `rotate(θ cx cy)`, HTML/Tailwind CSS `rotate`.
+
 **Moving between frames** (`Canvas.tsx` move gesture): the drop target is the deepest frame under the pointer (dragged layers excluded); the page when it is outside every frame. Inside an auto-layout parent a drag reorders while the pointer stays inside it and drags the layers out once it leaves. Dropping into auto layout inserts at the slot under the pointer (insert line shown); dropping into a free frame or the page keeps the world position and turns `fill` sizing into `fixed`. While dragging, layers whose frame clips them are drawn again on top, whole. Files dropped from Explorer land under the pointer, in the frame there → [FILE_FORMATS/04](../FILE_FORMATS/04-importers.md).
 
 ---
@@ -78,7 +80,7 @@ Wireframe nodes always render with the dashed "idea" style so they are never mis
 
 ---
 
-**Linked from:** [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md) · [APP_UI/01](../APP_UI/01-shell-tools-panels.md) · [CACHE/02](../CACHE/02-render-tiles.md) · [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md)
+**Linked from:** [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md) · [APP_UI/01](../APP_UI/01-shell-tools-panels.md) · [CACHE/02](../CACHE/02-render-tiles.md) · [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) · [MCP/01](../MCP/01-transports-tools.md)
 
-**Code:** [`apps/desktop/src/renderer/canvas/Canvas.tsx`](../../../apps/desktop/src/renderer/canvas/Canvas.tsx) · [`apps/desktop/src/renderer/canvas/changes.ts`](../../../apps/desktop/src/renderer/canvas/changes.ts) · [`apps/desktop/src/renderer/canvas/cursors.ts`](../../../apps/desktop/src/renderer/canvas/cursors.ts) · [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`apps/desktop/src/renderer/canvas/overlay.ts`](../../../apps/desktop/src/renderer/canvas/overlay.ts) · [`apps/desktop/src/renderer/lib/geometry.ts`](../../../apps/desktop/src/renderer/lib/geometry.ts) · [`apps/desktop/src/renderer/ui/LayersPanel.tsx`](../../../apps/desktop/src/renderer/ui/LayersPanel.tsx) · [`apps/desktop/test/changes.test.ts`](../../../apps/desktop/test/changes.test.ts) · [`apps/desktop/test/cursors.test.ts`](../../../apps/desktop/test/cursors.test.ts)
+**Code:** [`apps/desktop/src/renderer/canvas/Canvas.tsx`](../../../apps/desktop/src/renderer/canvas/Canvas.tsx) · [`apps/desktop/src/renderer/canvas/changes.ts`](../../../apps/desktop/src/renderer/canvas/changes.ts) · [`apps/desktop/src/renderer/canvas/cursors.ts`](../../../apps/desktop/src/renderer/canvas/cursors.ts) · [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`apps/desktop/src/renderer/canvas/overlay.ts`](../../../apps/desktop/src/renderer/canvas/overlay.ts) · [`apps/desktop/src/renderer/lib/geometry.ts`](../../../apps/desktop/src/renderer/lib/geometry.ts) · [`apps/desktop/src/renderer/ui/LayersPanel.tsx`](../../../apps/desktop/src/renderer/ui/LayersPanel.tsx) · [`apps/desktop/test/changes.test.ts`](../../../apps/desktop/test/changes.test.ts) · [`apps/desktop/test/cursors.test.ts`](../../../apps/desktop/test/cursors.test.ts) · [`apps/desktop/test/rotation.test.ts`](../../../apps/desktop/test/rotation.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
 <!-- backlinks:end -->
