@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react';
+import { extractSvg, isSvgMarkup } from '@archa/formats';
+import { SvgBlock } from './SvgBlock';
 
 /*
  * The small Markdown subset agents write in chat replies: headings, bullet / numbered lists,
- * code fences, **bold**, *italic* and `code`. Builds React elements — never raw HTML.
+ * code fences, **bold**, *italic* and `code`. Builds React elements — never raw HTML. Complete SVG
+ * (a ```svg fence or bare <svg>…</svg> lines) shows as the drawing, not as code.
  */
 
 export function Markdown({ text }: { text: string }) {
@@ -15,9 +18,21 @@ export function Markdown({ text }: { text: string }) {
       const code: string[] = [];
       i++;
       while (i < lines.length && !/^\s*```/.test(lines[i]!)) code.push(lines[i++]!);
+      const closed = i < lines.length;
       i++;
+      const svg = closed ? svgOf(code.join('\n')) : null;
+      if (svg) { blocks.push(<SvgBlock key={blocks.length} code={svg} />); continue; }
       blocks.push(<pre key={blocks.length} className="my-1 overflow-x-auto rounded-lg bg-panel-2 p-2 font-mono text-[11px] leading-relaxed text-fg-muted">{code.join('\n')}</pre>);
       continue;
+    }
+    if (/^\s*(<\?xml|<svg[\s>])/i.test(line)) {
+      const start = i;
+      while (i < lines.length && !/<\/svg>/i.test(lines[i]!)) i++;
+      if (i < lines.length) {
+        const svg = svgOf(lines.slice(start, ++i).join('\n'));
+        if (svg) { blocks.push(<SvgBlock key={blocks.length} code={svg} />); continue; }
+      }
+      i = start;
     }
     const heading = /^(#{1,4})\s+(.*)$/.exec(line);
     if (heading) {
@@ -45,11 +60,18 @@ export function Markdown({ text }: { text: string }) {
       continue;
     }
     if (!line.trim()) { i++; continue; }
-    const para: string[] = [];
-    while (i < lines.length && lines[i]!.trim() && !/^\s*(```|#{1,4}\s|[-*•]\s|\d+[.)]\s)/.test(lines[i]!)) para.push(lines[i++]!);
+    // The first line always belongs to the paragraph (an unfinished <svg> line would otherwise loop forever).
+    const para: string[] = [lines[i++]!];
+    while (i < lines.length && lines[i]!.trim() && !/^\s*(```|#{1,4}\s|[-*•]\s|\d+[.)]\s|<svg[\s>]|<\?xml)/i.test(lines[i]!)) para.push(lines[i++]!);
     blocks.push(<p key={blocks.length} className="my-1 first:mt-0">{inline(para.join('\n'))}</p>);
   }
   return <>{blocks}</>;
+}
+
+/** The SVG in a block when the block is just SVG markup (a finished one), else null. */
+function svgOf(text: string): string | null {
+  const t = text.trim();
+  return isSvgMarkup(t) ? extractSvg(t) : null;
 }
 
 function inline(text: string): ReactNode[] {

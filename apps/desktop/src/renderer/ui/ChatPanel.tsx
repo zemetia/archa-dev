@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeft, ArrowUp, BookOpen, Camera, Check, ChevronRight, Code2, Copy, Crosshair, FileText, Globe, Hexagon, History, ImagePlus, Layers, Loader2, MessageSquare, Network, ScanSearch, Settings, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowUp, BookOpen, Camera, Check, ChevronRight, Code2, Copy, Crosshair, FileText, Globe, Hexagon, History, ImagePlus, Layers, Loader2, MessageSquare, Network, ScanSearch, Settings, Shapes, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
 import { chatThreads, GUIDES, threadOf, type ChatImage, type ChatMessage, type ChatMode, type ModelOption } from '@archa/protocol';
 import { loadSkills, runOfThread, select, toast, useStore } from '../lib/store';
 import { imageFiles, MAX_CHAT_IMAGES, toChatImage } from '../lib/chatImages';
@@ -7,6 +7,8 @@ import { personaBg } from './persona';
 import { cn } from './controls';
 import { Dropdown, type DropdownOption } from './Dropdown';
 import { Markdown } from './Markdown';
+import { SvgBlock } from './SvgBlock';
+import { extractSvg, isSvgMarkup } from '@archa/formats';
 
 /*
  * Agent-first panel: launch a local agent on this canvas (launch mode) and see what
@@ -172,7 +174,7 @@ function MentionText({ text }: { text: string }) {
 
 const TOOL_ICON: Record<string, typeof Wrench> = {
   execute: Code2, inspect: ScanSearch, screenshot: Camera, get_state: Layers, read_guide: BookOpen, browser: Globe,
-  export_svg: Code2, delegate: Network, wait_workers: Network, tell_worker: Network,
+  export_svg: Code2, place_svg: Shapes, delegate: Network, wait_workers: Network, tell_worker: Network,
 };
 
 /**
@@ -202,7 +204,8 @@ function ToolRow({ m, pending }: { m: ToolItem; pending: boolean }) {
       </button>
       {open && (
         <div className="mb-1 ml-[18px] mt-0.5 space-y-1.5 rounded-lg border border-line bg-panel-2/60 p-1.5">
-          {m.detail && <DetailBlock label={tool === 'execute' ? 'Code' : 'Input'} text={m.detail} />}
+          {tool === 'place_svg' && m.detail && isSvgMarkup(m.detail) && extractSvg(m.detail) && <SvgBlock code={extractSvg(m.detail)!} />}
+          {m.detail && <DetailBlock label={tool === 'execute' ? 'Code' : tool === 'place_svg' ? 'SVG' : 'Input'} text={m.detail} />}
           {m.result !== undefined
             ? <DetailBlock label={m.failed ? 'Error' : 'Result'} text={m.result} danger={m.failed} />
             : pending && <div className="flex items-center gap-1.5 px-1 text-[10.5px] text-fg-subtle"><Loader2 size={10} className="animate-spin" />Waiting for the result…</div>}

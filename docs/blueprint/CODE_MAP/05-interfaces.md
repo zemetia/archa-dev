@@ -37,6 +37,7 @@ What exists **today**. Targets and full contracts: [ARCHITECTURE/02](../ARCHITEC
 | `inspect` | `agent.outline` | [MCP/01](../MCP/01-transports-tools.md) |
 | `read_guide` | — (compiled-in `design-guides.ts`) | [MCP/04](../MCP/04-local-skill.md) |
 | `screenshot` | `agent.screenshot` | [RENDERING/03](../RENDERING/03-export.md) |
+| `place_svg` | `agent.execute` (`svg(…)`) | [MCP/02](../MCP/02-execute-api.md) |
 | `export_svg` | `agent.exportSvg` | [RENDERING/03](../RENDERING/03-export.md) |
 | `say` | `agent.say` | [MCP/01](../MCP/01-transports-tools.md) |
 | `browser` | `agent.browser` | [BROWSER](../BROWSER.md) |

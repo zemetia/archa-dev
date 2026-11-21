@@ -75,7 +75,7 @@ export type Adapter = {
   models: (bin: string | null, env: Record<string, string>) => Promise<{ models: ModelOption[]; source: string }>;
 };
 
-export const MCP_TOOLS = ['get_state', 'execute', 'inspect', 'screenshot', 'export_svg', 'say', 'browser', 'read_guide', 'delegate', 'wait_workers', 'tell_worker'];
+export const MCP_TOOLS = ['get_state', 'execute', 'place_svg', 'inspect', 'screenshot', 'export_svg', 'say', 'browser', 'read_guide', 'delegate', 'wait_workers', 'tell_worker'];
 /** Windows caps a command line near 32 KiB. */
 const MAX_ARG_PROMPT = 28_000;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/[\]@+-]{0,127}$/;
@@ -338,6 +338,7 @@ function pretty(v: unknown): string | undefined {
 export function toolDetail(input: unknown): string | undefined {
   const i = (input ?? {}) as Record<string, unknown>;
   if (typeof i.code === 'string') return clipDetail(i.code);
+  if (typeof i.svg === 'string') return clipDetail(i.svg);
   return pretty(input);
 }
 
@@ -367,6 +368,7 @@ export function toolSummary(name: string, input: unknown): string {
   if (short === 'get_state') return 'get_state · read the canvas';
   if (short === 'inspect') return `inspect · ${i.node ? String(i.node) : 'whole page'}${i.depth !== undefined ? ` · depth ${String(i.depth)}` : ''}`;
   if (short === 'read_guide') return `read_guide · ${String(i.topic ?? '')}`;
+  if (short === 'place_svg') return `place_svg · ${String(i.name ?? (typeof i.svg === 'string' ? `${i.svg.length} chars` : ''))}`;
   if (short === 'export_svg') return `export_svg · ${String(i.node ?? '')}`;
   if (short === 'screenshot') return `screenshot · ${String(i.node ?? '')}`;
   if (short === 'say') return String(i.text ?? '');
@@ -385,7 +387,7 @@ const toml = (v: unknown) => JSON.stringify(v); // JSON strings/arrays are valid
  * agy does not put MCP tool descriptions in the model's context: it reads them from schema files,
  * which costs minutes of shell/file probing per run. Hand it the tools and the execute API up front.
  */
-const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, inspect { node?, depth? }, screenshot { node }, export_svg { node }, say { text }, read_guide { topic }. The canvas state is at the end of this message, so start designing right away; nothing outside the canvas is needed (no shell, files or browsing).
+const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, place_svg { svg, parent?, x?, y?, width?, height?, name?, mode? }, inspect { node?, depth? }, screenshot { node }, export_svg { node }, say { text }, read_guide { topic }. The canvas state is at the end of this message, so start designing right away; nothing outside the canvas is needed (no shell, files or browsing).
 
 execute tool documentation:
 ${EXECUTE_API_DOC}`;

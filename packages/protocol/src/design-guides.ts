@@ -3,7 +3,7 @@
  * pre-loaded into chat runs (blueprint MCP/04). All text is ours — written for ArchaDev's API.
  */
 
-export type GuideTopic = 'process' | 'layout' | 'taste' | 'type-color' | 'components' | 'icons' | 'landing' | 'web-app' | 'mobile';
+export type GuideTopic = 'process' | 'layout' | 'taste' | 'type-color' | 'components' | 'icons' | 'svg' | 'landing' | 'web-app' | 'mobile';
 
 export const GUIDES: Record<GuideTopic, { title: string; when: string; body: string }> = {
   process: {
@@ -67,6 +67,17 @@ Brand logos: icon("logos:github"), "logos:google", "logos:apple", "logos:stripe"
 Common names: search, menu, x, check, chevron-right, chevron-down, arrow-right, plus, minus, settings, user, users, bell, mail, home, calendar, clock, star, heart, shopping-cart, credit-card, lock, eye, trash-2, pencil, download, upload, share-2, filter, sliders-horizontal, layout-dashboard, bar-chart-3, file-text, folder, image, globe, phone, map-pin, sun, moon, log-out, zap, shield-check, sparkles.
 Sizes: 16 in dense UI and buttons, 20 in navs and lists, 24-32 in feature tiles (inside a tinted rounded frame). Colour = the text colour next to it, or the accent.`,
   },
+  svg: {
+    title: 'SVG drawings',
+    when: 'logos, illustrations, charts, diagrams, patterns, custom marks',
+    body: `When you write SVG, put it ON THE CANVAS — never in a text node, never only as code in your reply.
+Place it with the place_svg tool { svg, parent?, x?, y?, width?, height?, name? } (the markup goes in as a plain string, no escaping), or inside execute: svg(markup, parent, { width?, height?, x?, y?, name?, mode? }) -> id.
+The reply says how it landed: "N editable vector layers" (every shape is a path the person can recolour and move) or "an image" (exact look, not editable). Shapes stay vectors; gradients, <text>, <image>, filters, masks, clip paths, dashed strokes, <use> and nested <svg> make it an image. Prefer vectors: flat fills, strokes, opacity, transforms, arcs, <style> class rules all convert. Put words in real text nodes next to the drawing, not in <text>.
+Write clean SVG: a viewBox (e.g. 0 0 240 160), width/height or the width option for the size on the canvas, one shape per element, id on each meaningful shape (it becomes the layer name), colours from the design's palette as hex.
+Use icon() for icons and logos:<brand> for brand logos — write SVG only for things no set has: an illustration, a custom logo mark, a decorative pattern, a chart, a diagram.
+Charts: draw bars/lines/areas from the real values with exact coordinates; keep axis labels and numbers as text nodes beside the svg so they stay editable.
+Look at the screenshot in the reply; fix by placing a corrected SVG and removing the old one, or edit the vector layers with update().`,
+  },
   landing: {
     title: 'Landing page',
     when: 'marketing sites, heroes, pricing',
@@ -108,6 +119,7 @@ const KEYWORDS: Array<[GuideTopic, RegExp]> = [
   ['landing', /\b(landing|hero|marketing|website|homepage|home page|pricing|waitlist|portfolio|company profile|saas site)\b/i],
   ['web-app', /\b(dashboard|admin|analytics|table|crm|settings page|web ?app|saas|console|form|kanban|inbox|sidebar)\b/i],
   ['mobile', /\b(mobile|phone|ios|android|app screen|onboarding|splash|tab bar)\b/i],
+  ['svg', /\b(svg|vector|illustrations?|ilustrasi|logo ?marks?|chart|graph|grafik|diagram|pattern|drawing)\b/i],
 ];
 
 /** Guides worth pre-loading for a request (saves the agent a `read_guide` call on the first turn). */

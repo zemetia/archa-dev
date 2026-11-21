@@ -4,6 +4,7 @@ import {
   type ArchaDocument, type DocumentSession,
 } from '@archa/core';
 import { CUSTOM_SET, customIconNode, getIcon, ICON_SETS, iconNode, iconSetMeta, loadAllIconSets, loadedIconSet, parseIconRef, searchIcons, searchNames } from '@archa/icons';
+import { importSvg, isSvgMarkup, type SvgImportMode } from '@archa/formats';
 import { colorToHex, hexToColor, isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
 import type { ExecuteResult, TrailAction, TrailStep } from '@archa/protocol';
 import type { Connection, Workspace } from './workspace';
@@ -42,6 +43,7 @@ var wrap = (refs, frame) => __call('wrap', [[].concat(refs), frame || {}]);
 var outline = (ref, opts) => __call('outline', [ref, opts || {}]);
 var icon = (name, parent, opts) => __call('icon', [name, parent, opts || {}]);
 var icons = (query, opts) => __call('icons', [query, opts || {}]);
+var svg = (markup, parent, opts) => __call('svg', [markup, parent, opts || {}]);
 var print = (...v) => __call('print', [v.map((x) => typeof x === 'string' ? x : JSON.stringify(x))]);
 var find = (visitor, opts) => {
   if (!opts || !opts.under) throw new Error('find() needs { under: <frame id or name> } — use get_state for the page overview');
@@ -185,6 +187,12 @@ export class AgentExecutor {
         const [parent, input, index] = args as [string | undefined, NodeInput, number | undefined];
         if (!input || typeof input !== 'object' || !input.type) throw new Error('insert(parent, node): node needs a type ("frame" | "rect" | "ellipse" | "polygon" | "path" | "text" | "image" | "sticky" | "embed" | "group")');
         const parentId = parent ? ref(parent) : st.pageRoot;
+        // SVG markup written into a text node would show as code: place it as the drawing instead.
+        if (input.type === 'text' && typeof input.text === 'string' && isSvgMarkup(input.text)) {
+          const { text, name: n, x, y } = input as unknown as { text: string; name?: string; x?: number; y?: number };
+          st.output.push('insert: that text was SVG markup, so it was placed as a drawing — use svg(markup, parent, opts) for SVG');
+          return this.hostCall('svg', [text, parentId, { name: n, x, y, index }]);
+        }
         const { ops, rootId, created } = insertOpsFor(input, parentId, index ?? undefined);
         commit(ops);
         st.created.push(...created);
@@ -358,6 +366,24 @@ export class AgentExecutor {
         const { ops, rootId, created } = insertOpsFor(input, parentId, opts.index ?? undefined);
         commit(ops);
         st.created.push(...created);
+        step('create', rootId);
+        return rootId;
+      }
+      case 'svg': {
+        const [markup, parent, opts = {}] = args as [string, string | null | undefined, { width?: number; height?: number; x?: number; y?: number; index?: number; name?: string; mode?: SvgImportMode }];
+        if (typeof markup !== 'string' || !markup.trim()) throw new Error('svg(markup, parent, opts): markup is the SVG source as a string, e.g. svg(`<svg viewBox="0 0 24 24">…</svg>`, card)');
+        const parentId = parent ? ref(parent) : st.pageRoot;
+        const r = importSvg(markup, { name: opts.name, mode: opts.mode, width: Number(opts.width) || undefined, height: Number(opts.height) || undefined });
+        const input = r.node as NodeInput & { x?: number; y?: number };
+        if (opts.x !== undefined) input.x = Number(opts.x);
+        if (opts.y !== undefined) input.y = Number(opts.y);
+        if (opts.x === undefined && opts.y === undefined && parentId === st.pageRoot) Object.assign(input, findEmptySpace(doc, parentId, Number(input.width) || 100, Number(input.height) || 100));
+        const { ops, rootId, created } = insertOpsFor(input, parentId, opts.index ?? undefined);
+        commit(ops);
+        st.created.push(...created.slice(0, 1));
+        st.output.push(r.mode === 'vector'
+          ? `svg: "${created[0]!.name}" placed as ${r.shapes} editable vector layer${r.shapes === 1 ? '' : 's'}`
+          : `svg: "${created[0]!.name}" placed as an image${r.reason ? ` (vectors cannot keep ${r.reason})` : ''} — it looks exact but its shapes are not editable layers`);
         step('create', rootId);
         return rootId;
       }

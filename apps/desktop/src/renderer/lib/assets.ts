@@ -1,6 +1,6 @@
 import { CUSTOM_SET, customIconNode, getIcon, iconNode, loadIconSet, parseIconRef } from '@archa/icons';
 import type { NodeInput } from '@archa/schema';
-import { imageInput, place, svgToNodes } from './importers';
+import { imageInput, place, svgInput } from './importers';
 import { toast, useStore } from './store';
 
 /*
@@ -67,7 +67,7 @@ export async function uploadIcons(files: File[]) {
       if (/svg/i.test(f.type) || /\.svg$/i.test(f.name)) {
         const text = await readText(f);
         preview = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
-        node = svgToNodes(text, name) ?? await imageInput(preview, name);
+        node = svgInput(text, name);
       } else if (/^image\//.test(f.type)) {
         preview = await readDataUrl(f);
         node = await imageInput(preview, name);

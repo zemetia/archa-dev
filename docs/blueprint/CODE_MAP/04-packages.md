@@ -71,6 +71,7 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 | [`archa.ts`](../../../packages/formats/src/archa.ts) | `encodeArcha` / `decodeArcha` (fflate zip), migrations on open, `FormatError` | [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) |
 | [`migrations/archa/index.ts`](../../../packages/formats/src/migrations/archa/index.ts), [`v1-to-v2.ts`](../../../packages/formats/src/migrations/archa/v1-to-v2.ts), [`v2-to-v3.ts`](../../../packages/formats/src/migrations/archa/v2-to-v3.ts) | Pure JSON migrations per `formatVersion` step | [FILE_FORMATS/03](../FILE_FORMATS/03-migrations-validation.md) |
 | [`svg.ts`](../../../packages/formats/src/svg.ts) | `exportSvg` of a node subtree (text stays text) | [RENDERING/03](../RENDERING/03-export.md) |
+| [`import/svg.ts`](../../../packages/formats/src/import/svg.ts) | `importSvg` (SVG markup → vector frame or image node, DOM-free), `svgDataUrl`, `isSvgMarkup`, `extractSvg` | [FILE_FORMATS/04](../FILE_FORMATS/04-importers.md), [MCP/02](../MCP/02-execute-api.md) |
 | [`export/html.ts`](../../../packages/formats/src/export/html.ts) | Node → HTML + CSS or Tailwind; standalone page for PDF | [DESIGN_SYSTEM/04](../DESIGN_SYSTEM/04-code-export.md) |
 | [`export/tailwind.ts`](../../../packages/formats/src/export/tailwind.ts) | CSS declarations → Tailwind v4 classes | [DESIGN_SYSTEM/04](../DESIGN_SYSTEM/04-code-export.md) |
 | [`index.ts`](../../../packages/formats/src/index.ts) | Re-exports | [STRUCTURE/02](../STRUCTURE/02-packages.md) |
