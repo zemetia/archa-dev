@@ -121,6 +121,10 @@ describe('internal design guides', () => {
     expect(guidesFor('A pricing page with three tiers')).toEqual(['landing']);
     expect(guidesFor('Admin dashboard with a users table')).toEqual(['web-app']);
     expect(guidesFor('Mobile onboarding, 3 screens')).toEqual(['mobile']);
+    expect(guidesFor('tolong buatkan konten tentang archa dev dengan ratio 4:5 berisi 5-6 slide')).toEqual(['social']);
+    expect(guidesFor('Instagram carousel for a coffee shop landing page launch')).toEqual(['social']);
+    expect(guidesFor('Landing page with a pricing table')).toEqual(['landing', 'web-app']);
+    expect(guideText('social')).toContain('1080×1350');
     expect(guideText('icons')).toContain('icon(name');
     expect(guideText('nope')).toContain('Topics:');
   });

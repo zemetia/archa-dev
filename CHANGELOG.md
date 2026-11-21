@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### Social posts
+- **Instagram content looks like posts, not web pages.** A new built-in guide `social` rides along automatically when a request mentions Instagram, feed, carousel, reels, 4:5 or 9:16: 1080×1350 frames, headlines of 96–130px, nothing under 26px, one hero at extreme scale, one overlap, no badges or card grids.
+- The **design-social** skill now builds on the canvas first, with a checked example (`examples/canvas-post.js`).
+- **Finding skills**: `/` in the chat also searches skill descriptions — `/instagram`, `/feed` or `/carousel` find **design-social** — and shows up to 12 in a scrolling list.
+- **Fewer false warnings**: text contrast is measured against the shape behind it (a sticker, a card), and a crop at the edge can be marked as intended with `absolute: true`.
+
 ## [1.4.1] - 2026-11-21
 
 ### Brand
