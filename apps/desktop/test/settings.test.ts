@@ -8,7 +8,7 @@ import { McpServerManager } from '../src/core-host/mcp-servers';
 let root: string;
 let changes: number;
 const saved: Record<string, string | undefined> = {};
-const ENV = ['ARCHA_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'USERPROFILE', 'HOME'];
+const ENV = ['ARCHA_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'USERPROFILE', 'HOME', 'ARCHA_BUILTIN_SKILLS'];
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'archa-settings-'));
@@ -19,6 +19,7 @@ beforeEach(() => {
   process.env.USERPROFILE = root;
   process.env.HOME = root;
   changes = 0;
+  delete process.env.ARCHA_BUILTIN_SKILLS;
 });
 afterEach(() => {
   for (const k of ENV) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
@@ -59,6 +60,27 @@ describe('SkillManager', () => {
     m.delete({ id: 'archadev:brand' });
     expect(existsSync(join(skillsDir(), 'brand'))).toBe(false);
     expect(changes).toBe(4);
+  });
+
+  it('ships the repo design skills built in: listed, on by default, can be turned off, never deleted', () => {
+    // The real skills/ folder the installer bundles: every SKILL.md must parse.
+    process.env.ARCHA_BUILTIN_SKILLS = join(__dirname, '..', '..', '..', 'skills');
+    const m = new SkillManager(() => changes++);
+    const builtin = m.overview().skills.filter((s) => s.source === 'builtin');
+    expect(builtin.map((s) => s.name).sort()).toEqual(['design-flows', 'design-pdf', 'design-slides', 'design-social', 'design-svg', 'design-website']);
+    expect(builtin.every((s) => s.enabled && !s.error && s.description.length > 20)).toBe(true);
+    expect(m.forRun()).toHaveLength(6);
+
+    expect(m.update({ id: 'builtin:design-pdf', enabled: false }).enabled).toBe(false);
+    expect(m.forRunSkills().map((s) => s.name)).not.toContain('design-pdf');
+    expect(m.mention('design-pdf')?.body).toContain('#');
+    expect(() => m.delete({ id: 'builtin:design-pdf' })).toThrow(/Only ArchaDev/);
+
+    // A library skill of the same name replaces the built-in one in runs.
+    m.create({ name: 'design-website', description: 'Our own website rules', body: '# Ours' });
+    const run = m.forRunSkills().filter((s) => s.name === 'design-website');
+    expect(run.map((s) => s.source)).toEqual(['archadev']);
+    expect(m.mention('design-website')?.description).toBe('Our own website rules');
   });
 
   it('imports a folder once and rejects bad input', () => {

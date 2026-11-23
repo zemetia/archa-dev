@@ -7,13 +7,22 @@ directories:
 files:
   - out/**
   - package.json
+  # ONNX Runtime ships every platform's binaries; the Windows x64 build needs only its own.
+  - '!**/node_modules/onnxruntime-node/bin/napi-v*/{darwin,linux}/**'
+  - '!**/node_modules/onnxruntime-node/bin/napi-v*/win32/arm64/**'
 extraResources:
   # The `archa` CLI (MCP server for agents) ships inside the app.
   - from: ../cli/dist/archa.cjs
     to: cli/archa.cjs
+  # Built-in design skills (repo skills/), handed to every chat run unless turned off in Settings → Skills.
+  - from: ../../skills
+    to: skills
+    filter: ['**/*', '!**/node_modules/**']
 asar: true
 asarUnpack:
   - '**/*.wasm'
+  # Background removal runs ONNX Runtime natively; its binaries must sit outside the asar.
+  - '**/node_modules/onnxruntime-node/bin/**'
 fileAssociations:
   - ext: archa
     name: ArchaDev Document
@@ -27,6 +36,7 @@ win:
   target:
     - target: nsis
       arch: [x64]
+  icon: build/icon.ico
   artifactName: ArchaDev-Setup-${version}.${ext}
 nsis:
   oneClick: false

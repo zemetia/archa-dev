@@ -14,7 +14,7 @@ const KEYWORDS: Record<string, Record<string, string>> = {
   flex: { '1 1 0': 'flex-1' },
   'align-self': { stretch: 'self-stretch' },
   'align-items': { 'flex-start': 'items-start', center: 'items-center', 'flex-end': 'items-end' },
-  'justify-content': { center: 'justify-center', 'flex-end': 'justify-end', 'space-between': 'justify-between' },
+  'justify-content': { center: 'justify-center', 'flex-end': 'justify-end', 'space-between': 'justify-between', 'space-around': 'justify-around' },
   'text-align': { center: 'text-center', right: 'text-right' },
   'white-space': { pre: 'whitespace-pre', 'pre-wrap': 'whitespace-pre-wrap' },
   overflow: { hidden: 'overflow-hidden', visible: 'overflow-visible' },
@@ -30,7 +30,7 @@ const KEYWORDS: Record<string, Record<string, string>> = {
 const PREFIX: Record<string, string> = {
   left: 'left', top: 'top', width: 'w', height: 'h', gap: 'gap', 'border-radius': 'rounded',
   'background-color': 'bg', color: 'text', 'font-size': 'text', 'line-height': 'leading',
-  'letter-spacing': 'tracking', opacity: 'opacity', 'box-shadow': 'shadow',
+  'letter-spacing': 'tracking', opacity: 'opacity', 'box-shadow': 'shadow', rotate: 'rotate',
 };
 
 export function tailwindClasses(decls: Array<[string, string]>): string[] {

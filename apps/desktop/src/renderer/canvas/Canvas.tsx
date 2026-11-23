@@ -1,38 +1,51 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { insertOpsFor, runLayout } from '@archa/core';
-import { drawPage, FrameBitmapCache } from '@archa/render';
-import { isContainer, type Node, type NodeInput, type Op } from '@archa/schema';
+import { attachedBox, connectorRoute, insertOpsFor, routeConnectors, runLayout, type ArchaDocument } from '@archa/core';
+import { drawNode, drawPage, FrameBitmapCache } from '@archa/render';
+import { isContainer, type ConnectorEnd, type ConnectorNode, type Node, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, setTool, useStore, type Camera, type Tool } from '../lib/store';
-import { containerAt, fitCamera, handleCursor, handlePoint, HANDLES, hitPath, originOf, pageRoot, pickFromPath, selectionBounds, toWorld, type Handle } from '../lib/geometry';
+import { applyMat, connectorEnds, containerAt, fitCamera, handlesFor, hitPath, nodeHandlePoint, nodeMatrix, normalizeAngle, originOf, pageRoot, pageRotation, pickFromPath, resizedBox, resizeFrame, rotateHandlePoint, toWorld, turnedCursor, type Handle, type ResizeFrame } from '../lib/geometry';
 import { drawOverlay, type OverlayExtras } from './overlay';
 import { cursorAlive, drawCursors } from './cursors';
+import * as changes from './changes';
 import { TextEditor } from './TextEditor';
-import { EmbedLayer } from './EmbedLayer';
+import { EmbedLayer, scrollEmbed } from './EmbedLayer';
 import { CommentsLayer } from './CommentsLayer';
-import { onImageLoaded } from '@archa/render';
-import { onFontsLoaded } from '../lib/fonts';
+import { onFontLoaded, onImageLoaded } from '@archa/render';
 import { penBounds, penPath, type PenPoint } from './pen';
 import { scaleOps } from './scale';
+import { ASSET_MIME, assetStyle, insertAsset } from '../lib/assets';
+import { dropFiles } from '../lib/importers';
 
 type Pt = { x: number; y: number };
 type Gesture =
   | { kind: 'pan'; sx: number; sy: number; cam: Camera }
-  | { kind: 'move'; start: Pt; ids: string[]; orig: Map<string, Pt>; moved: boolean; reorder: { parentId: string; index: number } | null; drop: string | null }
-  | { kind: 'resize'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt }
+  | { kind: 'move'; start: Pt; ids: string[]; orig: Map<string, Pt>; ends: Map<string, Ends>; moved: boolean; reorder: { parentId: string; index: number } | null; drop: string | null }
+  /** Drawing a new connector (id null) or dragging one end of an existing one. */
+  | { kind: 'connect'; id: string | null; which: 'start' | 'end'; fixed: ConnectorEnd; start: Pt; end: ConnectorEnd | null }
+  /** `text`: a corner drag on text scales it (font size with the box), Canva-like. */
+  | { kind: 'resize'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt; frame: ResizeFrame; text: { fontSize: number; letterSpacing: number } | null }
+  | { kind: 'rotate'; id: string; center: Pt; startAngle: number; orig: number }
   | { kind: 'marquee'; start: Pt; cur: Pt }
   | { kind: 'create'; tool: CreateTool; start: Pt; cur: Pt; parentId: string }
   | { kind: 'scale'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt; cur: { x: number; y: number; width: number; height: number } }
   | { kind: 'pen'; index: number };
 
+type Ends = { start: ConnectorEnd; end: ConnectorEnd };
 type CreateTool = 'frame' | 'rect' | 'ellipse' | 'polygon' | 'sticky' | 'embed';
 const CREATE_TOOLS: ReadonlySet<Tool> = new Set<Tool>(['frame', 'rect', 'ellipse', 'polygon', 'sticky', 'embed']);
 /** Size used when the person clicks instead of dragging (shapes centre on the click, the rest start there). */
-const CLICK_SIZE: Record<CreateTool, [number, number]> = { frame: [400, 300], rect: [100, 100], ellipse: [100, 100], polygon: [100, 100], sticky: [200, 200], embed: [1280, 800] };
+const CLICK_SIZE: Record<CreateTool, [number, number]> = { frame: [400, 300], rect: [100, 100], ellipse: [100, 100], polygon: [100, 100], sticky: [200, 200], embed: [390, 844] };
 const NAMES: Record<CreateTool, string> = { frame: 'Frame', rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', sticky: 'Sticky note', embed: 'Web page' };
 
 const cache = new FrameBitmapCache();
+/** Drops cached frame bitmaps after a live (uncommitted) edit of the view model, e.g. a slider preview. */
+export const invalidateCanvas = () => cache.invalidate();
+/** Width of a text box placed with the text tool. */
+const TEXT_BOX_WIDTH = 240;
 const DEFAULT_FILL: Record<string, string> = { frame: '#ffffff', rect: '#d4d4d8', ellipse: '#d4d4d8', polygon: '#d4d4d8', sticky: '#fde68a' };
 let frameCounter = 1;
+/** Line style of connectors drawn with the tool. */
+const CONNECTOR_STROKE = { color: '#71717a', width: 2, align: 'center' };
 
 export function Canvas() {
   const wrap = useRef<HTMLDivElement>(null);
@@ -58,6 +71,7 @@ export function Canvas() {
   const fitRequest = useStore((s) => s.fitRequest);
   const editingText = useStore((s) => s.editingText);
   const pixelGrid = useStore((s) => s.pixelGrid);
+  const bgJob = useStore((s) => s.bgJob);
 
   const redraw = () => {
     cancelAnimationFrame(frame.current);
@@ -70,11 +84,16 @@ export function Canvas() {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-canvas') || '#1b1b1e';
       ctx.fillRect(0, 0, c.width, c.height);
-      if (st.doc) drawPage(ctx, st.doc, pageRoot(st.doc), st.camera, cache, dpr, size);
+      const now = performance.now();
+      if (st.doc) drawPage(ctx, st.doc, pageRoot(st.doc), st.camera, cache, dpr, size, changes.frame(st.doc, now));
+      changes.drawGhosts(ctx, st.camera, dpr, now);
+      if (st.doc && extras.current.lifted) drawLifted(ctx, st.doc, extras.current.lifted, st.camera, dpr);
       const octx = o.getContext('2d')!;
       octx.setTransform(dpr, 0, 0, dpr, 0, 0);
       octx.clearRect(0, 0, size.width, size.height);
       if (st.doc) drawOverlay(octx, st.doc, st, extras.current);
+      // Change animations keep painting until they settle.
+      if (changes.playing()) redraw();
     });
   };
 
@@ -103,10 +122,12 @@ export function Canvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitRequest]);
 
+  // The text editor hides its node in the mirror without a new revision; drop memoised frame hashes so cached frame bitmaps stop showing the old text under the editor.
+  useEffect(() => cache.invalidate(), [editingText]);
   useEffect(redraw, [doc, rev, camera, selection, hover, editingText, size, pixelGrid]);
 
   useEffect(() => onImageLoaded(() => { cache.invalidate(); redraw(); }));
-  useEffect(() => onFontsLoaded(() => { cache.invalidate(); redraw(); }));
+  useEffect(() => onFontLoaded(() => { cache.invalidate(); redraw(); }));
 
   // Leaving the pen tool finishes the path in progress.
   useEffect(() => {
@@ -152,6 +173,14 @@ export function Canvas() {
     } else {
       const dx = e.shiftKey ? e.deltaY : e.deltaX;
       const dy = e.shiftKey ? 0 : e.deltaY;
+      // A wheel over the selected web page scrolls the page, not the canvas.
+      const st = useStore.getState();
+      const sel = st.selection.length === 1 ? st.doc?.get(st.selection[0]!) : undefined;
+      if (sel?.type === 'embed') {
+        const w = toWorld(cam, sx, sy);
+        const lx = w.x - sel.x, ly = w.y - sel.y;
+        if (lx >= 0 && ly >= 0 && lx <= sel.width && ly <= sel.height && scrollEmbed(sel.id, lx, ly, dx, dy)) return;
+      }
       useStore.setState({ camera: { ...cam, x: cam.x - dx, y: cam.y - dy } });
     }
   };
@@ -210,21 +239,37 @@ export function Canvas() {
       void createText(w);
       return;
     }
+    if (st.tool === 'connector') {
+      gesture.current = { kind: 'connect', id: null, which: 'end', fixed: endAt(d, w, e.ctrlKey || e.metaKey).end, start: w, end: null };
+      return;
+    }
+
+    // Ends of a selected connector: drag to reattach.
+    const selConn = st.selection.length === 1 ? d.get(st.selection[0]!) : undefined;
+    if (selConn?.type === 'connector') {
+      const which = connectorHandleAt(d, selConn, w, st.camera.zoom);
+      if (which) {
+        gesture.current = { kind: 'connect', id: selConn.id, which, fixed: which === 'start' ? selConn.end : selConn.start, start: w, end: null };
+        return;
+      }
+    }
 
     // Resize handle of a single selection.
-    if (st.selection.length === 1) {
-      const r = selectionBounds(d, st.selection)!;
-      const tol = 6 / st.camera.zoom;
-      for (const h of HANDLES) {
-        const p = handlePoint(r, h);
-        if (Math.abs(p.x - w.x) <= tol && Math.abs(p.y - w.y) <= tol) {
-          const n = d.require(st.selection[0]!);
-          const orig = { x: n.x, y: n.y, width: n.width, height: n.height };
-          gesture.current = st.tool === 'scale'
-            ? { kind: 'scale', id: n.id, handle: h, orig, start: w, cur: d.worldBounds(n.id) }
-            : { kind: 'resize', id: n.id, handle: h, orig, start: w };
-          return;
-        }
+    if (st.selection.length === 1 && selConn?.type !== 'connector') {
+      const n = d.require(st.selection[0]!);
+      const handle = handleAt(d, n, w, st.camera.zoom);
+      if (handle === 'rotate') {
+        const m = nodeMatrix(d, n.id);
+        const center = applyMat(m, n.width / 2, n.height / 2);
+        gesture.current = { kind: 'rotate', id: n.id, center, startAngle: angleOf(center, w), orig: n.rotation };
+        return;
+      }
+      if (handle) {
+        const orig = { x: n.x, y: n.y, width: n.width, height: n.height };
+        gesture.current = st.tool === 'scale'
+          ? { kind: 'scale', id: n.id, handle, orig, start: w, cur: d.worldBounds(n.id) }
+          : { kind: 'resize', id: n.id, handle, orig, start: w, frame: resizeFrame(d, n.id, handle), text: n.type === 'text' && handle.length === 2 ? { fontSize: n.fontSize, letterSpacing: n.letterSpacing } : null };
+        return;
       }
     }
 
@@ -246,7 +291,8 @@ export function Canvas() {
     const ids = useStore.getState().selection;
     picked = d.require(ids[0]!);
     const orig = new Map(ids.map((id) => [id, { x: d.require(id).x, y: d.require(id).y }]));
-    gesture.current = { kind: 'move', start: w, ids, orig, moved: false, reorder: null, drop: null };
+    const ends = new Map(ids.flatMap((id) => { const n = d.require(id); return n.type === 'connector' ? [[id, { start: n.start, end: n.end }] as const] : []; }));
+    gesture.current = { kind: 'move', start: w, ids, orig, ends, moved: false, reorder: null, drop: null };
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -260,11 +306,13 @@ export function Canvas() {
     if (!g) {
       if (st.tool === 'pen' && pen.current.length) showPen(w);
       if ((st.tool !== 'select' && st.tool !== 'scale') || spaceDown.current) { setCursor(st.tool === 'hand' || spaceDown.current ? 'grab' : 'crosshair'); return; }
-      if (st.selection.length === 1) {
-        const r = selectionBounds(d, st.selection)!;
-        const tol = 6 / st.camera.zoom;
-        const h = HANDLES.find((hh) => { const p = handlePoint(r, hh); return Math.abs(p.x - w.x) <= tol && Math.abs(p.y - w.y) <= tol; });
-        if (h) { setCursor(handleCursor[h]); return; }
+      const hovered = st.selection.length === 1 ? d.get(st.selection[0]!) : undefined;
+      if (hovered?.type === 'connector') {
+        if (connectorHandleAt(d, hovered, w, st.camera.zoom)) { setCursor('crosshair'); return; }
+      } else if (st.selection.length === 1) {
+        const n = d.require(st.selection[0]!);
+        const h = handleAt(d, n, w, st.camera.zoom);
+        if (h) { setCursor(h === 'rotate' ? 'grab' : turnedCursor(h, pageRotation(d, n.id))); return; }
       }
       setCursor('default');
       const label = labelHit(d, st.camera, sx, sy);
@@ -298,6 +346,25 @@ export function Canvas() {
       g.cur = { x, y, width: Math.max(1, width), height: Math.max(1, height) };
       extras.current = { create: g.cur };
       redraw();
+    } else if (g.kind === 'connect') {
+      const hit = endAt(d, w, e.ctrlKey || e.metaKey);
+      // One node at both ends makes no line: that end stays free.
+      if (hit.end.nodeId && hit.end.nodeId === g.fixed.nodeId) { hit.end = { ...hit.end, nodeId: null }; hit.box = null; }
+      if (g.id) {
+        const n = d.require(g.id) as ConnectorNode;
+        const o = originOf(d, n.parentId!);
+        g.end = { ...hit.end, x: round2(w.x - o.x), y: round2(w.y - o.y) };
+        d.nodes.set(g.id, { ...n, [g.which]: g.end });
+        routeConnectors(d);
+        extras.current = { connect: { points: null, target: hit.box } };
+        cache.invalidate();
+        useStore.setState((s) => ({ rev: s.rev + 1 }));
+      } else {
+        g.end = hit.end;
+        const from = { box: attachedBox(d, g.fixed.nodeId), point: { x: g.fixed.x, y: g.fixed.y }, side: g.fixed.side };
+        extras.current = { connect: { points: connectorRoute(from, { box: hit.box, point: w, side: 'auto' }, 'elbow'), target: hit.box } };
+        redraw();
+      }
     } else if (g.kind === 'pan') {
       useStore.setState({ camera: { ...g.cam, x: g.cam.x + sx - g.sx, y: g.cam.y + sy - g.sy } });
     } else if (g.kind === 'marquee' || g.kind === 'create') {
@@ -310,52 +377,62 @@ export function Canvas() {
       g.moved = true;
       const first = d.require(g.ids[0]!);
       const parent = first.parentId ? d.get(first.parentId) : undefined;
-      if (parent?.type === 'frame' && parent.layout !== 'none' && !first.absolute && g.ids.every((id) => d.get(id)?.parentId === parent.id)) {
-        // Inside auto-layout: dragging reorders instead of moving.
-        const origin = originOf(d, parent.id);
-        const row = parent.layout === 'row';
-        const pos = row ? w.x - origin.x : w.y - origin.y;
-        const siblings = d.children(parent.id).filter((s) => !g.ids.includes(s.id));
-        let index = siblings.findIndex((s) => pos < (row ? s.x + s.width / 2 : s.y + s.height / 2));
-        if (index < 0) index = siblings.length;
-        g.reorder = { parentId: parent.id, index };
-        const before = siblings[index - 1], after = siblings[index];
-        const at = after ? (row ? after.x : after.y) - parent.gap / 2 : before ? (row ? before.x + before.width : before.y + before.height) + parent.gap / 2 : (row ? parent.padding.left : parent.padding.top);
-        extras.current = { insertLine: row
-          ? { x1: origin.x + at, y1: origin.y + parent.padding.top, x2: origin.x + at, y2: origin.y + parent.height - parent.padding.bottom }
-          : { x1: origin.x + parent.padding.left, y1: origin.y + at, x2: origin.x + parent.width - parent.padding.right, y2: origin.y + at } };
-        redraw();
+      // Inside auto-layout: dragging reorders while the pointer stays in the frame; leaving it drags the layers out.
+      if (parent?.type === 'frame' && parent.layout !== 'none' && !first.absolute && g.ids.every((id) => d.get(id)?.parentId === parent.id) && inside(d.worldBounds(parent.id), w)) {
+        // Back inside after a trip out: the layers return to their slots.
+        for (const id of g.ids) { const o = g.orig.get(id)!; const n = d.require(id); if (n.x !== o.x || n.y !== o.y) d.nodes.set(id, { ...n, x: o.x, y: o.y }); }
+        const slot = layoutSlot(d, parent.id, w, new Set(g.ids));
+        g.reorder = { parentId: parent.id, index: slot.index };
+        g.drop = null;
+        extras.current = { insertLine: slot.line };
+        cache.invalidate();
+        useStore.setState((s) => ({ rev: s.rev + 1 }));
         return;
       }
+      g.reorder = null;
       for (const id of g.ids) {
         const o = g.orig.get(id)!;
         const n = d.require(id);
-        d.nodes.set(id, { ...n, x: Math.round(o.x + dx), y: Math.round(o.y + dy) });
+        const ends = g.ends.get(id);
+        if (n.type === 'connector' && ends) {
+          // Free ends follow the drag; attached ends stay on their nodes.
+          const shift = (en: ConnectorEnd) => (attachedBox(d, en.nodeId, id) ? en : { ...en, x: round2(en.x + dx), y: round2(en.y + dy) });
+          d.nodes.set(id, { ...n, start: shift(ends.start), end: shift(ends.end) });
+        } else d.nodes.set(id, { ...n, x: Math.round(o.x + dx), y: Math.round(o.y + dy) });
       }
+      routeConnectors(d);
       const exclude = new Set(g.ids);
       const target = containerAt(d, w.x, w.y, exclude);
       g.drop = target.id !== first.parentId ? target.id : null;
-      extras.current = { dropTarget: g.drop };
+      // Dropping into an auto-layout frame shows where the layers will land.
+      const slot = g.drop && target.type === 'frame' && target.layout !== 'none' ? layoutSlot(d, target.id, w, exclude) : null;
+      // The dragged layers draw on top, so a clipping frame never hides them on the way out.
+      extras.current = { dropTarget: g.drop, insertLine: slot?.line, lifted: g.ids };
       cache.invalidate();
       useStore.setState((s) => ({ rev: s.rev + 1 }));
     } else if (g.kind === 'resize') {
       const n = d.require(g.id);
-      const o = g.orig;
-      const dx = w.x - g.start.x, dy = w.y - g.start.y;
-      let { x, y, width, height } = o;
-      if (g.handle.includes('e')) width = o.width + dx;
-      if (g.handle.includes('s')) height = o.height + dy;
-      if (g.handle.includes('w')) { width = o.width - dx; x = o.x + dx; }
-      if (g.handle.includes('n')) { height = o.height - dy; y = o.y + dy; }
-      if (e.shiftKey && o.width && o.height) {
-        const ratio = o.width / o.height;
-        if (g.handle === 'n' || g.handle === 's') width = height * ratio; else height = width / ratio;
+      // Corners scale text (font with the box); Shift keeps the ratio for everything else.
+      const b = resizedBox(g.frame, g.handle, g.orig, w.x - g.start.x, w.y - g.start.y, !!g.text || e.shiftKey);
+      const turned = !!pageRotation(d, g.id);
+      const snap = (v: number) => (turned ? round2(v) : Math.round(v));
+      const patch: Record<string, unknown> = { x: snap(b.x), y: snap(b.y), width: Math.max(1, snap(b.width)), height: Math.max(1, snap(b.height)) };
+      let sizing = sizingAfterResize(n, g.handle);
+      if (g.text && n.type === 'text') {
+        const k = b.width / (g.orig.width || 1);
+        Object.assign(patch, { fontSize: round2(Math.max(1, g.text.fontSize * k)), letterSpacing: round2(g.text.letterSpacing * k) });
+        // Scaling keeps how the text sizes itself: auto-width stays auto-width, everything else wraps at the new width.
+        sizing = n.textSizing === 'auto-width' ? {} : { sizing: { ...n.sizing, horizontal: 'fixed' }, textSizing: 'auto-height' } as Partial<Node>;
       }
-      width = Math.max(1, Math.round(width));
-      height = Math.max(1, Math.round(height));
-      const patch: Partial<Node> = { x: Math.round(x), y: Math.round(y), width, height };
-      d.nodes.set(g.id, { ...n, ...patch, ...sizingAfterResize(n, g.handle) } as Node);
+      d.nodes.set(g.id, { ...n, ...patch, ...sizing } as Node);
       runLayout(d);
+      cache.invalidate();
+      useStore.setState((s) => ({ rev: s.rev + 1 }));
+    } else if (g.kind === 'rotate') {
+      const n = d.require(g.id);
+      let deg = g.orig + angleOf(g.center, w) - g.startAngle;
+      if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+      d.nodes.set(g.id, { ...n, rotation: normalizeAngle(deg) } as Node);
       cache.invalidate();
       useStore.setState((s) => ({ rev: s.rev + 1 }));
     }
@@ -374,6 +451,24 @@ export function Canvas() {
       redraw();
       const ops = scaleOps(d, g.id, g.cur);
       if (ops.length) await commit('Scale', ops);
+      return;
+    }
+
+    if (g.kind === 'connect') {
+      redraw();
+      if (!g.end) return;
+      if (g.id) {
+        const n = d.require(g.id) as ConnectorNode;
+        await commit('Reconnect', [{ op: 'update', id: g.id, patch: { [g.which]: n[g.which] } }]);
+        return;
+      }
+      setTool('select');
+      setCursor('default');
+      const w = toWorld(st.camera, pointer(e).sx, pointer(e).sy);
+      if (Math.hypot(w.x - g.start.x, w.y - g.start.y) * st.camera.zoom < 4) return;
+      const input = { type: 'connector', name: 'Connector', start: g.fixed, end: g.end, strokes: [CONNECTOR_STROKE] } as unknown as NodeInput;
+      const { ops, rootId } = insertOpsFor(input, pageRoot(d));
+      if (await commit('Create connector', ops)) select([rootId]);
       return;
     }
 
@@ -398,7 +493,7 @@ export function Canvas() {
       const name = g.tool === 'frame' ? `Frame ${frameCounter++}` : NAMES[g.tool];
       const extra: Record<string, unknown> = g.tool === 'sticky'
         ? { effects: [{ color: '#00000026', x: 0, y: 2, blur: 8 }] }
-        : g.tool === 'embed' ? { url: 'https://example.com' } : {};
+        : g.tool === 'embed' ? { url: '' } : {};
       const fills = DEFAULT_FILL[g.tool] ? { fills: [DEFAULT_FILL[g.tool]] } : {};
       const input = { type: g.tool, name, x: Math.round(r.x - origin.x), y: Math.round(r.y - origin.y), width: Math.round(r.width), height: Math.round(r.height), ...fills, ...extra } as unknown as NodeInput;
       const { ops, rootId } = insertOpsFor(input, g.parentId);
@@ -419,27 +514,46 @@ export function Canvas() {
         await commit('Reorder', ops);
         return;
       }
+      const target = g.drop ? d.require(g.drop) : null;
+      const auto = target?.type === 'frame' && target.layout !== 'none';
+      const w = toWorld(st.camera, pointer(e).sx, pointer(e).sy);
+      const slot = target && auto ? layoutSlot(d, target.id, w, new Set(g.ids)).index : undefined;
+      let placed = 0;
       for (const id of g.ids) {
         const n = d.require(id);
-        if (g.drop) {
-          const target = d.require(g.drop);
+        if (n.type === 'connector') {
+          const o = g.ends.get(id);
+          if (o && JSON.stringify({ s: n.start, e: n.end }) !== JSON.stringify({ s: o.start, e: o.end })) ops.push({ op: 'update', id, patch: { start: n.start, end: n.end } });
+          continue;
+        }
+        if (target) {
           const world = d.worldBounds(id);
-          const origin = originOf(d, g.drop);
-          ops.push({ op: 'move', id, parentId: g.drop });
-          if (!(target.type === 'frame' && target.layout !== 'none')) ops.push({ op: 'update', id, patch: { x: Math.round(world.x - origin.x), y: Math.round(world.y - origin.y) } });
+          const origin = originOf(d, target.id);
+          ops.push({ op: 'move', id, parentId: target.id, ...(slot !== undefined ? { index: slot + placed++ } : {}) });
+          if (auto) continue;
+          // Out of auto layout: keep the size it had there ("fill" means nothing in a free frame).
+          const fixed = n.sizing.horizontal === 'fill' || n.sizing.vertical === 'fill'
+            ? { sizing: { horizontal: n.sizing.horizontal === 'fill' ? 'fixed' : n.sizing.horizontal, vertical: n.sizing.vertical === 'fill' ? 'fixed' : n.sizing.vertical }, width: n.width, height: n.height }
+            : {};
+          ops.push({ op: 'update', id, patch: { x: Math.round(world.x - origin.x), y: Math.round(world.y - origin.y), ...fixed } });
         } else if (n.x !== g.orig.get(id)!.x || n.y !== g.orig.get(id)!.y) {
           ops.push({ op: 'update', id, patch: { x: n.x, y: n.y } });
         }
       }
-      await commit(g.drop ? 'Move into frame' : 'Move', ops);
+      await commit(!target ? 'Move' : target.type === 'page' ? 'Move out of frame' : 'Move into frame', ops);
       return;
     }
 
     if (g.kind === 'resize') {
       const n = d.require(g.id);
       const patch: Record<string, unknown> = { x: n.x, y: n.y, width: n.width, height: n.height, sizing: n.sizing };
-      if (n.type === 'text') patch.textSizing = n.textSizing;
-      await commit('Resize', [{ op: 'update', id: g.id, patch }]);
+      if (n.type === 'text') Object.assign(patch, { textSizing: n.textSizing, fontSize: n.fontSize, letterSpacing: n.letterSpacing });
+      await commit(g.text ? 'Scale text' : 'Resize', [{ op: 'update', id: g.id, patch }]);
+    }
+
+    if (g.kind === 'rotate') {
+      const n = d.require(g.id);
+      if (n.rotation !== g.orig) await commit('Rotate', [{ op: 'update', id: g.id, patch: { rotation: n.rotation } }]);
     }
   };
 
@@ -505,7 +619,8 @@ export function Canvas() {
     const d = useStore.getState().doc!;
     const parent = containerAt(d, w.x, w.y);
     const origin = originOf(d, parent.id);
-    const { ops, rootId } = insertOpsFor({ type: 'text', name: 'Text', text: 'Text', x: Math.round(w.x - origin.x), y: Math.round(w.y - origin.y - 10), fills: ['#111111'] } as unknown as NodeInput, parent.id);
+    // A text box like Canva's: a set width that long text wraps inside, never grows past.
+    const { ops, rootId } = insertOpsFor({ type: 'text', name: 'Text', text: 'Text', x: Math.round(w.x - origin.x), y: Math.round(w.y - origin.y - 10), width: TEXT_BOX_WIDTH, textSizing: 'auto-height', fills: ['#111111'] } as unknown as NodeInput, parent.id);
     if (await commit('Create text', ops)) {
       select([rootId]);
       useStore.setState({ editingText: rootId });
@@ -529,14 +644,48 @@ export function Canvas() {
   return (
     <div ref={wrap} className="absolute inset-0 overflow-hidden bg-canvas" style={{ cursor }}
       onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-      onPointerLeave={() => useStore.setState({ hover: null })} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}>
+      onPointerLeave={() => useStore.setState({ hover: null })} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(ASSET_MIME) && !e.dataTransfer.types.includes('Files')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        // Photo files show the frame they will land in.
+        if (e.dataTransfer.types.includes('Files') && useStore.getState().doc) {
+          const r = wrap.current!.getBoundingClientRect();
+          const w = toWorld(useStore.getState().camera, e.clientX - r.left, e.clientY - r.top);
+          const target = containerAt(useStore.getState().doc!, w.x, w.y);
+          const drop = target.type === 'frame' ? target.id : null;
+          if (extras.current.dropTarget !== drop) { extras.current = { dropTarget: drop }; redraw(); }
+        }
+      }}
+      onDragLeave={() => { if (extras.current.dropTarget) { extras.current = {}; redraw(); } }}
+      onDrop={(e) => {
+        e.preventDefault();
+        extras.current = {};
+        redraw();
+        const r = wrap.current!.getBoundingClientRect();
+        const at = toWorld(useStore.getState().camera, e.clientX - r.left, e.clientY - r.top);
+        // An icon dragged from the Assets panel lands where it is dropped.
+        const ref = e.dataTransfer.getData(ASSET_MIME);
+        if (ref) { void insertAsset(ref, assetStyle(), at); return; }
+        // Photos and SVG files from Explorer land under the pointer, inside the frame there.
+        void dropFiles([...e.dataTransfer.files], at);
+      }}>
       <canvas ref={content} className="absolute inset-0" />
       <canvas ref={overlay} className="absolute inset-0" />
       <EmbedLayer />
       <CommentsLayer />
       <canvas ref={cursorLayer} className="pointer-events-none absolute inset-0" />
       {doc && editingText && doc.get(editingText) && <TextEditor nodeId={editingText} camera={camera} />}
-      {tool !== 'select' && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-panel-2 px-3 py-1 text-xs text-fg-muted">{toolHint(tool)}</div>}
+      {bgJob && (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-panel-2 px-3 py-1 text-xs text-fg-muted shadow-lg">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+          {bgJob.phase === 'download'
+            ? `Downloading the background model (once) · ${Math.round(bgJob.progress * 100)}%`
+            : 'Removing background on this computer…'}
+        </div>
+      )}
+      {tool !== 'select' && !bgJob && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-panel-2 px-3 py-1 text-xs text-fg-muted">{toolHint(tool)}</div>}
     </div>
   );
 }
@@ -556,6 +705,43 @@ function rectOf(a: Pt, b: Pt, square = false) {
 
 const intersects = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
   a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
+const inside = (r: { x: number; y: number; width: number; height: number }, p: Pt) => p.x >= r.x && p.y >= r.y && p.x <= r.x + r.width && p.y <= r.y + r.height;
+
+/** Where layers dropped at `w` land among an auto-layout frame's children, and the insert line to show. */
+function layoutSlot(d: ArchaDocument, parentId: string, w: Pt, exclude: Set<string>): { index: number; line: { x1: number; y1: number; x2: number; y2: number } } {
+  const parent = d.require(parentId);
+  if (parent.type !== 'frame') return { index: 0, line: { x1: w.x, y1: w.y, x2: w.x, y2: w.y } };
+  const origin = originOf(d, parent.id);
+  const row = parent.layout === 'row';
+  const pos = row ? w.x - origin.x : w.y - origin.y;
+  const siblings = d.children(parent.id).filter((s) => !exclude.has(s.id) && !s.absolute);
+  let index = siblings.findIndex((s) => pos < (row ? s.x + s.width / 2 : s.y + s.height / 2));
+  if (index < 0) index = siblings.length;
+  const before = siblings[index - 1], after = siblings[index];
+  const at = after ? (row ? after.x : after.y) - parent.gap / 2 : before ? (row ? before.x + before.width : before.y + before.height) + parent.gap / 2 : (row ? parent.padding.left : parent.padding.top);
+  // The op index counts every child, absolute ones and the dragged layers included.
+  const all = d.children(parent.id).filter((s) => !exclude.has(s.id));
+  const opIndex = after ? all.findIndex((s) => s.id === after.id) : all.length;
+  return {
+    index: opIndex,
+    line: row
+      ? { x1: origin.x + at, y1: origin.y + parent.padding.top, x2: origin.x + at, y2: origin.y + parent.height - parent.padding.bottom }
+      : { x1: origin.x + parent.padding.left, y1: origin.y + at, x2: origin.x + parent.width - parent.padding.right, y2: origin.y + at },
+  };
+}
+
+/** The handle of a single selected node under page point `w`: a resize handle, the rotate knob, or none. */
+function handleAt(d: ArchaDocument, n: Node, w: Pt, zoom: number): Handle | 'rotate' | null {
+  const tol = 6 / zoom;
+  const h = handlesFor(n).find((hh) => { const p = nodeHandlePoint(d, n.id, hh); return Math.abs(p.x - w.x) <= tol && Math.abs(p.y - w.y) <= tol; });
+  if (h) return h;
+  const k = rotateHandlePoint(d, n.id, zoom);
+  return Math.hypot(k.x - w.x, k.y - w.y) <= 7 / zoom ? 'rotate' : null;
+}
+
+/** Angle of `p` around `c`, in degrees (clockwise on screen, 0 = right). */
+const angleOf = (c: Pt, p: Pt) => (Math.atan2(p.y - c.y, p.x - c.x) * 180) / Math.PI;
 
 function sizingAfterResize(n: Node, h: Handle): Partial<Node> {
   const horiz = h.includes('e') || h.includes('w');
@@ -581,9 +767,46 @@ function labelHit(d: NonNullable<ReturnType<typeof useStore.getState>['doc']>, c
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
+/** Dragged layers whose frame clips them are drawn again on top, whole, so they stay visible on their way out. */
+function drawLifted(ctx: CanvasRenderingContext2D, d: ArchaDocument, ids: string[], cam: Camera, dpr: number) {
+  for (const id of ids) {
+    const n = d.get(id);
+    if (!n?.parentId || n.type === 'connector') continue;
+    let clipped = false;
+    for (let p = d.get(n.parentId); p && p.type !== 'page'; p = p.parentId ? d.get(p.parentId) : undefined) if (p.type === 'frame' && p.clip) { clipped = true; break; }
+    if (!clipped) continue;
+    const o = originOf(d, n.parentId);
+    ctx.save();
+    ctx.setTransform(dpr * cam.zoom, 0, 0, dpr * cam.zoom, dpr * (cam.x + o.x * cam.zoom), dpr * (cam.y + o.y * cam.zoom));
+    drawNode(ctx, d, n);
+    ctx.restore();
+  }
+}
+
+/**
+ * A connector end at page point `w`: stuck to the node under it, or free. The top-level node wins
+ * (a whole screen in a page map); Ctrl picks the deepest one. Connectors are never targets.
+ */
+function endAt(d: ArchaDocument, w: Pt, deep: boolean): { end: ConnectorEnd; box: { x: number; y: number; width: number; height: number } | null } {
+  const lines = new Set([...d.nodes.values()].filter((n) => n.type === 'connector').map((n) => n.id));
+  const path = hitPath(d, w.x, w.y, lines);
+  const t = deep ? path.at(-1) : path[0];
+  return { end: { nodeId: t?.id ?? null, side: 'auto', x: round2(w.x), y: round2(w.y) }, box: t ? d.worldBounds(t.id) : null };
+}
+
+/** Which end handle of a connector is under `w`, if any. */
+function connectorHandleAt(d: ArchaDocument, n: ConnectorNode, w: Pt, zoom: number): 'start' | 'end' | null {
+  const ends = connectorEnds(d, n.id);
+  if (!ends) return null;
+  const tol = 8 / zoom;
+  if (Math.hypot(ends.end.x - w.x, ends.end.y - w.y) <= tol) return 'end';
+  if (Math.hypot(ends.start.x - w.x, ends.start.y - w.y) <= tol) return 'start';
+  return null;
+}
+
 const toolHint = (t: string) => ({
   frame: 'Drag to draw a frame · click for 400×300', rect: 'Drag to draw a rectangle · Shift for square', ellipse: 'Drag to draw an ellipse · Shift for circle',
   polygon: 'Drag to draw a polygon · Shift keeps it even', text: 'Click to place text', hand: 'Drag to pan', scale: 'Drag a handle to scale everything inside, text and strokes too',
   pen: 'Click to add points · drag for curves · click the first point to close · Enter to finish', sticky: 'Click to add a sticky note',
-  embed: 'Drag to place a web page · double-click it to scroll and click inside', comment: 'Click anywhere to leave a comment',
+  embed: 'Drag to place a web page · double-click it to scroll and click inside', connector: 'Drag from a shape to another · Ctrl targets the layer inside', comment: 'Click anywhere to leave a comment',
 }[t] ?? '');

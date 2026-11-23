@@ -1,0 +1,154 @@
+<!doctype html>
+<!--
+  Example: a 4-page A4 project proposal (fictional studio "Nara Studio" → client "Kopi Rana").
+  Concept: "Swiss / colour block": a full-bleed cover in the brand colour, huge section numbers,
+  a strict 6-column grid, one accent, tabular figures, horizontal rules only.
+  Render: node ../scripts/render-pdf.mjs proposal.html proposal.pdf --preview
+-->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Proposal: Identitas & Website Kopi Rana</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  :root { --ink: #1b1a17; --muted: #6f6a61; --rule: #d9d3c7; --paper: #fbf8f2; --brand: #7c2d12; --brand-soft: #f3e3d6; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font: 400 10pt/1.55 "Inter", sans-serif; color: var(--ink); }
+
+  /* One element per physical page: exact A4, no body margin (else a blank page sneaks in). */
+  .page { width: 210mm; height: 297mm; padding: 22mm 20mm 20mm; position: relative; overflow: hidden;
+          background: var(--paper); break-after: page; }
+  .page:last-child { break-after: auto; }
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); column-gap: 6mm; }
+  .folio { position: absolute; left: 20mm; right: 20mm; bottom: 10mm; display: flex; justify-content: space-between;
+           font-size: 7.5pt; color: var(--muted); letter-spacing: .04em; }
+
+  h1, h2, .num, .big { font-family: "Fraunces", Georgia, serif; font-weight: 400; letter-spacing: -0.02em; }
+  .label { font-size: 8pt; font-weight: 500; color: var(--muted); }   /* captions and running headers only, never above a heading */
+
+  /* cover */
+  .cover { background: var(--brand); color: #fbf3ea; padding: 20mm; display: flex; flex-direction: column; }
+  .cover .label { color: #f3cdb3; }
+  .cover h1 { font-size: 64pt; line-height: .95; margin-top: auto; max-width: 150mm; }
+  .cover .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; margin-top: 16mm; padding-top: 5mm;
+                 border-top: 1px solid rgb(251 243 234 / .35); font-size: 9pt; }
+  .cover .meta span { display: block; color: #f3cdb3; font-size: 8pt; margin-bottom: 1.5mm; }
+  .cover .mark { position: absolute; right: -40mm; top: -30mm; width: 180mm; height: 180mm; border-radius: 50%;
+                 border: 22mm solid rgb(251 243 234 / .07); }
+
+  /* section opener */
+  .num { font-size: 120pt; line-height: .8; color: var(--brand-soft); }
+  h2 { font-size: 26pt; line-height: 1.1; margin: 4mm 0 8mm; }
+  p + p { margin-top: 3mm; }
+  .lead { font-size: 12.5pt; line-height: 1.5; }
+  .col-1-3 { grid-column: 1 / 4; } .col-4-6 { grid-column: 4 / 7; } .col-1-6 { grid-column: 1 / 7; } .col-3-6 { grid-column: 3 / 7; } .col-1-2 { grid-column: 1 / 3; }
+  .quote { font-family: "Fraunces", serif; font-size: 17pt; line-height: 1.3; border-left: 2px solid var(--brand); padding-left: 6mm; margin-top: 10mm; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; margin-top: 12mm; border-top: 1px solid var(--ink); padding-top: 5mm; }
+  .big { font-size: 34pt; line-height: 1; color: var(--brand); }
+  .stats p:not(.big) { font-size: 8.5pt; color: var(--muted); margin-top: 2mm; }
+
+  /* scope + timeline */
+  ol.scope { list-style: none; margin-top: 2mm; }
+  ol.scope li { display: grid; grid-template-columns: 12mm 1fr; padding: 4mm 0; border-top: 1px solid var(--rule); break-inside: avoid; }
+  ol.scope li b { font-weight: 600; }
+  ol.scope li em { font-style: normal; color: var(--brand); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .timeline { margin-top: 10mm; }
+  .bars { display: grid; grid-auto-flow: row; grid-template-columns: 34mm repeat(8, 1fr); row-gap: 2.2mm; font-size: 8pt; align-items: center; margin-top: 4mm; }
+  .bars .wk { color: var(--muted); text-align: center; border-bottom: 1px solid var(--rule); padding-bottom: 1.5mm; }
+  .bars .bar { height: 5mm; background: var(--brand); border-radius: 1mm; }
+  .bars .bar.soft { background: var(--brand-soft); }
+
+  /* investment */
+  table { width: 100%; border-collapse: collapse; margin-top: 6mm; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-size: 7.5pt; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+       padding-bottom: 2.5mm; border-bottom: 1px solid var(--ink); }
+  td { padding: 3.2mm 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  td small { display: block; color: var(--muted); font-size: 8.5pt; }
+  th:last-child, td:last-child { text-align: right; }
+  tr.total td { border-bottom: 0; border-top: 1px solid var(--ink); font-weight: 600; font-size: 12pt; padding-top: 4mm; }
+  .callout { background: var(--brand-soft); padding: 6mm; border-radius: 2mm; margin-top: 10mm; }
+  .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin-top: 18mm; }
+  .sign div { border-top: 1px solid var(--ink); padding-top: 2mm; font-size: 8.5pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<section class="page cover">
+  <div class="mark"></div>
+  <p class="label">Nara Studio · Proposal No. 2611-04</p>
+  <h1>Identitas &amp; website untuk Kopi Rana</h1>
+  <div class="meta">
+    <div><span>Untuk</span>Rana Pratiwi, Pemilik</div>
+    <div><span>Tanggal</span>20 November 2026</div>
+    <div><span>Berlaku hingga</span>20 Desember 2026</div>
+  </div>
+</section>
+
+<section class="page">
+  <div class="grid">
+    <div class="col-1-2"><p class="num">01</p></div>
+    <div class="col-3-6" style="padding-top:6mm">
+      <h2>Kopinya dikenal di Malang, tapi tidak bisa ditemukan di internet.</h2></div>
+    <div class="col-1-3"><p class="lead">Kopi Rana menjual 1.800 cup per minggu dari dua kedai, tetapi 70% pembeli baru datang dari mulut ke mulut. Logo saat ini tidak terbaca di gelas kecil, dan pesanan biji kopi masih lewat DM Instagram.</p></div>
+    <div class="col-4-6"><p>Kami mengusulkan identitas visual yang tegas di ukuran kecil, dan website ringan dengan katalog biji kopi serta pemesanan WhatsApp. Semuanya dibangun agar tim Anda bisa mengubah menu sendiri.</p>
+      <p>Target dalam 6 bulan setelah peluncuran: 25% penjualan biji kopi lewat website.</p></div>
+    <div class="col-1-6"><p class="quote">“Orang sering bilang ‘oh, ini Kopi Rana yang itu?’ Kami ingin mereka langsung mengenali kami.”</p></div>
+    <div class="col-1-6 stats">
+      <div><p class="big">1.800</p><p>cup terjual per minggu di dua kedai</p></div>
+      <div><p class="big">70%</p><p>pelanggan baru datang dari rekomendasi</p></div>
+      <div><p class="big">0</p><p>halaman yang muncul saat orang mencari “kopi rana”</p></div>
+    </div>
+  </div>
+  <div class="folio"><span>Nara Studio · Proposal Kopi Rana</span><span>2 / 4</span></div>
+</section>
+
+<section class="page">
+  <div class="grid">
+    <div class="col-1-2"><p class="num">02</p></div>
+    <div class="col-3-6" style="padding-top:6mm"><h2>Delapan minggu, tiga hasil yang bisa dipakai.</h2></div>
+    <div class="col-1-6">
+      <ol class="scope">
+        <li><em>A</em><div><b>Identitas visual</b><br>Logo utama dan versi kecil untuk gelas, palet, dua jenis huruf, pola kemasan, panduan 12 halaman.</div></li>
+        <li><em>B</em><div><b>Website</b><br>Beranda, cerita, katalog biji kopi (12 produk), lokasi kedai, pemesanan WhatsApp, panel ubah menu.</div></li>
+        <li><em>C</em><div><b>Peluncuran</b><br>Foto produk satu hari, 9 template Instagram, pelatihan tim 2 jam.</div></li>
+      </ol>
+      <div class="timeline">
+        <p class="label">Jadwal (minggu)</p>
+        <div class="bars">
+          <span></span><span class="wk">1</span><span class="wk">2</span><span class="wk">3</span><span class="wk">4</span><span class="wk">5</span><span class="wk">6</span><span class="wk">7</span><span class="wk">8</span>
+          <span style="grid-row:2">Riset &amp; konsep</span><span class="bar" style="grid-row:2;grid-column:2/4"></span>
+          <span style="grid-row:3">A · Identitas</span><span class="bar" style="grid-row:3;grid-column:3/6"></span>
+          <span style="grid-row:4">B · Website</span><span class="bar soft" style="grid-row:4;grid-column:5/6"></span><span class="bar" style="grid-row:4;grid-column:6/9"></span>
+          <span style="grid-row:5">C · Peluncuran</span><span class="bar" style="grid-row:5;grid-column:9/10"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="folio"><span>Nara Studio · Proposal Kopi Rana</span><span>3 / 4</span></div>
+</section>
+
+<section class="page">
+  <div class="grid">
+    <div class="col-1-2"><p class="num">03</p></div>
+    <div class="col-3-6" style="padding-top:6mm"><h2>Satu harga tetap, dibayar dalam tiga tahap.</h2></div>
+    <div class="col-1-6">
+      <table>
+        <thead><tr><th>Pekerjaan</th><th>Durasi</th><th>Biaya</th></tr></thead>
+        <tbody>
+          <tr><td>A · Identitas visual<small>Logo, palet, huruf, pola, panduan</small></td><td>3 minggu</td><td>Rp 18.500.000</td></tr>
+          <tr><td>B · Website<small>Desain, pembuatan, katalog, panel menu, hosting tahun pertama</small></td><td>4 minggu</td><td>Rp 32.000.000</td></tr>
+          <tr><td>C · Peluncuran<small>Foto produk, 9 template, pelatihan</small></td><td>1 minggu</td><td>Rp 9.500.000</td></tr>
+          <tr class="total"><td>Total</td><td>8 minggu</td><td>Rp 60.000.000</td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><b>Pembayaran:</b> 40% saat tanda tangan, 30% setelah identitas disetujui, 30% saat website tayang. Harga belum termasuk PPN 11%.</div>
+      <div class="sign"><div>Rana Pratiwi · Kopi Rana</div><div>Dimas Aryo · Nara Studio</div></div>
+    </div>
+  </div>
+  <div class="folio"><span>Nara Studio · halo@nara.studio · +62 812 3456 7890</span><span>4 / 4</span></div>
+</section>
+
+</body>
+</html>

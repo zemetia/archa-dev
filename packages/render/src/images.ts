@@ -21,6 +21,10 @@ export function setImageResolver(fn: ImageResolver): void {
   resolver = fn;
 }
 
+/** The document being drawn; drawNode sets it, so paints that only know a `src` still resolve `asset:` in the right folder. */
+let drawingDoc: ArchaDocument | undefined;
+export const setDrawingDoc = (doc: ArchaDocument | undefined) => { drawingDoc = doc; };
+
 /** The URL a source loads from (what the resolver makes of it). */
 export const resolveImageSrc = (src: string, doc?: ArchaDocument): string => (src ? resolver(src, doc) : src);
 
@@ -52,7 +56,7 @@ function load(url: string): Entry {
 }
 
 /** The decoded image, or null while loading / when it failed. */
-export function imageFor(src: string, doc?: ArchaDocument): HTMLImageElement | null {
+export function imageFor(src: string, doc: ArchaDocument | undefined = drawingDoc): HTMLImageElement | null {
   if (typeof Image === 'undefined' || !src) return null;
   return load(resolveImageSrc(src, doc)).img;
 }

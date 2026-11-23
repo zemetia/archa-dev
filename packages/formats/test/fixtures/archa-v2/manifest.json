@@ -4,5 +4,5 @@
   "id": "fixtureDoc2",
   "name": "Fixture v2",
   "createdWith": "archadev",
-  "pages": [{ "id": "page00002", "name": "Page 1", "rootId": "root000002", "entry": "pages/page00002.json" }]
+  "pages": [{ "id": "page00001", "name": "Page 1", "rootId": "root000001", "entry": "pages/page00001.json" }]
 }

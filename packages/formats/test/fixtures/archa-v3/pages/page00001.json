@@ -1,0 +1,7 @@
+{
+  "rootId": "root000001",
+  "nodes": {
+    "root000001": { "id": "root000001", "type": "page", "name": "Page 1", "parentId": null, "children": ["text000001"] },
+    "text000001": { "id": "text000001", "type": "text", "name": "Title", "parentId": "root000001", "x": 10, "y": 20, "width": 120, "height": 24, "text": "Hello", "textSizing": "auto-height" }
+  }
+}

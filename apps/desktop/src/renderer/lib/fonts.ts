@@ -1,23 +1,29 @@
-/*
- * Fonts the canvas draws with (blueprint DOCUMENT_MODEL/03 → Text measure). Twelve OFL families ship with the
- * app (Latin + Latin Extended, @fontsource static faces, listed in fonts-bundled.ts) and the core measures text
- * with their real advance widths (packages/core/src/text-metrics-data.ts), so layout and drawing agree on
- * every machine. Both files come from scripts/gen-text-metrics.mjs.
+import { BUNDLED_FONTS } from '@archa/protocol';
+
+/** Font families offered by the font picker: the fonts the app ships, then every family installed on this machine. */
+
+export { BUNDLED_FONTS };
+export const FALLBACK_FONTS = [...BUNDLED_FONTS, 'Segoe UI', 'Georgia', 'Times New Roman', 'Arial', 'Consolas', 'Courier New', 'Trebuchet MS', 'Verdana'];
+
+type LocalFont = { family: string };
+let pending: Promise<string[]> | null = null;
+
+/**
+ * Lists installed font families once per session (Local Font Access API).
+ * Call it from a click so Chromium sees a user gesture; falls back to the fixed list when the API is missing or refused.
  */
-import { BUNDLED_FACES } from './fonts-bundled';
-
-/** Loads the Latin and Latin Extended subsets of a face. */
-const SAMPLE = 'Aa0 ĀāŁł ±²—“”';
-
-/** A canvas only uses a webfont that is already loaded, so load every bundled face up front (local files). */
-export function preloadFonts(): Promise<void> {
-  if (typeof document === 'undefined' || !document.fonts) return Promise.resolve();
-  return Promise.all(BUNDLED_FACES.map(([f, w]) => document.fonts.load(`${w} 16px "${f}"`, SAMPLE).catch(() => []))).then(() => undefined);
-}
-
-/** Calls `fn` whenever new font faces finish loading (to repaint cached bitmaps). */
-export function onFontsLoaded(fn: () => void): () => void {
-  if (typeof document === 'undefined' || !document.fonts) return () => {};
-  document.fonts.addEventListener('loadingdone', fn);
-  return () => document.fonts.removeEventListener('loadingdone', fn);
+export function loadLocalFonts(): Promise<string[]> {
+  if (pending) return pending;
+  const query = (window as unknown as { queryLocalFonts?: () => Promise<LocalFont[]> }).queryLocalFonts;
+  pending = (query ? query.call(window) : Promise.resolve([] as LocalFont[]))
+    .then((fonts) => {
+      // Built-in fonts first (they look the same on every machine), then the installed ones A–Z.
+      const installed = new Set([...FALLBACK_FONTS, ...fonts.map((f) => f.family)].filter((f) => !BUNDLED_FONTS.includes(f)));
+      return [...BUNDLED_FONTS, ...[...installed].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))];
+    })
+    .catch(() => {
+      pending = null;
+      return [...FALLBACK_FONTS];
+    });
+  return pending;
 }

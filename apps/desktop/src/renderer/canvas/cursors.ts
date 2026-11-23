@@ -20,6 +20,8 @@ export type AgentCursor = {
   from: Pt | null;
   /** Idle drift strength when these steps started, so the cursor eases out of it instead of jumping. */
   drift0: number;
+  /** The agent called done(): play the remaining steps, then fade even if its process stays up. */
+  done?: boolean;
 };
 
 const MAX_STEPS = 80;
@@ -144,9 +146,12 @@ export function pushTrail(prev: AgentCursor | undefined, t: AgentTrail, now: num
   return { id: prev.id, name, steps, start: now, from: at.pos, drift0: driftAt(prev, now) };
 }
 
+/** The cursor after its session called done(); a later trail (a new turn) brings it back. */
+export const markDone = (c: AgentCursor): AgentCursor => ({ ...c, done: true });
+
 /** True while a cursor is still on screen (playing, lingering or fading). */
 export function cursorAlive(c: AgentCursor, now: number, working: boolean): boolean {
-  const alive = now < fadeAt(c, now, working) + FADE_MS;
+  const alive = now < fadeAt(c, now, working && !c.done) + FADE_MS;
   if (!alive) { moodOf.delete(c.id); lastWorking.delete(c.id); }
   return alive;
 }
@@ -190,7 +195,7 @@ export function pose(c: AgentCursor, cam: Camera, now: number, live: boolean): {
 export function drawCursors(ctx: CanvasRenderingContext2D, cam: Camera, cursors: AgentCursor[], working: Set<string>, now: number) {
   const palette = personaPalette();
   for (const c of cursors) {
-    const live = working.has(c.name);
+    const live = working.has(c.name) && !c.done;
     const end = endOf(c);
     const alpha = Math.max(0, Math.min(1, 1 - (now - fadeAt(c, now, live)) / FADE_MS));
     if (alpha <= 0) continue;

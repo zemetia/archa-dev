@@ -13,9 +13,14 @@ import { RightPanel } from './ui/RightPanel';
 import { ToolRail, TOOL_KEYS } from './ui/ToolRail';
 import { RailPanels } from './ui/RailPanels';
 import { ZoomBar } from './ui/ZoomBar';
+import { TextToolbar } from './ui/TextToolbar';
+import { TextEffectsPanel } from './ui/TextEffectsPanel';
 import { cn } from './ui/controls';
 import { SettingsDialog } from './ui/SettingsDialog';
+import { OrchestraView } from './ui/OrchestraView';
 import { BrowserPanel, toggleBrowser, useBrowserSync } from './ui/BrowserPanel';
+
+const blockFileDrop = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); };
 
 export function App() {
   const ready = useStore((s) => !!s.doc);
@@ -28,7 +33,13 @@ export function App() {
   useEffect(() => {
     window.addEventListener('keydown', onKey);
     window.addEventListener('paste', onPaste);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('paste', onPaste); };
+    // A file dropped anywhere the canvas or composer does not take it must not open in the window.
+    window.addEventListener('dragover', blockFileDrop);
+    window.addEventListener('drop', blockFileDrop);
+    return () => {
+      window.removeEventListener('keydown', onKey); window.removeEventListener('paste', onPaste);
+      window.removeEventListener('dragover', blockFileDrop); window.removeEventListener('drop', blockFileDrop);
+    };
   }, []);
 
   return (
@@ -39,9 +50,13 @@ export function App() {
         <LeftPanel />
         <main data-canvas-host className="relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-line">
           {ready ? <Canvas /> : <div className="flex h-full items-center justify-center text-fg-subtle">Connecting to core…</div>}
-          <div className="pointer-events-none absolute left-3 top-1/2 z-30 -translate-y-1/2"><ToolRail /></div>
+          {/* Centred beside the canvas; on a short window the rail scrolls instead of running off the edges. */}
+          <div className="pointer-events-none absolute inset-y-3 left-3 z-30 flex items-center"><ToolRail /></div>
           <RailPanels />
           <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2"><ZoomBar /></div>
+          {/* Canva-like text tools while one text layer is selected. */}
+          <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2"><TextToolbar /></div>
+          <TextEffectsPanel />
           {!rightOpen && (
             <button title="Show design panel (Ctrl+Shift+\)" onClick={() => togglePanel('right', true)}
               className="absolute right-3 top-3 flex h-9 items-center gap-1.5 rounded-xl border border-line bg-panel pl-2.5 pr-3 text-[12px] text-fg-muted shadow-xl shadow-black/30 hover:text-fg">
@@ -52,6 +67,7 @@ export function App() {
         {browserOpen && <div className="flex shrink-0 pl-2"><BrowserPanel /></div>}
         <RightPanel />
       </div>
+      <OrchestraView />
       <SettingsDialog />
       <ContextMenu />
       <div className="pointer-events-none fixed bottom-16 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">
@@ -126,6 +142,7 @@ function onKey(e: KeyboardEvent) {
   if (k === 'enter') return run(selectChildren);
   if (e.shiftKey && e.code === 'Digit1') return run(() => useStore.setState((s) => ({ fitRequest: s.fitRequest + 1 })));
   if (e.shiftKey && e.code === 'Digit0') return run(() => zoomTo(1));
+  if (e.shiftKey && k === 'i') return run(() => toggleRailPanel('assets'));
   if (e.shiftKey && e.altKey && k === 'a') return run(removeLayout);
   if (e.shiftKey && k === 'a') return run(() => wrapInFrame(true));
   if (k === ']') return run(() => reorder(1));

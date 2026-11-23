@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  Check, ChevronDown, Circle, Code, Diamond, Frame, Globe, Hand, ImageUp, MessageCircle, MousePointer2,
-  PanelLeft, PenTool, Scaling, Search, Shapes, Square, StickyNote, Triangle, Type,
+  Check, ChevronDown, Circle, LayoutGrid, Code, Diamond, Frame, Globe, Hand, ImageUp, MessageCircle, MousePointer2,
+  PanelLeft, PenTool, Scaling, Search, Shapes, Square, StickyNote, Triangle, Type, Workflow,
 } from 'lucide-react';
 import { setTool, toast, togglePanel, toggleRailPanel, useStore, type Tool } from '../lib/store';
 import { importImageOrSvg } from '../lib/importers';
@@ -15,7 +15,7 @@ type Item = { id: string; label: string; key?: string; icon: typeof Square; tool
 
 /** Single-key tool shortcuts (blueprint APP_UI/01 → Tool rail). */
 export const TOOL_KEYS: Record<string, Tool> = {
-  v: 'select', k: 'scale', h: 'hand', r: 'rect', o: 'ellipse', p: 'pen', t: 'text', f: 'frame', s: 'sticky', b: 'embed', c: 'comment',
+  v: 'select', k: 'scale', h: 'hand', r: 'rect', o: 'ellipse', p: 'pen', t: 'text', f: 'frame', s: 'sticky', b: 'embed', l: 'connector', c: 'comment',
 };
 
 const POINTER: Item[] = [
@@ -28,7 +28,7 @@ const SHAPES: Item[] = [
   { id: 'rect', label: 'Rectangle', key: 'R', icon: Square, tool: 'rect' },
   { id: 'ellipse', label: 'Ellipse', key: 'O', icon: Circle, tool: 'ellipse' },
   { id: 'polygon', label: 'Polygon', icon: Triangle, tool: 'polygon' },
-  { id: 'icon', label: 'Icon', icon: Shapes, run: () => toggleRailPanel('icons') },
+  { id: 'icon', label: 'Icons and logos…', key: 'Shift+I', icon: Shapes, run: () => toggleRailPanel('assets') },
   { id: 'script', label: 'Script', icon: Code, soon: true },
   { id: 'import', label: 'Import image or SVG…', key: 'Ctrl+Shift+K', icon: ImageUp, run: () => void importImageOrSvg() },
   { id: 'figma', label: 'Import Figma', icon: FigmaMark as unknown as typeof Square, soon: true },
@@ -50,7 +50,7 @@ export function ToolRail() {
   );
 
   return (
-    <div className="pointer-events-auto flex flex-col gap-1 rounded-2xl border border-line bg-panel p-1.5 shadow-xl shadow-black/30">
+    <div onScroll={() => setMenu(null)} className="pointer-events-auto thin-scroll flex max-h-full shrink-0 flex-col gap-1 overflow-y-auto overflow-x-hidden rounded-2xl border border-line bg-panel p-1.5 shadow-xl shadow-black/30 [&>*]:shrink-0">
       <IconButton title={`${leftOpen ? 'Hide' : 'Show'} sidebar (Ctrl+\\)`} onClick={() => togglePanel('left')}>
         <PanelLeft size={17} />
       </IconButton>
@@ -64,8 +64,10 @@ export function ToolRail() {
       {single('frame', 'Frame', 'F', Frame)}
       {single('sticky', 'Sticky note', 'S', StickyNote)}
       {single('embed', 'Web page', 'B', Globe)}
+      {single('connector', 'Connector', 'L', Workflow)}
       {single('comment', 'Comment', 'C', MessageCircle)}
       <div className="mx-1.5 my-0.5 h-px bg-line" />
+      <IconButton title="Assets — icons, logos, your icons (Shift+I)" active={railPanel === 'assets'} onClick={() => toggleRailPanel('assets')}><LayoutGrid size={17} /></IconButton>
       <IconButton title="Variables" active={railPanel === 'variables'} onClick={() => toggleRailPanel('variables')}><Diamond size={17} /></IconButton>
       <IconButton title="Find layer (Ctrl+F)" active={railPanel === 'find'} onClick={() => toggleRailPanel('find')}><Search size={17} /></IconButton>
     </div>
@@ -75,6 +77,15 @@ export function ToolRail() {
 /** A rail button for a family of tools: click uses the shown one, the chevron opens the family. */
 function Group({ item, active, items, current, open, onOpen }: { item: Item; active: boolean; items: Item[]; current: Tool; open: boolean; onOpen: (o: boolean) => void }) {
   const root = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  // The family menu is fixed beside its button (the rail scrolls, which would clip it) and stays inside the window.
+  useLayoutEffect(() => {
+    if (!open) { setAt(null); return; }
+    const r = root.current!.getBoundingClientRect();
+    const h = menu.current?.offsetHeight ?? 0;
+    setAt({ left: r.right + 12, top: Math.max(8, Math.min(r.top, window.innerHeight - h - 8)) });
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const close = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) onOpen(false); };
@@ -99,7 +110,8 @@ function Group({ item, active, items, current, open, onOpen }: { item: Item; act
         <ChevronDown size={11} />
       </button>
       {open && (
-        <div role="menu" className="absolute left-full top-0 z-50 ml-3 w-[264px] rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/50">
+        <div ref={menu} role="menu" style={{ left: at?.left ?? -9999, top: at?.top ?? 0, maxHeight: 'calc(100vh - 16px)' }}
+          className="fixed z-50 w-[264px] overflow-y-auto rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/50">
           {items.map((it) => (
             <MenuRow key={it.id} checked={!!it.tool && it.tool === current} onClick={() => choose(it)} icon={<it.icon size={15} />} label={it.label}
               hint={it.soon ? 'Soon' : it.key} dim={it.soon} />

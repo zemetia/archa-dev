@@ -42,18 +42,20 @@ src/renderer/
 
 ## Tool Rail
 
-Built today (`ui/ToolRail.tsx`, keys in `TOOL_KEYS`): a family button shows its last tool; the chevron under it opens the family (check = active).
+Built today (`ui/ToolRail.tsx`, keys in `TOOL_KEYS`): a family button shows its last tool; the chevron under it opens the family (check = active). On a short window the rail scrolls (thin scrollbar) instead of running off the canvas; family menus are fixed beside their button and close when the rail scrolls.
 
 | Rail item | Key | Family / behaviour | Code |
 |---|---|---|---|
 | Pointer | V · K · H (Space) | Move, Scale (resize scales the whole subtree: text, strokes, radii, gap, padding), Hand | `canvas/Canvas.tsx`, `canvas/scale.ts` |
-| Shapes | R · O | Rectangle, Ellipse, Polygon, Icon (lucide picker → vector), Script (soon), Import image or SVG (Ctrl+Shift+K), Import Figma (soon). Ctrl+V on the canvas imports a clipboard image / SVG markup; layers copied in-app win while the `archadev:layers` mark is still on the clipboard | `lib/importers.ts`, `lib/commands.ts` |
+| Shapes | R · O | Rectangle, Ellipse, Polygon, Icons and logos… (opens Assets), Script (soon), Import image or SVG (Ctrl+Shift+K), Import Figma (soon). Ctrl+V on the canvas imports a clipboard image / SVG markup; layers copied in-app win while the `archadev:layers` mark is still on the clipboard | `lib/importers.ts`, `lib/commands.ts` |
 | Pen | P | Click points, drag for curves, click first point to close, Enter/Esc finish, Backspace undoes a point | `canvas/pen.ts` |
-| Text · Frame | T · F | | |
+| Text · Frame | T · F | A selected text gets a Canva-like toolbar over the canvas (`ui/TextToolbar.tsx`: font, size −/+, colour, B/I/U/S, case, align, list, spacing, transparency) and an **Effects** panel (`ui/TextEffectsPanel.tsx`: 9 effects with live previews + sliders, Shape → Curve); sliders preview live and commit once (`lib/livePatch.ts`). Text works like Canva: the tool places a 240 px wide `auto-height` box; typing wraps and never widens it (free `auto-width` text turns `auto-height` at its width on edit, auto-layout text still hugs). Text has no top/bottom handles: sides change the width (rewrap), corners scale the font with the box. Any layer turns with the knob above it or the ↻ field | `canvas/Canvas.tsx`, `canvas/TextEditor.tsx` |
 | Sticky note | S | Click/drag on the page; edits in place | |
 | Web page | B | Live page on the page; double-click to scroll/click inside, Esc leaves; URL bar above when selected | `canvas/EmbedLayer.tsx` |
+| Connector | L | Drag from a layer to another (the top-level layer under the pointer; Ctrl = the deepest); release on empty canvas for a free end. Select a connector to drag its end handles onto other layers; the Design panel switches it elbow/straight, radius and caps | `canvas/Canvas.tsx`, `canvas/overlay.ts` |
 | Comment | C | Pins + threads; right panel becomes Comments | `canvas/CommentsLayer.tsx`, `ui/CommentsPanel.tsx` |
 | Variables | | Floating table: name, typed value, duplicate/delete, add colour/number/string | `ui/RailPanels.tsx` |
+| Assets | Shift+I | Icons from lucide, Tabler, Phosphor, Heroicons, brand logos and My icons (upload SVG/PNG); click or drag onto the canvas → [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md) | `ui/AssetsPanel.tsx`, `lib/assets.ts` |
 | Find layer | Ctrl+F | Search names, text and URLs; Enter selects + zooms | `ui/RailPanels.tsx` |
 
 Image import keeps pixels in the node (downscaled to 2048 px); SVG becomes a frame of vectors when it has no rotation, text, gradients or `<use>`, else an image. Planned: pencil, line/arrow/star, section and device presets, components entry, `…` menu.
@@ -79,7 +81,7 @@ Header row (`LeftTab` in the store): **Chat** on the left (also active while His
 
 | Tab | Content | Code |
 |---|---|---|
-| Chat | Current conversation (`chatThread`; null = new). Header: History, New chat | `ui/ChatPanel.tsx` |
+| Chat | Current conversation (`chatThread`; null = new). Header: History, New chat; Team (orchestrate threads) opens the full-window team view → [AGENT_BRIDGE/06](../AGENT_BRIDGE/06-orchestrate.md) | `ui/ChatPanel.tsx`, `ui/OrchestraView.tsx` |
 | History | Conversations of this document, newest first (`chatThreads()`), open = resume, two-click delete | `ui/HistoryPanel.tsx` |
 | Layers | Tree; components/instances show a violet icon | `ui/LayersPanel.tsx` |
 | Components | Make from selected frame, description (agents read it), Insert, Sync, Publish, Unmake; instance bar: Reset / Go to main / Detach | `ui/ComponentsPanel.tsx` |
@@ -95,7 +97,7 @@ Thumbnails: `lib/thumbs.ts` renders with `renderNodePng`, cached by subtree hash
 | Panel | Content |
 |---|---|
 | Layers | Virtualised tree → [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
-| Design | Position, sizing modes, auto-layout, fills/strokes/effects with variable pickers, text, component props, theme switcher |
+| Design | **Built 0.5:** name + type icon · Create component / instance actions · **Context** (note for agents, `meta.context`) · Alignment (6 edges, distribute for 3+; a child of auto layout sets the parent's align/justify) · Position (+ ignore auto layout) · Auto layout (direction, 9-dot placement, gap, space between/around, padding per axis or side) · Dimensions (W/H, Fill / Hug checkboxes; typing a size makes the axis fixed) · Appearance · Text · Fill (hex + %) · Stroke · Effects (drop/inner shadow, layer/background blur) · Code (copy / export HTML + Tailwind or CSS) · Export. Arrange logic lives in `@archa/core` `arrange.ts`, shared with agents. Target adds variable pickers, theme switcher |
 | Inspect | Computed values + variable behind each; live DOM styles for code frames |
 | Variables | → [DESIGN_SYSTEM/01](../DESIGN_SYSTEM/01-variables-themes.md) |
 | Issues | Lint for the current page |
@@ -115,7 +117,7 @@ Thumbnails: `lib/thumbs.ts` renders with `renderNodePng`, cached by subtree hash
 
 ## Context Menu
 
-Right-click on the canvas picks like a click (a hit inside the selection keeps it), then `ui/ContextMenu.tsx` opens at the pointer; items call `lib/commands.ts`. Esc, outside click, wheel or blur close it.
+Right-click on the canvas picks like a click (a hit inside the selection keeps it), then `ui/ContextMenu.tsx` opens at the pointer; items call `lib/commands.ts`. Esc, outside click, a wheel outside it or blur close it. Taller than the window → it scrolls; Settings ▸ opens fixed beside its row so the scroll does not clip it.
 
 | Target | Items |
 |---|---|
@@ -130,3 +132,12 @@ Groups are sized to the selection when made; the core does not refit them yet. N
 ## Shortcuts
 
 Registry `lib/shortcuts.ts`: id, default keys per platform, scope (global / canvas / text). Remappable in Settings; `?` opens the cheatsheet. Ctrl+K palette, Ctrl+L handoff.
+
+<!-- backlinks:start — generated by `node scripts/gen-backlinks.mjs`; do not edit by hand -->
+
+---
+
+**Linked from:** [APP_UI/04](./04-design-panel.md)
+
+**Code:** [`apps/desktop/src/renderer/App.tsx`](../../../apps/desktop/src/renderer/App.tsx) · [`apps/desktop/src/renderer/canvas/Canvas.tsx`](../../../apps/desktop/src/renderer/canvas/Canvas.tsx) · [`apps/desktop/src/renderer/canvas/pen.ts`](../../../apps/desktop/src/renderer/canvas/pen.ts) · [`apps/desktop/src/renderer/canvas/scale.ts`](../../../apps/desktop/src/renderer/canvas/scale.ts) · [`apps/desktop/src/renderer/index.html`](../../../apps/desktop/src/renderer/index.html) · [`apps/desktop/src/renderer/lib/commands.ts`](../../../apps/desktop/src/renderer/lib/commands.ts) · [`apps/desktop/src/renderer/lib/livePatch.ts`](../../../apps/desktop/src/renderer/lib/livePatch.ts) · [`apps/desktop/src/renderer/lib/store.ts`](../../../apps/desktop/src/renderer/lib/store.ts) · [`apps/desktop/src/renderer/lib/thumbs.ts`](../../../apps/desktop/src/renderer/lib/thumbs.ts) · [`apps/desktop/src/renderer/main.tsx`](../../../apps/desktop/src/renderer/main.tsx) · [`apps/desktop/src/renderer/ui/ArchaLogo.tsx`](../../../apps/desktop/src/renderer/ui/ArchaLogo.tsx) · [`apps/desktop/src/renderer/ui/AssetsPanel.tsx`](../../../apps/desktop/src/renderer/ui/AssetsPanel.tsx) · [`apps/desktop/src/renderer/ui/ChatPanel.tsx`](../../../apps/desktop/src/renderer/ui/ChatPanel.tsx) · [`apps/desktop/src/renderer/ui/ContextMenu.tsx`](../../../apps/desktop/src/renderer/ui/ContextMenu.tsx) · [`apps/desktop/src/renderer/ui/LayersPanel.tsx`](../../../apps/desktop/src/renderer/ui/LayersPanel.tsx) · [`apps/desktop/src/renderer/ui/LeftPanel.tsx`](../../../apps/desktop/src/renderer/ui/LeftPanel.tsx) · [`apps/desktop/src/renderer/ui/OrchestraView.tsx`](../../../apps/desktop/src/renderer/ui/OrchestraView.tsx) · [`apps/desktop/src/renderer/ui/RailPanels.tsx`](../../../apps/desktop/src/renderer/ui/RailPanels.tsx) · [`apps/desktop/src/renderer/ui/SettingsDialog.tsx`](../../../apps/desktop/src/renderer/ui/SettingsDialog.tsx) · [`apps/desktop/src/renderer/ui/SlidesPanel.tsx`](../../../apps/desktop/src/renderer/ui/SlidesPanel.tsx) · [`apps/desktop/src/renderer/ui/TextEffectsPanel.tsx`](../../../apps/desktop/src/renderer/ui/TextEffectsPanel.tsx) · [`apps/desktop/src/renderer/ui/TextToolbar.tsx`](../../../apps/desktop/src/renderer/ui/TextToolbar.tsx) · [`apps/desktop/src/renderer/ui/TitleBar.tsx`](../../../apps/desktop/src/renderer/ui/TitleBar.tsx) · [`apps/desktop/src/renderer/ui/ToolRail.tsx`](../../../apps/desktop/src/renderer/ui/ToolRail.tsx) · [`apps/desktop/src/renderer/ui/ZoomBar.tsx`](../../../apps/desktop/src/renderer/ui/ZoomBar.tsx)
+<!-- backlinks:end -->

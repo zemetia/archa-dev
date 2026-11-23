@@ -47,7 +47,10 @@ export type AgentEvent =
   | { kind: 'session'; id: string }
   | { kind: 'delta'; text: string }
   | { kind: 'text'; text: string }
-  | { kind: 'tool'; text: string }
+  /** A tool call: a one-line summary, the full input (`detail`) and an id to pair its result with. */
+  | { kind: 'tool'; text: string; detail?: string; callId?: string }
+  /** What a tool call returned (text only, clipped), for the chat's expandable tool rows. */
+  | { kind: 'result'; callId: string; text: string; failed: boolean }
   | { kind: 'error'; text: string }
   | { kind: 'final'; text: string }
   /** End of one turn in a warm process; `costUsd` is the session total so far when the CLI reports it. */
@@ -72,7 +75,7 @@ export type Adapter = {
   models: (bin: string | null, env: Record<string, string>) => Promise<{ models: ModelOption[]; source: string }>;
 };
 
-export const MCP_TOOLS = ['get_state', 'execute', 'screenshot', 'export_svg', 'say', 'browser', 'read_guide', 'reference', 'compare', 'list_documents', 'open_document', 'new_document', 'save_document'];
+export const MCP_TOOLS = ['get_state', 'execute', 'place_svg', 'inspect', 'screenshot', 'export_svg', 'say', 'browser', 'place_image', 'done', 'read_guide', 'delegate', 'wait_workers', 'tell_worker', 'reference', 'compare', 'list_documents', 'open_document', 'new_document', 'save_document'];
 /** Windows caps a command line near 32 KiB. */
 const MAX_ARG_PROMPT = 28_000;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/[\]@+-]{0,127}$/;
@@ -204,7 +207,7 @@ function claudeParser(): StreamParser {
         }
         for (const c of content) {
           if (c.type === 'text' && typeof c.text === 'string' && c.text.trim()) { live = ''; out.push({ kind: 'text', text: c.text }); }
-          if (c.type === 'tool_use') out.push(toolEvent(String(c.name), c.input));
+          if (c.type === 'tool_use') out.push(toolEvent(String(c.name), c.input, typeof c.id === 'string' ? c.id : undefined));
         }
       } else if (ev.type === 'user') {
         const content = (ev.message as { content?: Array<Record<string, unknown>> } | undefined)?.content ?? [];
@@ -213,6 +216,7 @@ function claudeParser(): StreamParser {
           const body = typeof c.content === 'string' ? c.content : Array.isArray(c.content) ? (c.content as Array<{ text?: string }>).map((x) => x.text ?? '').join('\n') : '';
           const r = resultEvent(body);
           if (r) out.push(r);
+          if (typeof c.tool_use_id === 'string') out.push(callResult(c.tool_use_id, body, c.is_error === true));
         }
       } else if (ev.type === 'result') {
         if (ev.is_error) {
@@ -250,10 +254,15 @@ function agyParser(): StreamParser {
         } else if (s.step_type === 'tool' && s.state === 'ACTIVE') {
           const p = s.tool_info?.parameters ?? {};
           // MCP calls come through agy's call_mcp_tool wrapper; show the archadev tool itself.
-          out.push(s.tool_name === 'call_mcp_tool' ? toolEvent(String(p.ToolName ?? 'mcp'), p.Arguments) : { kind: 'tool', text: agyToolSummary(s.tool_name ?? 'tool', p) });
-        } else if (s.step_type === 'tool' && s.state === 'DONE' && s.tool_name === 'call_mcp_tool') {
-          const r = resultEvent(String((s.tool_info as { output?: unknown } | undefined)?.output ?? ''));
-          if (r) out.push(r);
+          const callId = `agy-${i}`;
+          out.push(s.tool_name === 'call_mcp_tool' ? toolEvent(String(p.ToolName ?? 'mcp'), p.Arguments, callId) : { kind: 'tool', text: agyToolSummary(s.tool_name ?? 'tool', p), detail: pretty(p), callId });
+        } else if (s.step_type === 'tool' && s.state === 'DONE') {
+          const output = String((s.tool_info as { output?: unknown } | undefined)?.output ?? '');
+          if (s.tool_name === 'call_mcp_tool') {
+            const r = resultEvent(output);
+            if (r) out.push(r);
+          }
+          if (output) out.push(callResult(`agy-${i}`, output, output.startsWith('FAILED')));
         } else if (s.step_type === 'error_message' && s.error) out.push({ kind: 'error', text: clip(s.error) });
       } else if (ev.event === 'result') {
         const r = (ev.result ?? {}) as { status?: string; response?: string; error?: string };
@@ -276,7 +285,12 @@ function codexParser(): StreamParser {
       const it = (ev.item ?? {}) as Record<string, unknown>;
       if (ev.type === 'thread.started' && typeof ev.thread_id === 'string') return [{ kind: 'session', id: ev.thread_id }];
       if (ev.type === 'item.completed' && it.type === 'agent_message' && typeof it.text === 'string' && it.text.trim()) return [{ kind: 'text', text: it.text }];
-      if (ev.type === 'item.started' && it.type === 'mcp_tool_call') return [toolEvent(String(it.tool ?? 'mcp'), it.arguments)];
+      if (ev.type === 'item.started' && it.type === 'mcp_tool_call') return [toolEvent(String(it.tool ?? 'mcp'), it.arguments, typeof it.id === 'string' ? it.id : undefined)];
+      if (ev.type === 'item.completed' && it.type === 'mcp_tool_call' && typeof it.id === 'string') {
+        const res = it.result as { content?: Array<{ text?: string }> } | undefined;
+        const text = (res?.content ?? []).map((c) => c.text ?? '').join('\n') || String((it.error as { message?: string } | undefined)?.message ?? '');
+        return text ? [callResult(it.id, text, it.status === 'failed' || !!it.error)] : [];
+      }
       if (ev.type === 'turn.failed' || ev.type === 'error') {
         const msg = (ev.error as { message?: string } | undefined)?.message ?? String(ev.message ?? 'Codex run failed');
         return [{ kind: 'error', text: clip(msg) }];
@@ -306,20 +320,65 @@ function resultEvent(text: string): AgentEvent | null {
 }
 
 /** `say` is the agent talking to the person: show it as a message, not a tool line. */
-function toolEvent(name: string, input: unknown): AgentEvent {
+function toolEvent(name: string, input: unknown, callId?: string): AgentEvent {
   const i = (input ?? {}) as Record<string, unknown>;
   if (name.replace(/^mcp__archadev__/, '') === 'say' && typeof i.text === 'string' && i.text.trim()) return { kind: 'text', text: i.text.trim() };
-  return { kind: 'tool', text: toolSummary(name, input) };
+  const detail = toolDetail(input);
+  return { kind: 'tool', text: toolSummary(name, input), ...(detail ? { detail } : {}), ...(callId ? { callId } : {}) };
+}
+
+/** Longest tool input / result kept for the chat's expandable rows. */
+const MAX_DETAIL = 20_000;
+const clipDetail = (s: string) => (s.length > MAX_DETAIL ? `${s.slice(0, MAX_DETAIL)}\n… (${s.length - MAX_DETAIL} more characters)` : s);
+function pretty(v: unknown): string | undefined {
+  if (v === undefined || v === null || (typeof v === 'object' && !Object.keys(v as object).length)) return undefined;
+  return clipDetail(typeof v === 'string' ? v : JSON.stringify(v, null, 2));
+}
+
+/** The full input of a tool call: the code an execute ran, otherwise its arguments. */
+export function toolDetail(input: unknown): string | undefined {
+  const i = (input ?? {}) as Record<string, unknown>;
+  if (typeof i.code === 'string') return clipDetail(i.code);
+  if (typeof i.svg === 'string') return clipDetail(i.svg);
+  return pretty(input);
+}
+
+function callResult(callId: string, text: string, failed: boolean): AgentEvent {
+  // Screenshots come back as image blocks or long base64: keep the text around them only.
+  const clean = text.replace(/data:image\/[a-z]+;base64,[A-Za-z0-9+/=]{200,}/g, '[image]').replace(/[A-Za-z0-9+/=]{2000,}/g, '[binary]').trim();
+  return { kind: 'result', callId, text: clipDetail(clean || '(no text output)'), failed };
+}
+
+/** The line of a snippet worth showing in its summary: its leading comment, else its first statement. */
+function codeHint(code: string): string {
+  const lines = code.split('\n').map((l) => l.trim()).filter(Boolean);
+  const comment = lines.find((l) => l.startsWith('//'));
+  const hint = (comment ? comment.replace(/^\/\/+\s*/, '') : lines[0] ?? '').replace(/\s+/g, ' ');
+  return hint.length > 60 ? `${hint.slice(0, 57)}…` : hint;
 }
 
 export function toolSummary(name: string, input: unknown): string {
   const short = name.replace(/^mcp__archadev__/, '');
   const i = (input ?? {}) as Record<string, unknown>;
-  if (short === 'execute' && typeof i.code === 'string') return `execute · ${i.code.split('\n').length} lines`;
+  if (short === 'execute' && typeof i.code === 'string') {
+    const n = i.code.split('\n').length;
+    const hint = codeHint(i.code);
+    return `execute · ${hint ? `${hint} · ` : ''}${n} ${n === 1 ? 'line' : 'lines'}`;
+  }
   if (short === 'execute' && i.editId) return `execute · patch ${String(i.editId)}`;
+  if (short === 'get_state') return 'get_state · read the canvas';
+  if (short === 'inspect') return `inspect · ${i.node ? String(i.node) : 'whole page'}${i.depth !== undefined ? ` · depth ${String(i.depth)}` : ''}`;
+  if (short === 'read_guide') return `read_guide · ${String(i.topic ?? '')}`;
+  if (short === 'place_svg') return `place_svg · ${String(i.name ?? (typeof i.svg === 'string' ? `${i.svg.length} chars` : ''))}`;
+  if (short === 'export_svg') return `export_svg · ${String(i.node ?? '')}`;
   if (short === 'screenshot') return `screenshot · ${String(i.node ?? '')}`;
   if (short === 'say') return String(i.text ?? '');
-  if (short === 'browser') return `browser · ${String(i.action ?? '')}${i.url ? ` ${String(i.url)}` : i.ref ? ` ${String(i.ref)}` : ''}`;
+  if (short === 'done') return `done${i.summary ? ` · ${String(i.summary)}` : ''}`;
+  if (short === 'delegate' && Array.isArray(i.tasks)) return `delegate · ${(i.tasks as Array<{ title?: unknown }>).map((t) => String(t.title ?? '')).join(' · ')}`;
+  if (short === 'wait_workers') return 'waiting for the team';
+  if (short === 'tell_worker') return `tell ${String(i.worker ?? '')} · ${String(i.message ?? '').slice(0, 80)}`;
+  if (short === 'browser') return `browser · ${String(i.action ?? '')}${i.query ? ` "${String(i.query)}"` : i.url ? ` ${String(i.url).slice(0, 120)}` : i.ref ? ` ${String(i.ref)}` : ''}`;
+  if (short === 'place_image') return `place_image · ${String(i.name ?? (i.url ? String(i.url).slice(0, 120) : i.ref ?? i.selector ?? ''))}`;
   return short;
 }
 
@@ -331,7 +390,7 @@ const toml = (v: unknown) => JSON.stringify(v); // JSON strings/arrays are valid
  * agy does not put MCP tool descriptions in the model's context: it reads them from schema files,
  * which costs minutes of shell/file probing per run. Hand it the tools and the execute API up front.
  */
-const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, screenshot { node, slices? }, export_svg { node }, say { text }, read_guide { topic }, reference { path, page? } (read a PDF/image mockup into numbers), compare { node, reference, page? } (visual diff against it), list_documents {}, open_document { path }, new_document { name? }, save_document { path? }. Every document tool also takes doc (id, .archa path or name). The canvas state is at the end of this message, so start designing right away; nothing outside the canvas is needed (no shell, files or browsing).
+const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, place_svg { svg, parent?, x?, y?, width?, height?, name?, mode? }, inspect { node?, depth? }, screenshot { node }, export_svg { node }, say { text }, read_guide { topic }, browser { action, … } (the built-in web browser: search, open, screenshot, images, download), place_image { url | ref, parent? | fillOf?, x?, y?, width?, height?, fit? } (a real photo or logo onto the canvas; fillOf puts it into a frame's fills as a background), done { summary? } (call once when finished — it puts your canvas cursor away). reference { path, page? } (read a PDF/image mockup into numbers), compare { node, reference, page? } (visual diff against it), list_documents {}, open_document { path }, new_document { name? }, save_document { path? }. Every document tool also takes doc (id, .archa path or name). The canvas state is at the end of this message, so start designing right away; use browser and place_image for web research and pictures — never a shell, Python or file tools.
 
 execute tool documentation:
 ${EXECUTE_API_DOC}`;
@@ -428,6 +487,8 @@ export const ADAPTERS: Adapter[] = [
         '-c', `mcp_servers.archadev.command=${toml(mcp.command)}`,
         '-c', `mcp_servers.archadev.args=${toml([...mcp.args])}`,
         ...Object.entries(mcp.env).flatMap(([k, v]) => ['-c', `mcp_servers.archadev.env.${k}=${toml(v)}`]),
+        // wait_workers (orchestrate mode) blocks for minutes; codex gives an MCP call 60 s by default.
+        '-c', 'mcp_servers.archadev.tool_timeout_sec=660',
         ...(model ? ['--model', model] : []),
         // `=` form: the flag takes several values and must not swallow the `resume` subcommand.
         ...(images.length ? [`--image=${images.map((i) => i.path).join(',')}`] : []),

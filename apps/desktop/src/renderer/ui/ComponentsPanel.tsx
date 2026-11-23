@@ -39,7 +39,7 @@ export function ComponentsPanel() {
               <span className="text-fg">{sel.name}</span> is an instance of <span className="text-accent-fg">{selMain?.name ?? 'a deleted component'}</span>
             </div>
             <div className="flex gap-1">
-              {selMain && <SmallButton icon={RefreshCw} label="Reset to main" onClick={() => run('Sync instance', () => syncInstanceOps(doc, sel.id))} />}
+              {selMain && <SmallButton icon={RefreshCw} label="Reset to main" onClick={() => run('Reset instance', () => syncInstanceOps(doc, sel.id, { reset: true }))} />}
               {selMain && <SmallButton icon={Crosshair} label="Go to main" onClick={() => revealNode(selMain.id)} />}
               <SmallButton icon={Unlink} label="Detach" onClick={() => run('Detach instance', () => detachOps(doc, sel.id))} />
             </div>

@@ -1,0 +1,96 @@
+{
+ "rootId": "root000001",
+ "nodes": {
+  "root000001": {
+   "id": "root000001",
+   "type": "page",
+   "name": "Page 1",
+   "parentId": null,
+   "children": [
+    "hero000001"
+   ]
+  },
+  "hero000001": {
+   "id": "hero000001",
+   "type": "frame",
+   "name": "Hero",
+   "parentId": "root000001",
+   "width": 400,
+   "height": 240,
+   "children": [
+    "text000001"
+   ],
+   "fills": [
+    {
+     "type": "image",
+     "src": "data:image/png;base64,iVBORw0KGgo=",
+     "fit": "crop"
+    },
+    {
+     "type": "linear-gradient",
+     "angle": 180,
+     "stops": [
+      {
+       "position": 0,
+       "color": {
+        "l": 0,
+        "c": 0,
+        "h": 0,
+        "a": 0
+       }
+      },
+      {
+       "position": 1,
+       "color": {
+        "l": 0,
+        "c": 0,
+        "h": 0,
+        "a": 0.7
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "text000001": {
+   "id": "text000001",
+   "type": "text",
+   "name": "Headline",
+   "parentId": "hero000001",
+   "x": 24,
+   "y": 24,
+   "text": "Design faster",
+   "fills": [
+    {
+     "type": "solid",
+     "color": {
+      "l": 1,
+      "c": 0,
+      "h": 0,
+      "a": 1
+     }
+    }
+   ],
+   "spans": [
+    {
+     "start": 7,
+     "end": 13,
+     "fills": [
+      {
+       "type": "solid",
+       "color": {
+        "l": 0.6,
+        "c": 0.2,
+        "h": 290,
+        "a": 1
+       }
+      }
+     ]
+    }
+   ],
+   "bindings": {
+    "spans.0.fills.0.color": "var0000001"
+   }
+  }
+ }
+}

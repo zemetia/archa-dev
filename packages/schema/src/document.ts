@@ -4,9 +4,11 @@ import type { Comment, Variable } from './variables';
 
 /**
  * 2: polygon, path, image, sticky and embed nodes; document variables and comments.
- * 3: image `src` may be an `asset:` reference into the `<name>-asset/` folder beside the file (no base64).
+ * 3: inner-shadow, layer-blur and background-blur effects; justify "space-around".
+ * 4: gradient and image paints, rich-text spans, token bindings (`node.bindings`), grid frames (`wrap`, `lineGap`).
+ * 5: image sources (image nodes and image paints) may be `asset:` references into the `<name>-asset/` folder beside the file.
  */
-export const FORMAT_VERSION = 3;
+export const FORMAT_VERSION = 5;
 
 /** Prefix of an image source stored in the document's asset folder, e.g. `asset:images/3fa9….png`. */
 export const ASSET_SCHEME = 'asset:';

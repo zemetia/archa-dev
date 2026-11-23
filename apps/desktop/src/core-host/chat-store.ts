@@ -58,8 +58,11 @@ export class ChatStore {
     return list;
   }
 
+  /** Adds a message, or replaces the one with the same id (a tool row whose result arrived). */
   append(docId: string, m: ChatMessage): void {
-    this.list(docId).push(m);
+    const list = this.list(docId);
+    const i = list.findIndex((x) => x.id === m.id);
+    if (i >= 0) list[i] = m; else list.push(m);
     this.writeThread(docId, threadOfMessage(m));
   }
 
@@ -114,7 +117,11 @@ export class ChatStore {
         const t = threadOfMessage(m);
         // Old history kept thumbnails as base64; they become attachment files like new ones.
         if (m.images?.length) m.images = m.images.map((src) => (src.startsWith('data:') ? this.saveImage(docId, t, '', src)?.ref ?? src : src));
-        byThread.set(t, [...(byThread.get(t) ?? []), m]);
+        // A tool row written again once its result arrived: the later line replaces it.
+        const rows = byThread.get(t) ?? [];
+        const at = rows.findIndex((x) => x.id === m.id);
+        if (at >= 0) rows[at] = m; else rows.push(m);
+        byThread.set(t, rows);
       } catch { /* skip a torn line */ }
     }
     const all = [...byThread.values()].flat().sort((a, b) => a.ts - b.ts);

@@ -1,10 +1,11 @@
 import { getQuickJS, shouldInterruptAfterDeadline, type QuickJSContext, type QuickJSWASMModule } from 'quickjs-emscripten';
 import {
-  applyOps, BUNDLED_FONTS, boundVariable, DocumentError, findEmptySpace, insertOpsFor, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, subtreeInput, syncInstanceOps,
+  alignOps, applyOps, bindTokens, boundTo, contextOf, distributeOps, DocumentError, findEmptySpace, findVariable, insertOpsFor, outline, wrapOps, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, setPropsOps, subtreeInput, syncInstanceOps,
   type ArchaDocument, type DocumentSession,
 } from '@archa/core';
-import { iconKey, iconPath, searchIcons } from '@archa/core/icons';
-import { BINDABLE, colorToHex, hexToColor, isContainer, newId, paintColor, type Node, type NodeInput, type Op } from '@archa/schema';
+import { CUSTOM_SET, customIconNode, getIcon, ICON_SETS, iconNode, iconSetMeta, loadAllIconSets, loadedIconSet, parseIconRef, searchIcons, searchNames } from '@archa/icons';
+import { importSvg, isSvgMarkup, type SvgImportMode } from '@archa/formats';
+import { paintColor, colorToHex, hexToColor, isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
 import type { ExecuteResult, TrailAction, TrailStep } from '@archa/protocol';
 import type { Connection, Workspace } from './workspace';
 import { readFileSync } from 'node:fs';
@@ -32,19 +33,26 @@ var getSelection = () => __call('selection', []);
 var findEmptySpace = (width, height) => __call('space', [width, height]);
 var screenshot = (ref, opts) => __call('screenshot', [ref, opts || {}]);
 var components = () => __call('components', []);
-var makeComponent = (ref, description) => __call('makeComponent', [ref, description || '']);
+var makeComponent = (ref, description, opts) => __call('makeComponent', [ref, description || '', opts || {}]);
 var instance = (component, parent, opts) => __call('instance', [component, parent, opts || {}]);
 var syncInstances = (component) => __call('syncInstances', [component]);
+var setProps = (ref, values) => __call('setProps', [ref, values || {}]);
+var resetInstance = (ref) => __call('resetInstance', [ref]);
+var bind = (ref, map) => __call('bind', [ref, map || {}]);
+var unbind = (ref, paths) => __call('unbind', [ref, paths === undefined ? null : [].concat(paths)]);
 var copy = (ref, parent, opts) => __call('copy', [ref, parent, opts || {}]);
 var fromLibrary = (ref, parent, opts) => __call('fromLibrary', [ref, parent, opts || {}]);
 var variables = () => __call('variables', []);
 var setVariable = (name, value) => __call('setVariable', [name, value]);
 var resolveComment = (id) => __call('resolveComment', [id]);
+var align = (refs, edge, opts) => __call('align', [[].concat(refs), edge, opts || {}]);
+var distribute = (refs, axis, opts) => __call('distribute', [[].concat(refs), axis, typeof opts === 'number' ? { gap: opts } : opts || {}]);
+var wrap = (refs, frame) => __call('wrap', [[].concat(refs), frame || {}]);
+var outline = (ref, opts) => __call('outline', [ref, opts || {}]);
 var icon = (name, parent, opts) => __call('icon', [name, parent, opts || {}]);
-var image = (src, parent, opts) => __call('image', [src, parent, opts || {}]);
-var bind = (ref, map) => __call('bind', [ref, map || {}]);
-var fonts = () => __call('fonts', []);
-var icons = (query) => __call('icons', [query]);
+var image = (src, parent, opts) => __call('imageFile', [src, parent, opts || {}]);
+var icons = (query, opts) => __call('icons', [query, opts || {}]);
+var svg = (markup, parent, opts) => __call('svg', [markup, parent, opts || {}]);
 var print = (...v) => __call('print', [v.map((x) => typeof x === 'string' ? x : JSON.stringify(x))]);
 var find = (visitor, opts) => {
   if (!opts || !opts.under) throw new Error('find() needs { under: <frame id or name> } — use get_state for the page overview');
@@ -55,11 +63,19 @@ var find = (visitor, opts) => {
 `;
 
 type Pending = { code: string; createdAt: number };
+export type ImagePlacement = {
+  /** Put the picture into this layer's fills instead of placing a new image layer. */
+  fillOf?: string;
+  parent?: string; x?: number; y?: number; width?: number; height?: number; index?: number;
+  name?: string; fit?: 'crop' | 'fit' | 'fill'; cornerRadius?: number; naturalWidth?: number; naturalHeight?: number;
+};
 
 export class AgentExecutor {
   private ctx: QuickJSContext | null = null;
   private failed = new Map<string, Pending>();
-  private state = { working: null as ArchaDocument | null, ops: [] as Op[], created: [] as Array<{ name: string; id: string }>, changed: new Map<string, string>(), output: [] as string[], shots: [] as Array<{ id: string; scale: number }>, pageRoot: '', selection: [] as string[], steps: [] as TrailStep[], assetDir: '' };
+  /** Large data URLs handed to a snippet by key, so megabytes never pass through the JS source. */
+  private blobs = new Map<string, string>();
+  private state ={ working: null as ArchaDocument | null, ops: [] as Op[], created: [] as Array<{ name: string; id: string }>, changed: new Map<string, string>(), output: [] as string[], shots: [] as Array<{ id: string; scale: number }>, pageRoot: '', selection: [] as string[], steps: [] as TrailStep[], assetDir: '' };
 
   constructor(private ws: Workspace, private conn: Connection) {}
 
@@ -86,6 +102,17 @@ export class AgentExecutor {
     return ctx;
   }
 
+  /** place_image (blueprint BROWSER, "Images"): puts a fetched picture on the canvas with the usual execute reply. */
+  async placeImage(session: DocumentSession, embed: string, opts: ImagePlacement): Promise<ExecuteResult> {
+    const key = `archa-blob:${newId(10)}`;
+    this.blobs.set(key, embed);
+    try {
+      return await this.run(session, { code: `__call('image', [${JSON.stringify(key)}, ${JSON.stringify(opts)}])` });
+    } finally {
+      this.blobs.delete(key);
+    }
+  }
+
   async run(session: DocumentSession, params: { code?: string; editId?: string; edits?: Array<{ find: string; replace: string }> }): Promise<ExecuteResult> {
     let code = params.code;
     let editId = params.editId;
@@ -100,6 +127,8 @@ export class AgentExecutor {
     }
     if (!code?.trim()) return { ok: false, revision: session.revision, reason: 'Pass `code` (a JS snippet) or `editId` + `edits`.', editId: newId(6) };
 
+    // Icon sets load once, on the first snippet that asks for one (they are large).
+    if (/\bicons?\s*\(/.test(code)) await loadAllIconSets();
     const ctx = await this.context();
     const page = session.doc.pages[0]!;
     this.state = { working: session.doc.clone(), ops: [], created: [], changed: new Map(), output: [], shots: [], pageRoot: page.rootId, selection: this.ws.selection.get(session.id) ?? [], steps: [], assetDir: this.ws.assetDir(session) };
@@ -193,7 +222,13 @@ export class AgentExecutor {
         const [parent, input, index] = args as [string | undefined, NodeInput, number | undefined];
         if (!input || typeof input !== 'object' || !input.type) throw new Error('insert(parent, node): node needs a type ("frame" | "rect" | "ellipse" | "polygon" | "path" | "text" | "image" | "sticky" | "embed" | "group")');
         const parentId = parent ? ref(parent) : st.pageRoot;
-        const { ops, rootId, created } = insertOpsFor(input, parentId, index ?? undefined);
+        // SVG markup written into a text node would show as code: place it as the drawing instead.
+        if (input.type === 'text' && typeof input.text === 'string' && isSvgMarkup(input.text)) {
+          const { text, name: n, x, y } = input as unknown as { text: string; name?: string; x?: number; y?: number };
+          st.output.push('insert: that text was SVG markup, so it was placed as a drawing — use svg(markup, parent, opts) for SVG');
+          return this.hostCall('svg', [text, parentId, { name: n, x, y, index }]);
+        }
+        const { ops, rootId, created } = insertOpsFor(withTokens(doc, input), parentId, index ?? undefined);
         commit(ops);
         st.created.push(...created);
         step('create', rootId);
@@ -207,8 +242,22 @@ export class AgentExecutor {
         const merged: Record<string, unknown> = { ...patch };
         if (patch.sizing && typeof patch.sizing === 'object') merged.sizing = { ...cur.sizing, ...(patch.sizing as object) };
         if (patch.padding && typeof patch.padding === 'object' && !Array.isArray(patch.padding) && cur.padding) merged.padding = { ...cur.padding, ...(patch.padding as object) };
-        const norm = normaliseInput({ ...merged, type: cur.type });
+        // `context` is the person's note on the layer (design panel → Context); it lives in meta, next to component data.
+        if ('context' in patch) { merged.meta = { ...cur.meta, ...(merged.meta as object | undefined), context: String(patch.context ?? '') }; delete merged.context; }
+        else if (merged.meta && typeof merged.meta === 'object') merged.meta = { ...cur.meta, ...(merged.meta as object) };
+        // "$color/accent" values bind the property to that token; bindings of replaced properties go.
+        const tokened = bindTokens(doc, merged, tokenHex);
+        if (tokened.bindings) {
+          const kept = Object.fromEntries(Object.entries(cur.bindings ?? {}).filter(([path]) => !(path.split('.')[0]! in patch)));
+          tokened.bindings = { ...kept, ...(tokened.bindings as Record<string, string>) };
+        }
+        // Shorthands that add to a list (backdropBlur → effects) keep the node's other effects; grid
+        // spellings need the current direction (rowGap means another gap in a column grid).
+        if (BLUR_KEYS.some((k) => k in patch) && !('effects' in patch) && 'effects' in cur) tokened.effects = cur.effects;
+        const hinted = cur.type === 'frame' && !('layout' in patch);
+        const norm = normaliseInput({ ...tokened, type: cur.type, ...(hinted ? { layout: cur.layout } : {}) });
         delete norm.type;
+        if (hinted && norm.layout === cur.layout) delete norm.layout;
         if (!('name' in patch)) delete norm.name;
         commit([{ op: 'update', id, patch: norm }]);
         st.changed.set(id, doc.require(id).name);
@@ -261,14 +310,22 @@ export class AgentExecutor {
         return listComponents(doc);
       case 'makeComponent': {
         const id = ref(args[0]);
-        commit(makeComponentOps(doc, id, String(args[1] ?? '')));
+        const opts = (args[2] ?? {}) as { props?: Record<string, { type: 'text' | 'boolean'; node: string }>; set?: string; variant?: Record<string, string> };
+        const props = opts.props ? Object.fromEntries(Object.entries(opts.props).map(([k, v]) => [k, { type: v.type, node: ref(v.node) }])) : undefined;
+        commit(makeComponentOps(doc, id, String(args[1] ?? ''), { props, set: opts.set, variant: opts.variant }));
         st.changed.set(id, doc.require(id).name);
         step('edit', id);
         return id;
       }
       case 'instance': {
-        const [c, parent, opts] = args as [string, string | null | undefined, { x?: number; y?: number; index?: number; name?: string }];
+        const [c, parent, opts] = args as [string, string | null | undefined, { x?: number; y?: number; index?: number; name?: string; props?: Record<string, string | boolean> }];
         const main = ref(c);
+        // Props may name a variant ("size: lg"): place the right main, then set the rest.
+        if (opts?.props && Object.keys(opts.props).length) {
+          const id = this.hostCall('instance', [c, parent, { ...opts, props: undefined }]) as string;
+          this.hostCall('setProps', [id, opts.props]);
+          return id;
+        }
         const { ops, rootId, created } = instanceOps(doc, main, parent ? ref(parent) : st.pageRoot, opts ?? {});
         step('focus', main);
         commit(ops);
@@ -317,8 +374,45 @@ export class AgentExecutor {
         for (const inst of list) { commit(syncInstanceOps(doc, inst.id)); st.changed.set(inst.id, inst.name); step('edit', inst.id); }
         return list.length;
       }
+      case 'setProps': {
+        const id = ref(args[0]);
+        commit(setPropsOps(doc, id, (args[1] ?? {}) as Record<string, string | boolean>));
+        st.changed.set(id, doc.require(id).name);
+        step('edit', id);
+        return null;
+      }
+      case 'resetInstance': {
+        const id = ref(args[0]);
+        commit(syncInstanceOps(doc, id, { reset: true }));
+        st.changed.set(id, doc.require(id).name);
+        step('edit', id);
+        return null;
+      }
+      case 'bind': {
+        const id = ref(args[0]);
+        const cur = doc.require(id);
+        const bindings: Record<string, string> = { ...cur.bindings };
+        for (const [path, name] of Object.entries((args[1] ?? {}) as Record<string, string>)) {
+          const v = findVariable(doc, String(name));
+          if (!v) throw new Error(`bind: no variable "${String(name)}" — variables: ${[...doc.variables.values()].map((x) => x.name).slice(0, 30).join(', ') || 'none (setVariable first)'}`);
+          bindings[BIND_ALIASES[path] ?? path] = v.id;
+        }
+        commit([{ op: 'update', id, patch: { bindings } }]);
+        st.changed.set(id, cur.name);
+        step('edit', id);
+        return null;
+      }
+      case 'unbind': {
+        const id = ref(args[0]);
+        const cur = doc.require(id);
+        const paths = args[1] as string[] | null;
+        const bindings = Object.fromEntries(Object.entries(cur.bindings ?? {}).filter(([path]) => paths && !paths.map((x) => BIND_ALIASES[x] ?? x).includes(path)));
+        commit([{ op: 'update', id, patch: { bindings: Object.keys(bindings).length ? bindings : undefined } }]);
+        st.changed.set(id, cur.name);
+        return null;
+      }
       case 'variables':
-        return [...doc.variables.values()].map((v) => ({ id: v.id, name: v.name, type: v.type, value: v.type === 'color' ? colorToHex(v.value, true) : v.value }));
+        return [...doc.variables.values()].map((v) => ({ name: v.name, type: v.type, value: v.type === 'color' ? colorToHex(v.value, true) : v.value, bound: boundTo(doc, v.id).length }));
       case 'setVariable': {
         const [name, value] = args as [string, unknown];
         if (!name) throw new Error('setVariable(name, value): name is required');
@@ -340,27 +434,33 @@ export class AgentExecutor {
       }
       case 'icon': {
         const [nameArg, parent, opts = {}] = args as [string, string | null | undefined, { size?: number; color?: string; strokeWidth?: number; index?: number; x?: number; y?: number; name?: string }];
-        const d = iconPath(String(nameArg ?? ''));
-        if (!d) {
-          const near = searchIcons(String(nameArg ?? ''), 8);
-          throw new Error(`No icon "${String(nameArg)}"${near.length ? ` — did you mean ${near.join(', ')}?` : ' — lucide has no brand logos; use a neutral icon (globe, mail, link, at-sign, message-circle) or a short text label. icons("query") lists names'}`);
-        }
+        const { set, name: key } = parseIconRef(String(nameArg ?? ''));
         const parentId = parent ? ref(parent) : st.pageRoot;
         const size = Number(opts.size) > 0 ? Number(opts.size) : 20;
-        const input = {
-          type: 'path', name: opts.name ?? `Icon ${iconKey(String(nameArg))}`, d, viewBox: { x: 0, y: 0, width: 24, height: 24 }, width: size, height: size,
-          fills: [], strokes: [{ color: opts.color ?? inkFor(doc, parentId), width: ((Number(opts.strokeWidth) || 2) * size) / 24, align: 'center' }],
-          lineCap: 'round', lineJoin: 'round', ...(opts.x !== undefined ? { x: opts.x } : {}), ...(opts.y !== undefined ? { y: opts.y } : {}),
-        } as NodeInput;
+        let input: NodeInput;
+        if (set === CUSTOM_SET) {
+          const mine = this.ws.icons.get(key);
+          if (!mine) throw new Error(`No uploaded icon "${key}" — uploaded icons: ${this.ws.icons.list().map((i) => i.name).slice(0, 30).join(', ') || 'none'}`);
+          input = customIconNode(mine, { size, color: opts.color, name: opts.name });
+        } else {
+          const icon = getIcon(loadedIconSet(set), key);
+          if (!icon) {
+            if (!iconSetMeta(set)) throw new Error(`Unknown icon set "${set}" — sets: ${ICON_SETS.map((x) => x.id).join(', ')}, my`);
+            const near = searchIcons(key, { sets: [set], limit: 8 });
+            throw new Error(`No icon "${String(nameArg)}"${near.length ? ` — did you mean ${near.join(', ')}?` : ''}. icons("query") searches every set; brand logos are "logos:<brand>"`);
+          }
+          // Logos keep their brand colour unless one is asked for; icons default to readable ink.
+          input = iconNode(icon, { size, color: opts.color ?? (icon.brand ? undefined : inkFor(doc, parentId)), strokeWidth: opts.strokeWidth, name: opts.name });
+        }
+        if (opts.x !== undefined) (input as { x?: number }).x = opts.x;
+        if (opts.y !== undefined) (input as { y?: number }).y = opts.y;
         const { ops, rootId, created } = insertOpsFor(input, parentId, opts.index ?? undefined);
         commit(ops);
         st.created.push(...created);
         step('create', rootId);
         return rootId;
       }
-      case 'icons':
-        return searchIcons(String(args[0] ?? ''), 30);
-      case 'image': {
+      case 'imageFile': {
         // The host reads the file: it is copied into the asset folder and placed at its natural size.
         const [srcArg, parent, opts = {}] = args as [string, string | null | undefined, Record<string, unknown>];
         const raw = String(srcArg ?? '').trim();
@@ -387,25 +487,94 @@ export class AgentExecutor {
         if (natural) st.output.push(`image "${name}": ${natural.width}×${natural.height} file → ${src}`);
         return rootId;
       }
-      case 'bind': {
-        const [r, map] = args as [string, Record<string, string | null>];
-        const id = ref(r);
-        const cur = doc.require(id);
-        const next: Record<string, string> = { ...(cur.bind ?? {}) };
-        for (const [key, varRef] of Object.entries(map ?? {})) {
-          if (varRef === null || varRef === '') { delete next[key]; continue; }
-          if (!BINDABLE[key]) throw new Error(`bind(): "${key}" cannot be bound — use one of ${Object.keys(BINDABLE).join(', ')}`);
-          const v = boundVariable(doc, String(varRef));
-          if (!v) throw new Error(`bind(): no variable "${String(varRef)}" — variables() lists them, setVariable() creates one`);
-          next[key] = v.id;
-        }
-        commit([{ op: 'update', id, patch: { bind: Object.keys(next).length ? next : undefined } }]);
-        st.changed.set(id, doc.require(id).name);
-        step('edit', id);
-        return next;
+      case 'svg': {
+        const [markup, parent, opts = {}] = args as [string, string | null | undefined, { width?: number; height?: number; x?: number; y?: number; index?: number; name?: string; mode?: SvgImportMode }];
+        if (typeof markup !== 'string' || !markup.trim()) throw new Error('svg(markup, parent, opts): markup is the SVG source as a string, e.g. svg(`<svg viewBox="0 0 24 24">…</svg>`, card)');
+        const parentId = parent ? ref(parent) : st.pageRoot;
+        const r = importSvg(markup, { name: opts.name, mode: opts.mode, width: Number(opts.width) || undefined, height: Number(opts.height) || undefined });
+        const input = r.node as NodeInput & { x?: number; y?: number };
+        if (opts.x !== undefined) input.x = Number(opts.x);
+        if (opts.y !== undefined) input.y = Number(opts.y);
+        if (opts.x === undefined && opts.y === undefined && parentId === st.pageRoot) Object.assign(input, findEmptySpace(doc, parentId, Number(input.width) || 100, Number(input.height) || 100));
+        const { ops, rootId, created } = insertOpsFor(input, parentId, opts.index ?? undefined);
+        commit(ops);
+        st.created.push(...created.slice(0, 1));
+        st.output.push(r.mode === 'vector'
+          ? `svg: "${created[0]!.name}" placed as ${r.shapes} editable vector layer${r.shapes === 1 ? '' : 's'}`
+          : `svg: "${created[0]!.name}" placed as an image${r.reason ? ` (vectors cannot keep ${r.reason})` : ''} — it looks exact but its shapes are not editable layers`);
+        step('create', rootId);
+        return rootId;
       }
-      case 'fonts':
-        return BUNDLED_FONTS;
+      case 'image': {
+        const [key, o] = args as [string, ImagePlacement];
+        const src = this.blobs.get(key);
+        if (!src) throw new Error('That image is no longer available — call place_image again.');
+        if (o.fillOf) {
+          // A picture fill under the layer's gradients (scrims stay on top); solid fills give way to it.
+          const id = ref(o.fillOf);
+          const target = doc.require(id);
+          if (!('fills' in target)) throw new Error(`place_image fillOf: "${target.name}" is a ${target.type} and has no fills`);
+          const fit = o.fit ?? 'crop';
+          const fills = [{ type: 'image' as const, src, fit, scale: 1, opacity: 1, visible: true }, ...target.fills.filter((f) => f.type !== 'solid' && f.type !== 'image')];
+          commit([{ op: 'update', id, patch: { fills } }]);
+          st.changed.set(id, target.name);
+          st.output.push(`image: placed as the picture fill of "${target.name}" (fit ${fit}); its gradients stay on top`);
+          step('edit', id);
+          return id;
+        }
+        const parentId = o.parent ? ref(o.parent) : st.pageRoot;
+        const nw = o.naturalWidth || 300, nh = o.naturalHeight || 200;
+        let w = Number(o.width) || 0, h = Number(o.height) || 0;
+        if (w && !h) h = Math.round(w * nh / nw);
+        else if (h && !w) w = Math.round(h * nw / nh);
+        else if (!w && !h) {
+          // Like a pasted image: big pictures land at a comfortable size; the pixels stay full resolution.
+          const fit = Math.min(1, 800 / Math.max(nw, nh));
+          w = Math.round(nw * fit); h = Math.round(nh * fit);
+        }
+        const input = { type: 'image', name: o.name || 'Image', src, fit: o.fit ?? 'crop', width: w, height: h, ...(o.cornerRadius ? { cornerRadius: o.cornerRadius } : {}) } as NodeInput & { x?: number; y?: number };
+        if (o.x !== undefined) input.x = Number(o.x);
+        if (o.y !== undefined) input.y = Number(o.y);
+        if (o.x === undefined && o.y === undefined && parentId === st.pageRoot) Object.assign(input, findEmptySpace(doc, parentId, w, h));
+        const { ops, rootId, created } = insertOpsFor(input, parentId, o.index ?? undefined);
+        commit(ops);
+        st.created.push(...created.slice(0, 1));
+        st.output.push(`image: "${created[0]!.name}" placed at ${w}×${h}${o.naturalWidth ? ` (file ${o.naturalWidth}×${o.naturalHeight} px)` : ''}, fit ${input.fit as string}`);
+        step('create', rootId);
+        return rootId;
+      }
+      case 'align':
+      case 'distribute': {
+        const [refs, how, opts] = args as [string[], string, { to?: 'auto' | 'parent' | 'selection'; gap?: number }];
+        const ids = refs.map(ref);
+        const r = name === 'align' ? alignOps(doc, ids, String(how ?? ''), opts?.to ?? 'auto') : distributeOps(doc, ids, String(how ?? ''), opts?.gap);
+        commit(r.ops);
+        for (const op of r.ops) if (op.op === 'update') { st.changed.set(op.id, doc.require(op.id).name); step('edit', op.id); }
+        st.output.push(...r.notes.map((n) => `${name}: ${n}`));
+        return null;
+      }
+      case 'wrap': {
+        const [refs, frame] = args as [string[], Record<string, unknown>];
+        const { ops, rootId } = wrapOps(doc, refs.map(ref), frame ?? {});
+        commit(ops);
+        st.created.push({ id: rootId, name: doc.require(rootId).name });
+        step('create', rootId);
+        return rootId;
+      }
+      case 'outline': {
+        const [r, opts] = args as [string | null | undefined, { depth?: number }];
+        const id = r ? ref(r) : st.pageRoot;
+        step('read', id);
+        return outline(doc, id, opts?.depth ?? (id === st.pageRoot ? 1 : 3));
+      }
+      case 'icons': {
+        const [q, o] = args as [string, { set?: string | string[]; limit?: number } | undefined];
+        const sets = o?.set ? [o.set].flat() : undefined;
+        const limit = Math.min(Number(o?.limit) || 30, 100);
+        const hits = searchIcons(String(q ?? ''), { sets: sets?.filter((x) => x !== CUSTOM_SET), limit });
+        if (!sets || sets.includes(CUSTOM_SET)) hits.unshift(...searchNames(this.ws.icons.list().map((i) => i.name), String(q ?? ''), 6).map((n) => `${CUSTOM_SET}:${n}`));
+        return hits.slice(0, limit);
+      }
       case 'print':
         st.output.push((args[0] as string[]).join(' '));
         return null;
@@ -428,11 +597,26 @@ function finishTrail(doc: ArchaDocument, steps: TrailStep[]): TrailStep[] {
   return list.length <= MAX ? list : Array.from({ length: MAX }, (_, i) => list[Math.round((i * (list.length - 1)) / (MAX - 1))]!);
 }
 
+const BLUR_KEYS = ['backdropBlur', 'backgroundBlur', 'backdropFilter', 'glass', 'layerBlur', 'blur', 'filter'];
+
+const tokenHex = (v: { value: Parameters<typeof colorToHex>[0] }) => colorToHex(v.value, true);
+
+/** Agent-friendly binding names → property paths. */
+const BIND_ALIASES: Record<string, string> = { fill: 'fills.0.color', color: 'fills.0.color', stroke: 'strokes.0.color', radius: 'cornerRadius', spacing: 'gap' };
+
+/** `"$token"` values in a node input (and its inline children) → literal values + bindings. */
+function withTokens(doc: ArchaDocument, input: NodeInput): NodeInput {
+  const out = bindTokens(doc, input as Record<string, unknown>, tokenHex) as NodeInput;
+  if (Array.isArray(input.children)) out.children = input.children.map((c) => withTokens(doc, c));
+  return out;
+}
+
 /** Readable ink for content placed in `parentId`: light on dark fills (or the dark page), dark on light. */
 function inkFor(doc: ArchaDocument, parentId: string): string {
   for (let n = doc.get(parentId); n; n = n.parentId ? doc.get(n.parentId) : undefined) {
-    const fill = 'fills' in n ? n.fills.map((f) => (f.visible ? paintColor(f) : null)).filter((c) => c && c.a > 0.3).at(-1) : undefined;
-    if (fill) return fill.l < 0.6 ? '#f4f4f5' : '#18181b';
+    // The topmost paint that is not see-through decides; a photo is read as dark (scrims usually darken it).
+    const fill = 'fills' in n ? n.fills.filter((f) => f.visible && (f.type === 'image' || (paintColor(f)?.a ?? 0) > 0.3)).at(-1) : undefined;
+    if (fill) return (paintColor(fill)?.l ?? 0) < 0.6 ? '#f4f4f5' : '#18181b';
   }
   return '#d4d4d8';
 }
@@ -506,10 +690,12 @@ export function describeState(ws: Workspace, s: DocumentSession): string {
     `Document "${doc.meta.name}" (id ${s.id}) · revision ${s.revision}${s.filePath ? ` · ${s.filePath}` : ' · unsaved'}`,
     `Page "${page.name}" root id "${page.rootId}" — insert(null, …) places nodes on this page.`,
     `Selection: ${sel.length ? sel.map((n) => `${n.name} "${n.id}" (${n.type} ${n.width}×${n.height})`).join(', ') : 'none'}`,
+    ...describeSelection(doc, sel),
     `Top-level nodes (${top.length}):`,
     ...top.slice(0, 30).map((n) => `  - ${n.name} "${n.id}" ${n.type} at ${n.x},${n.y} size ${n.width}×${n.height}${isContainer(n) ? ` · ${n.children.length} children` : ''}`),
     ...(top.length > 30 ? [`  … +${top.length - 30} more`] : []),
     ...describeVariables(doc),
+    ...describeContext(doc),
     ...describeComments(doc),
     ...describeComponents(doc),
     ...describeLibrary(ws),
@@ -518,12 +704,28 @@ export function describeState(ws: Workspace, s: DocumentSession): string {
   return lines.join('\n');
 }
 
+/** The selected layers as the design panel shows them, so the agent edits what the person points at without a read call. */
+function describeSelection(doc: ArchaDocument, sel: Node[]): string[] {
+  if (!sel.length || sel.length > 6) return [];
+  return ['Selected layers (outline):', ...sel.map((n) => outline(doc, n.id, 2, 60).replace(/^/gm, '  '))];
+}
+
+/** Notes people wrote on layers (Context): constraints the agent must follow when it touches them. */
+function describeContext(doc: ArchaDocument): string[] {
+  const noted = [...doc.nodes.values()].filter((n) => contextOf(n));
+  if (!noted.length) return [];
+  return [
+    `Layer context notes (${noted.length}) — the person's instructions for these layers; follow them:`,
+    ...noted.slice(0, 30).map((n) => `  - ${n.name} "${n.id}": ${contextOf(n).replace(/\s+/g, ' ').slice(0, 300)}`),
+  ];
+}
+
 function describeVariables(doc: ArchaDocument): string[] {
   const vars = [...doc.variables.values()];
   if (!vars.length) return [];
   return [
-    `Variables (${vars.length}) — the document's design tokens; use these values instead of inventing new ones:`,
-    ...vars.slice(0, 60).map((v) => `  - ${v.name} (${v.type}) = ${v.type === 'color' ? colorToHex(v.value, true) : JSON.stringify(v.value)}`),
+    `Variables (${vars.length}) — the document's design tokens; use them as "$name" values (fills: ["$color/accent"], cornerRadius: "$radius/md") so the design follows the token:`,
+    ...vars.slice(0, 60).map((v) => `  - ${v.name} (${v.type}) = ${v.type === 'color' ? colorToHex(v.value, true) : JSON.stringify(v.value)}${boundTo(doc, v.id).length ? ` · bound by ${boundTo(doc, v.id).length}` : ''}`),
   ];
 }
 
@@ -546,7 +748,11 @@ function describeComponents(doc: ArchaDocument): string[] {
   if (!list.length) return ['Components: none yet. When you build something that repeats (button, card, nav item, list row), makeComponent() it and reuse it with instance().'];
   return [
     `Components (${list.length}) — reuse with instance(id, parent); never rebuild them by hand:`,
-    ...list.slice(0, 40).map((c) => `  - ${c.name} "${c.id}" ${c.width}×${c.height} · ${c.instances} instance${c.instances === 1 ? '' : 's'}${c.description ? ` · ${c.description}` : ''}`),
+    ...list.slice(0, 40).map((c) => {
+      const props = Object.entries(c.props).map(([k, t]) => `${k}:${t}`);
+      const variant = c.set ? ` · variant of "${c.set}" ${Object.entries(c.variant).map(([k, v]) => `${k}=${v}`).join(' ')}` : '';
+      return `  - ${c.name} "${c.id}" ${c.width}×${c.height} · ${c.instances} instance${c.instances === 1 ? '' : 's'}${variant}${props.length ? ` · props ${props.join(', ')}` : ''}${c.description ? ` · ${c.description}` : ''}`;
+    }),
   ];
 }
 

@@ -1,0 +1,11 @@
+%% User flow: first-time owner connects a bank account. Happy path left to right, branches below.
+flowchart LR
+  start(["Klik 'Coba gratis'"]) --> signup["Daftar: nama toko, WhatsApp"]
+  signup --> otp{"OTP benar?"}
+  otp -- tidak --> otpErr["Kode salah: kirim ulang (maks 3x)"] --> otp
+  otp -- ya --> pick["Pilih bank"] --> consent["Izin akses baca saja"]
+  consent --> ok{"Bank terhubung?"}
+  ok -- ya --> sync[/"Tarik mutasi 90 hari"/] --> done(["Dasbor dengan kas hari ini"])
+  ok -- tidak --> bankErr["Gagal terhubung: coba lagi atau lewati"]
+  bankErr -- coba lagi --> pick
+  bankErr -- lewati --> empty["Dasbor kosong + pengingat hubungkan bank"]

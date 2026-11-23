@@ -18,6 +18,7 @@ Status: **Proposed** (this plan's recommendation, waiting for the owner) · **Ac
 | D-08 | Launch + listen agent modes, adapters ported from Gungnir | Proposed | Proven with the same four agents | Embedding one agent SDK (pen's approach) |
 | D-09 | pnpm + Turborepo monorepo, electron-vite, electron-builder | Proposed | Mainstream, fast | Nx, Forge |
 | D-10 | Plan in `docs/plan`, graduating into `docs/blueprint` + `docs/knowledge` | Proposed | Zemetiash system | — |
+| D-12 | Grid = `wrap: N` items per line on row/column frames (plus `lineGap`), not a separate grid layout | Accepted (owner, 2026-11-23) | Owner asked for a max item count per line like `grid-template-columns`; one integer keeps the vocabulary narrow, maps to CSS grid `repeat(N, …)`, and agents get it from `columns: N` | Full CSS grid (areas, spans, explicit tracks); flex-wrap by width |
 | D-11 | Chat engine: keep local agent CLIs warm per thread (A) before any direct-API engine (B) | Proposed | Removes cold start and allows steering while keeping D-08 (own logins, agent-neutral) — [CHAT_AGENT](./CHAT_AGENT.md) | Direct API with keys; both |
 
 ## Open questions for the owner

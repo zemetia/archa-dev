@@ -1,0 +1,148 @@
+[
+ {
+  "id": "lucide",
+  "label": "Lucide",
+  "family": "Lucide",
+  "style": "Outline",
+  "licence": "ISC",
+  "version": "1.75.0",
+  "viewBox": 24,
+  "mode": "stroke",
+  "stroke": 2,
+  "count": 2091
+ },
+ {
+  "id": "tabler",
+  "label": "Tabler Outline",
+  "family": "Tabler",
+  "style": "Outline",
+  "licence": "MIT",
+  "version": "3.35.0",
+  "viewBox": 24,
+  "mode": "stroke",
+  "stroke": 2,
+  "count": 4963
+ },
+ {
+  "id": "tabler-filled",
+  "label": "Tabler Filled",
+  "family": "Tabler",
+  "style": "Filled",
+  "licence": "MIT",
+  "version": "3.35.0",
+  "viewBox": 24,
+  "mode": "fill",
+  "count": 999
+ },
+ {
+  "id": "ph",
+  "label": "Phosphor Regular",
+  "family": "Phosphor",
+  "style": "Regular",
+  "licence": "MIT",
+  "version": "2.1.1",
+  "viewBox": 256,
+  "mode": "fill",
+  "count": 1512
+ },
+ {
+  "id": "ph-thin",
+  "label": "Phosphor Thin",
+  "family": "Phosphor",
+  "style": "Thin",
+  "licence": "MIT",
+  "version": "2.1.1",
+  "viewBox": 256,
+  "mode": "fill",
+  "count": 1512
+ },
+ {
+  "id": "ph-light",
+  "label": "Phosphor Light",
+  "family": "Phosphor",
+  "style": "Light",
+  "licence": "MIT",
+  "version": "2.1.1",
+  "viewBox": 256,
+  "mode": "fill",
+  "count": 1512
+ },
+ {
+  "id": "ph-bold",
+  "label": "Phosphor Bold",
+  "family": "Phosphor",
+  "style": "Bold",
+  "licence": "MIT",
+  "version": "2.1.1",
+  "viewBox": 256,
+  "mode": "fill",
+  "count": 1512
+ },
+ {
+  "id": "ph-fill",
+  "label": "Phosphor Fill",
+  "family": "Phosphor",
+  "style": "Fill",
+  "licence": "MIT",
+  "version": "2.1.1",
+  "viewBox": 256,
+  "mode": "fill",
+  "count": 1512
+ },
+ {
+  "id": "hero",
+  "label": "Heroicons Outline",
+  "family": "Heroicons",
+  "style": "Outline",
+  "licence": "MIT",
+  "version": "2.2.0",
+  "viewBox": 24,
+  "mode": "stroke",
+  "stroke": 1.5,
+  "count": 324
+ },
+ {
+  "id": "hero-solid",
+  "label": "Heroicons Solid",
+  "family": "Heroicons",
+  "style": "Solid",
+  "licence": "MIT",
+  "version": "2.2.0",
+  "viewBox": 24,
+  "mode": "fill",
+  "count": 324
+ },
+ {
+  "id": "hero-mini",
+  "label": "Heroicons Mini",
+  "family": "Heroicons",
+  "style": "Mini",
+  "licence": "MIT",
+  "version": "2.2.0",
+  "viewBox": 20,
+  "mode": "fill",
+  "count": 324
+ },
+ {
+  "id": "hero-micro",
+  "label": "Heroicons Micro",
+  "family": "Heroicons",
+  "style": "Micro",
+  "licence": "MIT",
+  "version": "2.2.0",
+  "viewBox": 16,
+  "mode": "fill",
+  "count": 316
+ },
+ {
+  "id": "logos",
+  "label": "Brand logos",
+  "family": "Logos",
+  "style": "Brand",
+  "licence": "CC0 (trademarks belong to their owners)",
+  "version": "16.38.0",
+  "viewBox": 24,
+  "mode": "fill",
+  "count": 3472
+ }
+]

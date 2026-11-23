@@ -10,3 +10,7 @@ export * from './lint';
 export * from './space';
 export * from './components';
 export * from './shapes';
+export * from './arrange';
+export * from './outline';
+export * from './connectors';
+export * from './metrics';

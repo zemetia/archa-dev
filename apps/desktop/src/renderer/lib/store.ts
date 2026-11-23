@@ -1,16 +1,17 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, threadOf, type AccountsOverview, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, threadOf, type AccountsOverview, type ChatMode, type CustomIconInfo, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodeImage, renderNodePng, renderNodeSlices } from '@archa/render';
 import { onChatRun } from './comments';
-import { preloadFonts } from './fonts';
-import { pushTrail, type AgentCursor } from '../canvas/cursors';
+import { markDone, pushTrail, type AgentCursor } from '../canvas/cursors';
+import * as changes from '../canvas/changes';
+import { readingOrder } from './geometry';
 
 export type LeftTab = 'chat' | 'history' | 'layers' | 'components' | 'slides' | 'library';
-export type Tool = 'select' | 'scale' | 'hand' | 'frame' | 'rect' | 'ellipse' | 'polygon' | 'pen' | 'text' | 'sticky' | 'embed' | 'comment';
+export type Tool = 'select' | 'scale' | 'hand' | 'frame' | 'rect' | 'ellipse' | 'polygon' | 'pen' | 'text' | 'sticky' | 'embed' | 'connector' | 'comment';
 /** Floating panels opened from the tool rail. */
-export type RailPanel = 'variables' | 'find' | 'icons' | null;
+export type RailPanel = 'variables' | 'find' | 'assets' | null;
 export type Camera = { x: number; y: number; zoom: number };
 type Toast = { id: number; text: string; kind: 'info' | 'error' };
 
@@ -29,6 +30,10 @@ type State = {
   leftTab: LeftTab;
   /** Conversation shown in the Chat tab; null = a new conversation (blueprint APP_UI/01 → Left menu). */
   chatThread: string | null;
+  /** Lead thread whose team view fills the window (orchestrate mode); null = closed. */
+  orchestraView: string | null;
+  /** Mode of the next new chat; remembered per machine. */
+  chatMode: ChatMode;
   /** Global library components (Library tab, DESIGN_SYSTEM/02). Loaded on demand. */
   library: LibraryItem[] | null;
   /** Sidebar visibility; remembered per machine (localStorage), never part of the document. */
@@ -46,6 +51,8 @@ type State = {
   /** One cursor per agent session on the active document, by author id (canvas/cursors.ts). */
   cursors: Record<string, AgentCursor>;
   editingText: string | null;
+  /** Text Effects panel (Canva-like) open beside the canvas. */
+  textEffectsOpen: boolean;
   toasts: Toast[];
   fitRequest: number;
   settingsOpen: boolean;
@@ -70,19 +77,23 @@ type State = {
   interactEmbed: string | null;
   /** Canvas right-click menu: screen position and the page point under it. */
   contextMenu: { x: number; y: number; world: { x: number; y: number } } | null;
+  /** Icons the person uploaded (Assets → My icons); null until first loaded. */
+  customIcons: CustomIconInfo[] | null;
   /** 1px grid drawn when zoomed in far enough; remembered per machine. */
   pixelGrid: boolean;
+  /** Background removal in progress: the image, and the model download share (0-1) while it downloads. */
+  bgJob: { nodeId: string; phase: 'download' | 'working'; progress: number } | null;
 };
 
 export const useStore = create<State>(() => ({
   client: null, info: null, docs: [], activeDocId: null, doc: null, rev: 0,
-  selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, library: null,
+  selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, orchestraView: null, chatMode: readMode(), library: null,
   leftOpen: readFlag('archa.leftOpen'), rightOpen: readFlag('archa.rightOpen'), chatDraft: '',
-  agents: [], activity: [], chat: [], runs: {}, chatLive: {}, cursors: {}, editingText: null, toasts: [], fitRequest: 0,
+  agents: [], activity: [], chat: [], runs: {}, chatLive: {}, cursors: {}, editingText: null, textEffectsOpen: false, toasts: [], fitRequest: 0,
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
   browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
   railPanel: null, showComments: true, openComment: null, commentDraft: null, interactEmbed: null,
-  contextMenu: null, pixelGrid: readFlag('archa.pixelGrid'),
+  contextMenu: null, customIcons: null, pixelGrid: readFlag('archa.pixelGrid'), bgJob: null,
 }));
 
 /** Switches tool and closes per-tool UI that no longer applies. */
@@ -102,6 +113,10 @@ export function togglePixelGrid() {
   const next = !useStore.getState().pixelGrid;
   useStore.setState({ pixelGrid: next });
   try { localStorage.setItem('archa.pixelGrid', next ? '1' : '0'); } catch { /* storage blocked: keep in-memory state */ }
+}
+
+function readMode(): ChatMode {
+  try { return localStorage.getItem('archa.chatMode') === 'orchestrate' ? 'orchestrate' : 'chat'; } catch { return 'chat'; }
 }
 
 export function togglePanel(side: 'left' | 'right', open?: boolean) {
@@ -149,8 +164,11 @@ export async function init() {
     if (!doc || e.docId !== activeDocId) return;
     if (e.revision === doc.revision + 1) {
       try {
+        // Snapshot what is about to change so the change can play (canvas/changes.ts).
+        const fx = changes.animates(e.author, e.label) ? changes.before(doc, e.ops, get().camera.zoom * (window.devicePixelRatio || 1)) : null;
         applyOps(doc, e.ops);
         doc.revision = e.revision;
+        if (fx) changes.after(doc, fx, performance.now());
       } catch {
         void resync();
         return;
@@ -172,6 +190,9 @@ export async function init() {
   client.on('chat.message', (m) => {
     if (m.docId !== get().activeDocId) return;
     // A finished agent message replaces the streamed preview of the same run.
+    // A tool row comes again with its result: replace it in place.
+    const at = m.role === 'tool' && m.callId ? get().chat.findLastIndex((c) => c.id === m.id) : -1;
+    if (at >= 0) { set((s) => ({ chat: s.chat.map((c, i) => (i === at ? m : c)) })); return; }
     set((s) => ({ chat: [...s.chat, m], chatLive: m.role === 'agent' && s.chatLive[threadOf(m)]?.runId === m.runId ? omit(s.chatLive, threadOf(m)) : s.chatLive }));
   });
   client.on('chat.delta', (d) => {
@@ -188,6 +209,10 @@ export async function init() {
     if (t.docId !== get().activeDocId) return;
     set((s) => ({ cursors: { ...s.cursors, [t.author.id]: pushTrail(s.cursors[t.author.id], t, performance.now()) } }));
   });
+  client.on('agent.done', (e) => {
+    const c = get().cursors[e.author.id];
+    if (e.docId === get().activeDocId && c) set((s) => ({ cursors: { ...s.cursors, [e.author.id]: markDone(c) } }));
+  });
   let accountsTimer: ReturnType<typeof setTimeout> | undefined;
   client.on('accounts.changed', () => { clearTimeout(accountsTimer); accountsTimer = setTimeout(() => void loadAccounts(), 120); });
   let skillsTimer: ReturnType<typeof setTimeout> | undefined;
@@ -201,7 +226,6 @@ export async function init() {
         const snap = await client.call('doc.snapshot', { docId });
         doc = new ArchaDocument(snap.data, snap.revision);
       }
-      await preloadFonts();
       await document.fonts.ready;
       if (slice) {
         const slices = await renderNodeSlices(doc, nodeId, scale, slice);
@@ -232,7 +256,6 @@ export async function init() {
         const snap = await client.call('doc.snapshot', { docId });
         doc = new ArchaDocument(snap.data, snap.revision);
       }
-      await preloadFonts();
       const { compareToReference } = await import('./reference');
       const r = await compareToReference(doc, nodeId, url, page, scale, slice);
       await client.call('render.respond', { requestId, png: r.png, slices: r.slices, stats: r.stats });
@@ -302,9 +325,10 @@ export async function activate(docId: string | null) {
   if (!client || !docId) { set({ activeDocId: null, doc: null }); return; }
   const snap = await client.call('doc.snapshot', { docId });
   const chat = await client.call('chat.list', { docId });
+  changes.reset();
   // Reopen the most recent conversation of this document.
   const last = chat.at(-1);
-  set((s) => ({ activeDocId: docId, doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1, selection: [], chat, chatThread: last ? threadOf(last) : null, cursors: {}, editingText: null, fitRequest: s.fitRequest + 1 }));
+  set((s) => ({ activeDocId: docId, doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1, selection: [], chat, chatThread: last ? threadOf(last) : null, orchestraView: null, cursors: {}, editingText: null, fitRequest: s.fitRequest + 1 }));
 }
 
 function omit<T>(map: Record<string, T>, key: string): Record<string, T> {
@@ -321,6 +345,7 @@ export async function resync() {
   const { client, activeDocId } = get();
   if (!client || !activeDocId) return;
   const snap = await client.call('doc.snapshot', { docId: activeDocId });
+  changes.reset();
   set((s) => ({ doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1 }));
 }
 
@@ -408,27 +433,74 @@ export const EXPORT_KINDS: Array<{ value: ExportKind; label: string; ext: string
   { value: 'tailwind', label: 'HTML + Tailwind', ext: 'html' },
 ];
 
-/** Export a node (blueprint RENDERING/03): rasters render here, PDF prints in main, the rest is written by the core. */
-export async function exportNode(nodeId: string, kind: ExportKind, scale = 2) {
-  const { client, doc, activeDocId } = get();
+/** Several layers as one PDF, a page each (vector, own size), in reading order. */
+export { readingOrder };
+
+export async function exportPdf(nodeIds: string[]) {
+  const { client, doc, activeDocId, docs } = get();
   if (!client || !doc || !activeDocId) return;
-  const node = doc.get(nodeId);
-  const spec = EXPORT_KINDS.find((k) => k.value === kind);
-  if (!node || !spec) return;
-  const suffix = (kind === 'png' || kind === 'jpg') && scale !== 1 ? `@${scale}x` : '';
-  const path = await window.archa.showExportDialog(`${node.name}${suffix}.${spec.ext}`, spec.ext);
+  const ids = readingOrder(doc, nodeIds);
+  if (!ids.length) return;
+  const name = ids.length === 1 ? doc.require(ids[0]!).name : docs.find((d) => d.id === activeDocId)?.name ?? 'Pages';
+  const path = await window.archa.showExportDialog(`${name}.pdf`, 'pdf');
   if (!path) return;
   try {
-    if (kind === 'pdf') {
-      const page = await client.call('export.page', { docId: activeDocId, nodeId });
-      const err = await window.archa.exportPdf({ ...page, path });
-      if (err) throw new Error(err);
-      toast('Exported PDF');
-      return;
+    const pages = [];
+    for (const nodeId of ids) pages.push(await client.call('export.page', { docId: activeDocId, nodeId }));
+    if (ids.length > 1) toast(`Printing ${ids.length} pages…`);
+    const err = await window.archa.exportPdf({ pages, path });
+    if (err) throw new Error(err);
+    toast(ids.length > 1 ? `Exported PDF · ${ids.length} pages` : 'Exported PDF');
+  } catch (e) {
+    toast(`Export failed: ${(e as Error).message}`, 'error');
+  }
+}
+
+/** Export a node (blueprint RENDERING/03): rasters render here, PDF prints in main, the rest is written by the core. */
+export async function exportNode(nodeId: string, kind: ExportKind, scale = 2) {
+  const { doc } = get();
+  const node = doc?.get(nodeId);
+  const spec = EXPORT_KINDS.find((k) => k.value === kind);
+  if (!node || !spec) return;
+  if (kind === 'pdf') return exportPdf([nodeId]);
+  const path = await window.archa.showExportDialog(`${node.name}${scaleSuffix(kind, scale)}.${spec.ext}`, spec.ext);
+  if (!path) return;
+  try {
+    const files = await saveExport(nodeId, kind, scale, path);
+    toast(files > 1 ? `Exported ${spec.label} (${files} files)` : `Exported ${spec.label}`);
+  } catch (e) {
+    toast(`Export failed: ${(e as Error).message}`, 'error');
+  }
+}
+
+const scaleSuffix = (kind: ExportKind, scale: number) => ((kind === 'png' || kind === 'jpg') && scale !== 1 ? `@${scale}x` : '');
+
+async function saveExport(nodeId: string, kind: Exclude<ExportKind, 'pdf'>, scale: number, path: string): Promise<number> {
+  const { client, doc, activeDocId } = get();
+  if (!client || !doc || !activeDocId) return 0;
+  const image = kind === 'png' || kind === 'jpg' ? await renderNodeImage(doc, nodeId, scale, kind === 'png' ? 'png' : 'jpeg') : undefined;
+  const { files } = await client.call('export.save', { docId: activeDocId, nodeId, format: kind, path, image });
+  return files.length;
+}
+
+/** Several layers as image files: one per layer, into a folder the person picks; equal names get a number. */
+export async function exportEach(nodeIds: string[], kind: Exclude<ExportKind, 'pdf'>, scale = 2) {
+  const { doc } = get();
+  const spec = EXPORT_KINDS.find((k) => k.value === kind);
+  if (!doc || !spec) return;
+  const ids = readingOrder(doc, nodeIds);
+  const folder = ids.length ? await window.archa.pickFolder(`Export ${ids.length} layers as ${spec.label}`) : null;
+  if (!folder) return;
+  const sep = folder.includes('\\') ? '\\' : '/';
+  const used = new Map<string, number>();
+  try {
+    for (const id of ids) {
+      const base = doc.require(id).name.replace(/[<>:"/\\|?*\x00-\x1f]+/g, '-').trim() || 'Layer';
+      const n = (used.get(base) ?? 0) + 1;
+      used.set(base, n);
+      await saveExport(id, kind, scale, `${folder}${sep}${n > 1 ? `${base} ${n}` : base}${scaleSuffix(kind, scale)}.${spec.ext}`);
     }
-    const image = kind === 'png' || kind === 'jpg' ? await renderNodeImage(doc, nodeId, scale, kind === 'png' ? 'png' : 'jpeg') : undefined;
-    const { files } = await client.call('export.save', { docId: activeDocId, nodeId, format: kind, path, image });
-    toast(files.length > 1 ? `Exported ${spec.label} (${files.length} files)` : `Exported ${spec.label}`);
+    toast(`Exported ${ids.length} ${spec.label} files`);
   } catch (e) {
     toast(`Export failed: ${(e as Error).message}`, 'error');
   }

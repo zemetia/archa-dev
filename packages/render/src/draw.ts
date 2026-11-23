@@ -1,18 +1,43 @@
-import { colorToCss, isContainer, linearGradientLine, paintColor, type Paint, type EmbedNode, type ImageNode, type Node, type PathNode, type StickyNode, type TextNode, type VisualNode } from '@archa/schema';
-import { lineLayoutOf, linesOf, polygonPoints, textSegments, viewBoxMatrix, type ArchaDocument } from '@archa/core';
-import { imageFor } from './images';
+import { colorToCss, isContainer, type ConnectorNode, type EmbedNode, type ImageNode, type Node, type PathNode, type StickyNode, type VisualNode } from '@archa/schema';
+import { connectorGeometry, connectorStroke, polygonPoints, viewBoxMatrix, type ArchaDocument } from '@archa/core';
+import { imageFor, setDrawingDoc } from './images';
+import { canvasPaint, fillPaint } from './paint';
+import { drawText } from './text';
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+/** Transient per-node animation (canvas change animations): offset in parent space, fade, scale about the centre. */
+export type NodeAnim = { dx?: number; dy?: number; alpha?: number; scale?: number };
+export type AnimMap = ReadonlyMap<string, NodeAnim>;
 
 /**
  * Draws a node and its subtree in the node's parent coordinate space.
  * Pure: reads the document, never resolves variables or mutates (blueprint RENDERING/01).
  */
-export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
+export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node, anim?: AnimMap): void {
+  setDrawingDoc(doc);
   if (!node.visible || node.type === 'page') return;
   ctx.save();
   ctx.translate(node.x, node.y);
+  // Rotation turns the box (and its subtree) about its centre; connectors route in page space instead.
+  if (node.rotation && node.type !== 'connector') {
+    ctx.translate(node.width / 2, node.height / 2);
+    ctx.rotate((node.rotation * Math.PI) / 180);
+    ctx.translate(-node.width / 2, -node.height / 2);
+  }
   if (node.opacity < 1) ctx.globalAlpha *= node.opacity;
+  const a = anim?.get(node.id);
+  if (a) {
+    if (a.dx || a.dy) ctx.translate(a.dx ?? 0, a.dy ?? 0);
+    if (a.alpha !== undefined) ctx.globalAlpha *= a.alpha;
+    if (a.scale !== undefined && a.scale !== 1) {
+      ctx.translate(node.width / 2, node.height / 2);
+      ctx.scale(a.scale, a.scale);
+      ctx.translate(-node.width / 2, -node.height / 2);
+    }
+  }
+  const blur = 'effects' in node ? node.effects.find((e) => e.visible && e.type === 'layer-blur') : undefined;
+  if (blur?.type === 'layer-blur' && blur.radius > 0) ctx.filter = `blur(${blur.radius * deviceScale(ctx)}px)`;
 
   switch (node.type) {
     case 'frame':
@@ -24,7 +49,7 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
           roundRect(ctx, 0, 0, node.width, node.height, r);
           ctx.clip();
         }
-        drawChildren(ctx, doc, node);
+        drawChildren(ctx, doc, node, anim);
       }
       break;
     }
@@ -35,10 +60,10 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
       });
       break;
     case 'group':
-      drawChildren(ctx, doc, node);
+      drawChildren(ctx, doc, node, anim);
       break;
     case 'text':
-      drawText(ctx, node);
+      drawText(ctx, node, deviceScale(ctx));
       break;
     case 'polygon': {
       const pts = polygonPoints(node.sides, node.width, node.height);
@@ -55,7 +80,7 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
       break;
     }
     case 'image':
-      drawImageNode(ctx, node, doc);
+      drawImageNode(ctx, node);
       break;
     case 'sticky':
       drawSticky(ctx, node);
@@ -63,15 +88,31 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
     case 'embed':
       drawEmbed(ctx, node);
       break;
+    case 'connector':
+      drawConnector(ctx, node);
+      break;
   }
   ctx.restore();
 }
 
-function drawChildren(ctx: Ctx, doc: ArchaDocument, node: Node) {
+function drawConnector(ctx: Ctx, node: ConnectorNode) {
+  const { line, caps } = connectorGeometry(node);
+  if (!line) return;
+  const { css, width } = connectorStroke(node);
+  ctx.strokeStyle = css;
+  ctx.fillStyle = css;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke(new Path2D(line));
+  for (const c of caps) ctx.fill(new Path2D(c));
+}
+
+function drawChildren(ctx: Ctx, doc: ArchaDocument, node: Node, anim?: AnimMap) {
   if (!isContainer(node)) return;
   for (const id of node.children) {
     const c = doc.get(id);
-    if (c) drawNode(ctx, doc, c);
+    if (c) drawNode(ctx, doc, c, anim);
   }
 }
 
@@ -119,39 +160,69 @@ function shape(ctx: Ctx, node: VisualNode, path: () => Path2D | void, phase: 'al
 }
 
 function paintFills(ctx: Ctx, node: VisualNode, path: () => Path2D | void, fill: (p: Path2D | void) => void) {
+  const k = deviceScale(ctx);
+  const first = node.fills.find((f) => f.visible);
   for (const fx of node.effects) {
-    if (!fx.visible) continue;
+    if (!fx.visible || fx.type !== 'drop-shadow') continue;
     ctx.save();
+    // Shadow offset and blur are in device pixels: scale them so they match at every zoom.
     ctx.shadowColor = colorToCss(fx.color);
-    ctx.shadowBlur = fx.blur;
-    ctx.shadowOffsetX = fx.x;
-    ctx.shadowOffsetY = fx.y;
+    ctx.shadowBlur = fx.blur * k;
+    ctx.shadowOffsetX = fx.x * k;
+    ctx.shadowOffsetY = fx.y * k;
     const p = path();
-    const first = node.fills.find((f) => f.visible);
-    ctx.fillStyle = first ? colorToCss(paintColor(first)) : 'rgba(0,0,0,1)';
+    // The shadow takes the shape of the fill (a gradient that fades out casts a fading shadow).
+    ctx.fillStyle = (first && first.type !== 'radial-gradient' && canvasPaint(ctx, first, node.width, node.height)) || 'rgba(0,0,0,1)';
     fill(p);
+    ctx.restore();
+  }
+  for (const fx of node.effects) {
+    if (!fx.visible || fx.type !== 'background-blur' || fx.radius <= 0) continue;
+    // Frosted glass: blur what is already drawn under the shape, then the (translucent) fills go on top.
+    ctx.save();
+    clipTo(ctx, node, path());
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.filter = `blur(${fx.radius * k}px)`;
+    ctx.drawImage(ctx.canvas, 0, 0);
     ctx.restore();
   }
   for (const f of node.fills) {
     if (!f.visible) continue;
+    fillPaint(ctx, f, node.width, node.height, path() ?? undefined, fill);
+  }
+  for (const fx of node.effects) {
+    if (!fx.visible || fx.type !== 'inner-shadow') continue;
+    // Inner shadow: clip to the shape and cast the shadow of everything outside it. The caster is drawn far
+    // to the side (outside the clip) and its shadow is offset back, so only the shadow lands inside.
+    ctx.save();
+    clipTo(ctx, node, path());
+    const reach = fx.blur * 2 + Math.abs(fx.x) + Math.abs(fx.y) + 8;
+    const away = node.width + reach * 2 + 100;
+    ctx.shadowColor = colorToCss(fx.color);
+    ctx.shadowBlur = fx.blur * k;
+    ctx.shadowOffsetX = (fx.x + away) * k;
+    ctx.shadowOffsetY = fx.y * k;
+    ctx.translate(-away, 0);
     const p = path();
-    ctx.fillStyle = paintStyle(ctx, f, node.width, node.height);
-    fill(p);
+    const ring = new Path2D();
+    if (p) ring.addPath(p);
+    else ctx.rect(-reach, -reach, node.width + reach * 2, node.height + reach * 2);
+    ring.rect(-reach, -reach, node.width + reach * 2, node.height + reach * 2);
+    ctx.fillStyle = '#000';
+    if (p) ctx.fill(ring, 'evenodd'); else ctx.fill('evenodd');
+    ctx.restore();
   }
 }
 
-/** A paint as a canvas fill style, in the node's own box (gradients span 0,0 → w,h). */
-export function paintStyle(ctx: Ctx, f: Paint, w: number, h: number): string | CanvasGradient {
-  if (f.type === 'solid') return colorToCss(f.color);
-  let g: CanvasGradient;
-  if (f.type === 'linear') {
-    const l = linearGradientLine(f.angle, w, h);
-    g = ctx.createLinearGradient(l.x0, l.y0, l.x1, l.y1);
-  } else {
-    g = ctx.createRadialGradient(f.cx * w, f.cy * h, 0, f.cx * w, f.cy * h, Math.max(1e-3, f.radius * Math.max(w, h)));
-  }
-  for (const st of [...f.stops].sort((a, b) => a.offset - b.offset)) g.addColorStop(Math.min(1, Math.max(0, st.offset)), colorToCss(st.color));
-  return g;
+function clipTo(ctx: Ctx, node: VisualNode, p: Path2D | void) {
+  const rule = node.type === 'path' ? node.fillRule : 'nonzero';
+  if (p) ctx.clip(p, rule); else ctx.clip(rule);
+}
+
+/** Canvas units → device pixels (zoom × DPR × export scale); scaling is uniform, so the length of one turned axis fits both. */
+function deviceScale(ctx: Ctx): number {
+  const m = ctx.getTransform();
+  return Math.hypot(m.a, m.b) || 1;
 }
 
 const pathCache = new Map<string, Path2D>();
@@ -174,14 +245,14 @@ export function pathOf(n: PathNode): Path2D | null {
   return p;
 }
 
-function drawImageNode(ctx: Ctx, n: ImageNode, doc: ArchaDocument) {
+function drawImageNode(ctx: Ctx, n: ImageNode) {
   const r = Math.min(n.cornerRadius, n.width / 2, n.height / 2);
   const box = () => roundRect(ctx, 0, 0, n.width, n.height, r);
   shape(ctx, n, box, 'fill');
   ctx.save();
   box();
   ctx.clip();
-  const img = imageFor(n.src, doc);
+  const img = imageFor(n.src);
   if (img && img.naturalWidth && img.naturalHeight) {
     const iw = img.naturalWidth, ih = img.naturalHeight;
     if (n.fit === 'fill') ctx.drawImage(img, 0, 0, n.width, n.height);
@@ -224,18 +295,12 @@ function drawEmbed(ctx: Ctx, n: EmbedNode) {
   ctx.fillStyle = '#ffffff';
   ctx.fill();
   ctx.clip();
-  ctx.fillStyle = '#f4f4f5';
-  ctx.fillRect(0, 0, n.width, 36);
-  ctx.fillStyle = '#e4e4e7';
-  ctx.fillRect(0, 36, n.width, 1);
+  // The node is the page itself: no address strip, the URL stays out of the picture.
   ctx.font = '500 13px Inter, "Segoe UI", system-ui, sans-serif';
   ctx.textBaseline = 'middle';
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#52525b';
-  ctx.fillText(n.url || 'No URL', 14, 18, Math.max(1, n.width - 28));
   ctx.textAlign = 'center';
   ctx.fillStyle = '#a1a1aa';
-  ctx.fillText(n.url ? 'Live web page' : 'Set a URL in the design panel', n.width / 2, 36 + (n.height - 36) / 2, Math.max(1, n.width - 28));
+  ctx.fillText(n.url ? 'Web page' : 'Paste a link to load a page', n.width / 2, n.height / 2, Math.max(1, n.width - 28));
   ctx.restore();
 }
 
@@ -262,35 +327,3 @@ export function roundRect(ctx: Ctx, x: number, y: number, w: number, h: number, 
   else ctx.roundRect(x, y, w, h, r);
 }
 
-export const fontString = (n: TextNode) => `${n.fontWeight} ${n.fontSize}px "${n.fontFamily}", Inter, system-ui, sans-serif`;
-
-/** The lines a text node draws — the core's line breaks, so drawn text fits the box the layout measured. */
-export const layoutLines = (n: TextNode): string[] => linesOf(n);
-
-/**
- * Text is drawn run by run at x positions from the core's metrics (kerning off), so every glyph lands where
- * the layout measured it — also across rich-text spans that change weight, family or colour mid-line.
- */
-function drawText(ctx: Ctx, n: TextNode) {
-  if (!n.fills.some((f) => f.visible) && !n.spans?.some((sp) => sp.fills?.some((f) => f.visible))) return;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'left';
-  if ('fontKerning' in ctx) (ctx as CanvasRenderingContext2D).fontKerning = 'none';
-  const lh = n.fontSize * n.lineHeight;
-  lineLayoutOf(n).forEach((line, i) => {
-    const x0 = n.textAlign === 'center' ? (n.width - line.width) / 2 : n.textAlign === 'right' ? n.width - line.width : 0;
-    const y = lh * i + lh / 2;
-    for (const seg of textSegments(n, line)) {
-      const st = seg.style;
-      const fill = (st.fills ?? n.fills).filter((f) => f.visible).at(-1);
-      if (!fill) continue;
-      ctx.font = `${st.fontWeight} ${n.fontSize}px "${st.fontFamily}", Inter, system-ui, sans-serif`;
-      if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D).letterSpacing = `${st.letterSpacing}px`;
-      ctx.fillStyle = paintStyle(ctx, fill, n.width, n.height);
-      ctx.fillText(n.text.slice(seg.start, seg.end), x0 + seg.x, y);
-      const t = Math.max(1, n.fontSize / 16);
-      if (st.underline) ctx.fillRect(x0 + seg.x, y + n.fontSize * 0.42, seg.width, t);
-      if (st.strikethrough) ctx.fillRect(x0 + seg.x, y - t / 2, seg.width, t);
-    }
-  });
-}

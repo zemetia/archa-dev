@@ -1,4 +1,4 @@
-import { contrastRatio, paintColor, hasVisual, isContainer, type Issue, type Node } from '@archa/schema';
+import { contrastRatio, hasVisual, isContainer, paintColor, type Color, type Issue, type Node } from '@archa/schema';
 import type { ArchaDocument } from './document';
 
 /**
@@ -37,14 +37,26 @@ function check(doc: ArchaDocument, n: Node, issues: Issue[]) {
   if (parent?.type === 'frame' && parent.clip && !n.absolute) {
     const overflowX = n.x < -0.5 || n.x + n.width > parent.width + 0.5;
     const overflowY = n.y < -0.5 || n.y + n.height > parent.height + 0.5;
-    if (overflowX || overflowY) push(issues, n, 'layout/clipped', `clipped by "${parent.name}" (${overflowX ? 'horizontally' : 'vertically'})`, 'resize the parent, use hug sizing, or move the node inside');
+    if (overflowX || overflowY) push(issues, n, 'layout/clipped', `clipped by "${parent.name}" (${overflowX ? 'horizontally' : 'vertically'})`, 'resize the parent, use hug sizing, or move the node inside; if the crop is intended (a bleed off the edge), set absolute: true');
   }
 
-  if (n.type === 'text' && n.fills[0] && parent && hasVisual(parent) && parent.fills[0]) {
-    const ratio = contrastRatio(paintColor(n.fills[0]), paintColor(parent.fills[0]));
-    const large = n.fontSize >= 24 || (n.fontSize >= 18.5 && n.fontWeight >= 700);
-    if (ratio < (large ? 3 : 4.5)) push(issues, n, 'a11y/contrast', `contrast ${ratio.toFixed(2)}:1 on "${parent.name}" is below WCAG AA`, 'darken/lighten the text or the background');
+  const ink = n.type === 'text' && n.fills[0] ? paintColor(n.fills[0]) : null;
+  if (ink && parent) {
+    const back = backdrop(doc, n, parent);
+    if (back && n.type === 'text') {
+      const ratio = contrastRatio(ink, back.color);
+      const large = n.fontSize >= 24 || (n.fontSize >= 18.5 && n.fontWeight >= 700);
+      if (ratio < (large ? 3 : 4.5)) push(issues, n, 'a11y/contrast', `contrast ${ratio.toFixed(2)}:1 on "${back.name}" is below WCAG AA`, 'darken/lighten the text or the background');
+    }
   }
+
+  // Frosted glass only shows through a see-through fill.
+  if (hasVisual(n) && n.effects.some((e) => e.visible && e.type === 'background-blur' && e.radius > 0)) {
+    const fills = n.fills.filter((f) => f.visible);
+    const solid = fills.some((f) => f.type === 'image' || (paintColor(f)?.a ?? 0) >= 0.95);
+    if (!fills.length || solid) push(issues, n, 'effect/blur-hidden', fills.length ? 'background-blur is hidden behind an opaque fill' : 'background-blur has no fill to show through', 'give it a translucent fill, e.g. fills: ["#ffffff26"] (dark glass "#0b0b0e66"), and keep something behind it');
+  }
+  if (n.type === 'frame' && n.wrap > 0 && n.layout === 'none') push(issues, n, 'layout/grid-no-layout', `wrap ${n.wrap} has no effect: layout is "none"`, 'set layout "row" (columns) or "column" (rows), or use columns: N');
 
   if (parent?.type === 'page' && n.type === 'frame' && isContainer(parent)) {
     for (const otherId of parent.children) {
@@ -56,4 +68,32 @@ function check(doc: ArchaDocument, n: Node, issues: Issue[]) {
       }
     }
   }
+}
+
+/**
+ * What a text node is read against: the topmost solid shape drawn before it (an earlier sibling, or a
+ * layer inside one) under its centre, else its parent's fill. A sticker or card behind the text counts.
+ */
+function backdrop(doc: ArchaDocument, n: Node, parent: Node): { color: Color; name: string } | null {
+  const b = doc.worldBounds(n.id);
+  const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+  // A picture fill makes the backdrop unknown: the topmost visible paint decides, a photo stops the search.
+  const solid = (m: Node): { color: Color } | undefined => {
+    if (!hasVisual(m) || m.type === 'text' || !m.visible || m.opacity < 0.5) return undefined;
+    const top = m.fills.filter((f) => f.visible).reverse().find((f) => f.type === 'image' || (paintColor(f)?.a ?? 0) >= 0.5);
+    const c = top ? paintColor(top) : null;
+    return c ? { color: c } : undefined;
+  };
+  const under = (m: Node) => { const r = doc.worldBounds(m.id); return cx >= r.x && cx <= r.x + r.width && cy >= r.y && cy <= r.y + r.height; };
+  const siblings = isContainer(parent) ? parent.children : [];
+  for (let i = siblings.indexOf(n.id) - 1; i >= 0; i--) {
+    const s = doc.get(siblings[i]!);
+    if (!s || !s.visible || !under(s)) continue;
+    // Inside a sibling, the last (topmost) solid layer under the centre wins.
+    let hit: { color: Color; name: string } | null = null;
+    for (const m of doc.walk(s.id)) { const f = solid(m); if (f && under(m)) hit = { color: f.color, name: m.name }; }
+    if (hit) return hit;
+  }
+  const f = solid(parent);
+  return f ? { color: f.color, name: parent.name } : null;
 }

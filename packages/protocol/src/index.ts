@@ -1,11 +1,15 @@
-import type { Author, DocumentData, Issue, Op } from '@archa/schema';
-import type { BrowserCommand, BrowserReply } from './browser';
+import type { Author, DocumentData, Issue, NodeInput, Op } from '@archa/schema';
+import type { BrowserCommand, BrowserReply, PlaceImageParams } from './browser';
 import type { McpImportCandidate, McpImportSource, McpServer, McpServerInput, McpTestResult, SkillsOverview, Skill } from './settings';
 
+
+/** An icon the person uploaded: a node tree at its natural size. */
+export type CustomIconInfo = { name: string; width: number; height: number; node: NodeInput; addedAt: number; preview?: string };
 export * from './agent-docs';
 export * from './design-guides';
 export * from './browser';
 export * from './settings';
+export * from './fonts';
 
 /* ----------------------------------------------------------------------------
  * One protocol for every client: renderer (MessagePort), CLI / MCP (socket).
@@ -79,22 +83,34 @@ export interface CoreMethods {
   'agent.exportSvg': { params: { docId?: string; node: string }; result: { svg: string } };
   'agent.reference': { params: { docId?: string; path: string; page?: number; images?: boolean }; result: { text: string; json?: string; png?: string } };
   'agent.compare': { params: { docId?: string; node: string; reference: string; page?: number; scale?: number }; result: CompareResult };
+  /** Compact text tree of a node (default: the selection, else the page) — what the design panel shows, per layer. */
+  'agent.outline': { params: { docId?: string; node?: string; depth?: number }; result: string };
   'agent.say': { params: { docId?: string; text: string; nodeId?: string }; result: void };
+  /** The agent finished its turn: its canvas cursor stops and fades (blueprint RENDERING/02, Agent presence). */
+  'agent.done': { params: { docId?: string; summary?: string }; result: void };
   /** Drive the in-app browser (blueprint BROWSER). */
   'agent.browser': { params: BrowserCommand; result: BrowserReply };
+  /** A picture from a URL, file or the browser page onto the canvas (blueprint BROWSER, "Images"). */
+  'agent.placeImage': { params: PlaceImageParams; result: ExecuteResult };
+  /** Orchestrate mode (blueprint AGENT_BRIDGE/06): a lead thread starts worker threads and collects their reports. */
+  'orchestra.delegate': { params: { tasks: OrchestraTask[] }; result: { workers: OrchestraWorker[] } };
+  'orchestra.wait': { params: { workers?: string[]; timeoutSec?: number }; result: { workers: OrchestraReport[]; timedOut: boolean } };
+  'orchestra.tell': { params: { worker: string; message: string }; result: { queued: boolean } };
   // App
   'app.info': { params: void; result: AppInfo };
   /** html / tailwind also write a CSS file and image assets next to `path`; png / jpg arrive rendered by the renderer as base64. */
   'export.save': { params: { docId: string; nodeId: string; format: ExportFormat; path: string; image?: string }; result: { files: string[] } };
   /** Self-contained HTML page of a node (CSS inlined, images embedded) — main prints it to PDF. */
   'export.page': { params: { docId: string; nodeId: string }; result: { html: string; width: number; height: number } };
+  /** Code of a node for the clipboard: one HTML file (CSS inlined in a <style>, or Tailwind classes), images embedded. */
+  'export.code': { params: { docId: string; nodeId: string; style: 'css' | 'tailwind' }; result: { code: string } };
   // Chat: launch a local agent CLI on this document (blueprint AGENT_BRIDGE/03)
   /** No threadId = start a new conversation. */
   /**
    * `now` stops the thread's running turn and runs this message next; otherwise a busy thread queues it.
    * `focus` = node ids the request is about (the composer's selection chip).
    */
-  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string; now?: boolean; focus?: string[]; images?: ChatImage[] }; result: { runId: string; threadId: string; persona: string; queued?: boolean } };
+  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string; now?: boolean; focus?: string[]; images?: ChatImage[]; mode?: ChatMode }; result: { runId: string; threadId: string; persona: string; queued?: boolean } };
   /** Start (or keep) the agent process for a thread before the person sends, so the first turn starts at once. No threadId = a fresh thread id is reserved and returned. */
   'chat.warm': { params: { docId: string; agent: string; model?: string; account?: string; threadId?: string }; result: { threadId: string; warm: boolean } };
   'chat.stop': { params: { runId: string }; result: void };
@@ -110,6 +126,10 @@ export interface CoreMethods {
   'library.remove': { params: { library: string; id: string }; result: void };
   /** First use places a local main linked to the library; later uses add instances of it. */
   'library.insert': { params: { docId: string; library: string; id: string; parentId?: string; x?: number; y?: number }; result: { nodeId: string; placed: 'main' | 'instance' } };
+  // Uploaded icons, per machine (blueprint DESIGN_SYSTEM/05)
+  'icons.custom.list': { params: void; result: CustomIconInfo[] };
+  'icons.custom.add': { params: { icons: Array<{ name: string; width: number; height: number; node: NodeInput; preview?: string }> }; result: CustomIconInfo[] };
+  'icons.custom.remove': { params: { name: string }; result: void };
   // Agent login profiles (blueprint AGENT_BRIDGE/02)
   'accounts.overview': { params: void; result: AccountsOverview };
   'accounts.create': { params: { agent: AccountAgent; name?: string; apiKey?: string }; result: AgentAccount };
@@ -183,10 +203,25 @@ export type ChatMessage = {
   text: string;
   /** Thumbnails of the images a user message carried: `asset:chats/attachments/…` files in the document's asset folder. */
   images?: string[];
+  /** Tool rows: the call's full input (code or arguments) and, once it returns, its text result. */
+  detail?: string;
+  result?: string;
+  /** The tool call returned an error. */
+  failed?: boolean;
+  /** Pairs a tool row with the result the agent CLI reports later. */
+  callId?: string;
+  /** Orchestrate mode: set on every message of a lead thread and of its worker threads. */
+  orchestra?: OrchestraMeta;
   ts: number;
 };
+export type ChatMode = 'chat' | 'orchestrate';
+/** lead: the thread that plans and delegates. Worker threads carry their lead's thread id, task title and prompt. */
+export type OrchestraMeta = { lead: true } | { parent: string; title: string; kind?: string; prompt: string };
+export type OrchestraTask = { title: string; prompt: string; kind?: string; agent?: string; model?: string; frame?: string };
+export type OrchestraWorker = { threadId: string; persona: string; title: string; agent: string };
+export type OrchestraReport = OrchestraWorker & { status: 'working' | 'finished' | 'failed' | 'stopped'; reply: string };
 export type LibraryItem = { library: string; id: string; ref: string; name: string; description: string; width: number; height: number; publishedAt: number; thumb?: string };
-export type ChatThread = { id: string; title: string; agent: string; persona?: string; startedAt: number; updatedAt: number; messages: number };
+export type ChatThread = { id: string; title: string; agent: string; persona?: string; startedAt: number; updatedAt: number; messages: number; orchestra?: OrchestraMeta };
 /** Group a document's messages into conversations, newest first (History tab). */
 export function chatThreads(messages: ChatMessage[]): ChatThread[] {
   const by = new Map<string, ChatThread>();
@@ -195,11 +230,13 @@ export function chatThreads(messages: ChatMessage[]): ChatThread[] {
     const t: ChatThread = by.get(id) ?? { id, title: '', agent: m.agent, startedAt: m.ts, updatedAt: m.ts, messages: 0 };
     if (!t.title && m.role === 'user') t.title = m.text.slice(0, 120);
     if (!t.persona && m.persona) t.persona = m.persona;
+    if (!t.orchestra && m.orchestra) t.orchestra = m.orchestra;
     t.updatedAt = Math.max(t.updatedAt, m.ts);
     t.messages++;
     by.set(id, t);
   }
-  return [...by.values()].map((t) => ({ ...t, title: t.title || 'Untitled conversation' })).sort((a, b) => b.updatedAt - a.updatedAt);
+  // A worker's first message is its whole brief; its task title reads better.
+  return [...by.values()].map((t) => ({ ...t, title: (t.orchestra && 'parent' in t.orchestra ? t.orchestra.title : t.title) || 'Untitled conversation' })).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 export const threadOf = (m: ChatMessage) => m.threadId ?? m.runId;
 export const PERSONA_COLORS = 8;
@@ -231,6 +268,8 @@ export interface CoreEvents {
   'chat.run': ChatRunEvent;
   /** Where an agent session just worked; the canvas moves its cursor along the steps. */
   'agent.trail': AgentTrail;
+  /** An agent session called done(): its cursor fades now instead of idling until the process exits. */
+  'agent.done': { docId: string; author: Author; runId?: string };
   /** Accounts or a sign-in changed; clients re-read `accounts.overview`. */
   'accounts.changed': { accountId?: string };
   /** Skills or MCP servers changed; clients re-read `skills.list` / `mcp.list`. */

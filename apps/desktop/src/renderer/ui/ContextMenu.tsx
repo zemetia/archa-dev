@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { openSettings, togglePixelGrid, useStore } from '../lib/store';
+import { exportPdf, openSettings, readingOrder, togglePixelGrid, useStore } from '../lib/store';
 import {
   arrange, canMakeComponent, copy, createComponent, deleteSelection, duplicate, group, hasCopiedLayers, pasteAt, removeLayout, selectAll, ungroup, ungroupable, wrapInFrame,
 } from '../lib/commands';
 import { cn } from './controls';
+import { canRemoveBackground, removeBackground } from '../lib/removeBackground';
 
 /*
  * Canvas right-click menu (blueprint APP_UI/01 → Context menu). The canvas sets `contextMenu` after
@@ -19,6 +20,8 @@ type Entry =
 
 const SEP: Entry = { kind: 'sep' };
 const SUB_WIDTH = 220;
+/** Gap kept between a menu and the window edge. */
+const EDGE = 8;
 
 export function ContextMenu() {
   const menu = useStore((s) => s.contextMenu);
@@ -47,13 +50,14 @@ function Menu({ x, y, world }: { x: number; y: number; world: { x: number; y: nu
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
     window.addEventListener('pointerdown', outside, true);
     window.addEventListener('keydown', key, true);
-    window.addEventListener('wheel', close, true);
+    const wheel = (e: WheelEvent) => { if (!root.current?.contains(e.target as Node)) close(); };
+    window.addEventListener('wheel', wheel, true);
     window.addEventListener('blur', close);
     window.addEventListener('resize', close);
     return () => {
       window.removeEventListener('pointerdown', outside, true);
       window.removeEventListener('keydown', key, true);
-      window.removeEventListener('wheel', close, true);
+      window.removeEventListener('wheel', wheel, true);
       window.removeEventListener('blur', close);
       window.removeEventListener('resize', close);
     };
@@ -80,6 +84,8 @@ function Menu({ x, y, world }: { x: number; y: number; world: { x: number; y: nu
       { kind: 'item', label: 'Copy', keys: 'Ctrl+C', run: copy },
       paste,
       { kind: 'item', label: 'Duplicate', keys: 'Ctrl+D', run: duplicate },
+      ...(ids.length === 1 && doc.get(ids[0]!)?.type === 'image'
+        ? [SEP, { kind: 'item', label: 'Remove background', run: () => removeBackground(ids[0]!), disabled: !canRemoveBackground(ids[0]) } as const] : []),
       SEP,
       { kind: 'item', label: 'Bring to front', keys: 'Ctrl+]', run: () => arrange('front') },
       { kind: 'item', label: 'Send to back', keys: 'Ctrl+[', run: () => arrange('back') },
@@ -90,6 +96,8 @@ function Menu({ x, y, world }: { x: number; y: number; world: { x: number; y: nu
       { kind: 'item', label: 'Add auto layout', keys: 'Shift+A', run: () => wrapInFrame(true) },
       ...(ids.some((id) => { const n = doc.get(id); return n?.type === 'frame' && n.layout !== 'none'; })
         ? [{ kind: 'item', label: 'Remove auto layout', keys: 'Shift+Alt+A', run: removeLayout } as const] : []),
+      SEP,
+      { kind: 'item', label: readingOrder(doc, ids).length > 1 ? `Export as PDF · ${readingOrder(doc, ids).length} pages` : 'Export as PDF', run: () => exportPdf(ids) },
       ...(ids.length === 1 && canMakeComponent(doc, ids[0]!)
         ? [SEP, { kind: 'item', label: 'Create component', keys: 'Ctrl+Alt+K', run: createComponent } as const] : []),
       SEP,
@@ -100,8 +108,9 @@ function Menu({ x, y, world }: { x: number; y: number; world: { x: number; y: nu
 
   const subLeft = pos.x + (root.current?.offsetWidth ?? 240) + SUB_WIDTH + 8 > window.innerWidth;
   return (
-    <div ref={root} role="menu" style={{ left: pos.x, top: pos.y }} onContextMenu={(e) => e.preventDefault()}
-      className="fixed z-50 min-w-[230px] rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/50">
+    <div ref={root} role="menu" style={{ left: pos.x, top: pos.y, maxHeight: `calc(100vh - ${EDGE * 2}px)` }} onContextMenu={(e) => e.preventDefault()}
+      onScroll={() => setOpenSub(null)}
+      className="fixed z-50 min-w-[230px] overflow-y-auto rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/50">
       <Rows entries={entries} openSub={openSub} setOpenSub={setOpenSub} subLeft={subLeft} close={close} />
     </div>
   );
@@ -115,17 +124,9 @@ function Rows({ entries, openSub, setOpenSub, subLeft, close }: {
     const row = 'flex h-8 w-full items-center gap-3 rounded-lg px-2.5 text-left text-[12.5px]';
     if (e.kind === 'sub') {
       return (
-        <div key={i} className="relative" onMouseEnter={() => setOpenSub(i)}>
-          <div className={cn(row, 'cursor-default text-fg', openSub === i && 'bg-panel-3')}>
-            <span className="flex-1">{e.label}</span><ChevronRight size={13} className="text-fg-subtle" />
-          </div>
-          {openSub === i && (
-            <div role="menu" style={{ width: SUB_WIDTH }}
-              className={cn('absolute -top-1 rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/50', subLeft ? 'right-full mr-1.5' : 'left-full ml-1.5')}>
-              <Rows entries={e.items} openSub={null} setOpenSub={() => {}} subLeft={subLeft} close={close} />
-            </div>
-          )}
-        </div>
+        <SubRow key={i} label={e.label} open={openSub === i} onOpen={() => setOpenSub(i)} subLeft={subLeft} rowClass={row}>
+          <Rows entries={e.items} openSub={null} setOpenSub={() => {}} subLeft={subLeft} close={close} />
+        </SubRow>
       );
     }
     if (e.kind === 'toggle') {
@@ -148,4 +149,32 @@ function Rows({ entries, openSub, setOpenSub, subLeft, close }: {
       </button>
     );
   });
+}
+
+/** A row that opens a submenu beside it, placed with fixed coordinates and kept inside the window. */
+function SubRow({ label, open, onOpen, subLeft, rowClass, children }: {
+  label: string; open: boolean; onOpen: () => void; subLeft: boolean; rowClass: string; children: React.ReactNode;
+}) {
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const sub = useRef<HTMLDivElement>(null);
+  const [top, setTop] = useState(0);
+  useLayoutEffect(() => {
+    if (!open || !anchor) return;
+    const h = sub.current?.offsetHeight ?? 0;
+    setTop(Math.max(EDGE, Math.min(anchor.top - 4, window.innerHeight - h - EDGE)));
+  }, [open, anchor]);
+  return (
+    <div onMouseEnter={(ev) => { setAnchor(ev.currentTarget.getBoundingClientRect()); onOpen(); }}>
+      <div className={cn(rowClass, 'cursor-default text-fg', open && 'bg-panel-3')}>
+        <span className="flex-1">{label}</span><ChevronRight size={13} className="text-fg-subtle" />
+      </div>
+      {open && anchor && (
+        <div ref={sub} role="menu"
+          style={{ width: SUB_WIDTH, top, left: subLeft ? anchor.left - SUB_WIDTH - 6 : anchor.right + 6, maxHeight: `calc(100vh - ${EDGE * 2}px)` }}
+          className="fixed z-50 overflow-y-auto rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/50">
+          {children}
+        </div>
+      )}
+    </div>
+  );
 }

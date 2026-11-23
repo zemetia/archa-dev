@@ -1,0 +1,163 @@
+<!doctype html>
+<!--
+  Example: 5-slide research deck, 1920×1080 (fictional retail chain "Toko Kita").
+  Concept: "editorial findings". A newspaper serif for statements, a quiet sans for everything else,
+  warm paper + ink + one vermilion. Each slide shows ONE finding as a picture of the data (a dot
+  matrix, a line, a chat thread), and the evidence is layered: tilted chat cards and a phone that
+  overlaps the colour field. Titles are the findings, written as sentences.
+  Render: node ../../design-pdf/scripts/render-pdf.mjs deck-research.html deck-research.pdf --preview --dpi 32
+-->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Toko Kita: Riset Belanja Gen Z</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300;1,6..72,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @page { size: 1920px 1080px; margin: 0; }
+  :root { --paper: #f5f1ea; --paper-2: #ebe5da; --ink: #1b1a17; --muted: #75705f; --line: #d9d1c2; --red: #e2491f; --red-soft: #f7d9cd;
+          --serif: "Newsreader", Georgia, serif; --sans: "Inter", system-ui, sans-serif;
+          --lift: 0 2px 4px rgb(27 26 23 / .08), 0 30px 60px -18px rgb(27 26 23 / .35); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: var(--sans); background: #444; }
+  section { position: relative; width: 1920px; height: 1080px; overflow: hidden; break-after: page; background: var(--paper); color: var(--ink); }
+  section:last-child { break-after: auto; }
+  .dark { background: var(--ink); color: var(--paper); }
+  h1, h2, blockquote { font-family: var(--serif); font-weight: 300; letter-spacing: -.02em; font-variation-settings: "opsz" 72; }
+  h2 { font-size: 72px; line-height: 1.05; }
+  em { font-style: italic; color: var(--red); }
+  .foot { position: absolute; left: 120px; right: 120px; bottom: 64px; display: flex; justify-content: space-between; font-size: 20px; color: var(--muted); }
+  .dark .foot { color: #8f8a7b; }
+
+  /* chat cards (used on 1 and 3) */
+  .chat { background: #fff; border-radius: 28px; padding: 30px 32px; box-shadow: var(--lift); width: 560px; font-size: 24px; line-height: 1.4; color: var(--ink); }
+  .chat .who { display: flex; align-items: center; gap: 14px; font-weight: 600; font-size: 22px; margin-bottom: 18px; }
+  .chat .who i { width: 44px; height: 44px; border-radius: 50%; background: var(--red-soft); color: var(--red); display: grid; place-items: center; font-style: normal; font-size: 20px; }
+  .chat .who span { font-weight: 400; color: var(--muted); font-size: 18px; margin-left: auto; }
+  .b { padding: 16px 22px; border-radius: 22px 22px 22px 6px; background: var(--paper-2); width: fit-content; max-width: 440px; }
+  .b.me { margin-left: auto; border-radius: 22px 22px 6px 22px; background: var(--red); color: #fff; }
+  .b + .b { margin-top: 12px; }
+
+  /* 1 cover */
+  .s1 h1 { position: absolute; left: 120px; top: 150px; width: 980px; font-size: 128px; line-height: .98; }
+  .s1 .by { position: absolute; left: 124px; bottom: 120px; font-size: 24px; color: var(--muted); }
+  .s1 .by strong { color: var(--ink); font-weight: 600; }
+  .s1 .chat { position: absolute; }
+  .s1 .c1 { right: 230px; top: 150px; transform: rotate(-7deg); opacity: .55; }
+  .s1 .c2 { right: 110px; top: 330px; transform: rotate(4deg); opacity: .8; }
+  .s1 .c3 { right: 190px; top: 520px; }
+
+  /* 2 dot matrix */
+  .s2 h2 { position: absolute; left: 120px; top: 380px; width: 760px; }
+  .s2 .n { position: absolute; left: 112px; top: 90px; font: 300 260px/1 var(--serif); color: var(--red); letter-spacing: -.04em; }
+  .s2 .dots { position: absolute; right: 120px; top: 120px; display: grid; grid-template-columns: repeat(10, 64px); gap: 20px; }
+  .s2 .dots i { width: 64px; height: 64px; border-radius: 50%; background: #3a3832; display: block; }
+  .s2 .dots i.on { background: var(--red); }
+  .s2 .note { position: absolute; left: 120px; top: 700px; width: 640px; font-size: 26px; line-height: 1.5; color: #b9b3a3; }
+
+  /* 3 split quote + phone */
+  .s3 .panel { position: absolute; left: 0; top: 0; bottom: 0; width: 1100px; background: var(--red); }
+  .s3 blockquote { position: absolute; left: 120px; top: 150px; width: 820px; font-size: 84px; line-height: 1.08; color: #fff; }
+  .s3 .who { position: absolute; left: 124px; bottom: 140px; font-size: 24px; color: rgb(255 255 255 / .85); }
+  .s3 .who strong { color: #fff; }
+  .s3 .phone { position: absolute; left: 1000px; top: 120px; width: 520px; height: 1020px; border-radius: 64px; background: var(--ink); padding: 18px; box-shadow: var(--lift); }
+  .s3 .screen { width: 100%; height: 100%; border-radius: 48px; background: var(--paper); padding: 90px 30px 30px; }
+  .s3 .screen .top { position: absolute; left: 18px; right: 18px; top: 18px; height: 80px; border-radius: 48px 48px 0 0; background: #fff; display: flex; align-items: center; gap: 14px; padding: 0 32px; font: 600 22px var(--sans); }
+  .s3 .screen .top i { width: 40px; height: 40px; border-radius: 50%; background: var(--red-soft); }
+  .s3 .screen .b { font-size: 22px; margin-top: 16px; max-width: 360px; }
+  .s3 .screen .b.me { background: var(--ink); }
+  .s3 .side { position: absolute; left: 1600px; top: 160px; width: 220px; font-size: 22px; line-height: 1.45; color: var(--muted); }
+  .s3 .side b { display: block; font: 300 72px/1 var(--serif); color: var(--ink); margin-bottom: 10px; }
+  .s3 .side p + p { margin-top: 48px; }
+
+  /* 4 line chart */
+  .s4 h2 { position: absolute; left: 120px; top: 110px; width: 1300px; }
+  .s4 svg { position: absolute; left: 120px; top: 360px; width: 1680px; height: 560px; overflow: visible; }
+
+  /* 5 close */
+  .s5 h2 { position: absolute; left: 120px; top: 120px; width: 1200px; font-size: 96px; line-height: 1; }
+  .s5 .recs { position: absolute; left: 120px; right: 120px; top: 520px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 60px; }
+  .s5 .recs div { border-top: 2px solid #3a3832; padding-top: 32px; }
+  .s5 .recs b { display: block; font: 300 120px/0.9 var(--serif); color: var(--red); }
+  .s5 .recs h3 { margin-top: 26px; font: 600 32px/1.2 var(--sans); }
+  .s5 .recs p { margin-top: 12px; font-size: 24px; line-height: 1.45; color: #b9b3a3; }
+</style>
+</head>
+<body>
+
+<section class="s1">
+  <h1>Gen Z Surabaya tidak lagi ke minimarket. Mereka <em>chat</em> warung.</h1>
+  <p class="by"><strong>Riset belanja harian</strong> · Toko Kita · November 2026</p>
+  <div class="chat c1" aria-hidden="true"><div class="who"><i>B</i>Warung Bu Sri<span>06.52</span></div><div class="b">Pagi mbak, galonnya diantar sekarang ya</div></div>
+  <div class="chat c2" aria-hidden="true"><div class="who"><i>P</i>Toko Pak Hari<span>12.10</span></div><div class="b me">Pak, rokok sama korek, ke kos biru</div></div>
+  <div class="chat c3"><div class="who"><i>S</i>Warung Bu Sri<span>19.04</span></div>
+    <div class="b me">Bu, gula 1 kg sama telur ½ kg ya. Antar jam 7 bisa?</div>
+    <div class="b">Bisa mbak. Total Rp 41.000, bayar QRIS pas sampai.</div></div>
+</section>
+
+<section class="dark s2">
+  <p class="n">64</p>
+  <h2>dari 100 anak muda pernah pesan kebutuhan harian lewat chat ke warung dekat rumah.</h2>
+  <p class="note">Lebih banyak dari yang belanja lewat aplikasi minimarket (41) atau quick commerce (37).</p>
+  <div class="dots" aria-label="64 dari 100 titik berwarna">
+    <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+    <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+    <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+    <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+    <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+    <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+    <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+  </div>
+  <div class="foot"><span>Survei 1.050 responden usia 17–26, Surabaya & Sidoarjo, Sept–Okt 2026</span><span>02</span></div>
+</section>
+
+<section class="s3">
+  <div class="panel" aria-hidden="true"></div>
+  <blockquote>“Saya nggak mau keluar kos cuma buat beli sabun. Bu Sri sudah hafal merek saya.”</blockquote>
+  <p class="who"><strong>Alya, 21</strong> · mahasiswi, Keputih</p>
+  <div class="phone" aria-hidden="true"><div class="screen">
+    <div class="top"><i></i>Warung Bu Sri</div>
+    <div class="b me">Bu, sabun yang biasa 2 ya</div>
+    <div class="b">Yang hijau kan mbak? Sekalian sampo, kemarin bilang habis</div>
+    <div class="b me">Iya bu sekalian, makasih</div>
+    <div class="b">Siap, 10 menit</div>
+  </div></div>
+  <div class="side"><p><b>9 mnt</b>rata-rata waktu antar warung dalam 1 km</p><p><b>0</b>ongkir di 7 dari 10 warung yang kami amati</p></div>
+</section>
+
+<section class="s4">
+  <h2>Pesanan lewat chat naik <em>tiga kali lipat</em> dalam setahun, kunjungan minimarket turun.</h2>
+  <svg viewBox="0 0 1680 560" aria-label="Grafik garis pesanan chat dan kunjungan minimarket per kuartal">
+    <g stroke="#d9d1c2" stroke-width="2"><line x1="0" y1="520" x2="1440" y2="520"/></g>
+    <g font-family="Inter" font-size="22" fill="#75705f">
+      <text x="0" y="556">K4 2025</text><text x="460" y="556">K1 2026</text><text x="920" y="556">K2 2026</text><text x="1380" y="556" text-anchor="end">K3 2026</text>
+    </g>
+    <path d="M0 300 L480 330 L960 370 L1440 410" fill="none" stroke="#a49d8a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M0 470 L480 400 L960 250 L1440 90 L1440 520 L0 520 Z" fill="#f7d9cd" opacity=".7"/>
+    <path d="M0 470 L480 400 L960 250 L1440 90" fill="none" stroke="#e2491f" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="1440" cy="90" r="16" fill="#e2491f"/><circle cx="1440" cy="90" r="30" fill="none" stroke="#e2491f" stroke-width="3" opacity=".35"/>
+    <text x="1480" y="80" font-family="Newsreader" font-size="64" fill="#1b1a17">3,1×</text>
+    <text x="1480" y="118" font-family="Inter" font-size="22" fill="#75705f">pesanan via chat</text>
+    <text x="1480" y="402" font-family="Newsreader" font-size="44" fill="#75705f">−18%</text>
+    <text x="1480" y="436" font-family="Inter" font-size="22" fill="#75705f">kunjungan minimarket</text>
+  </svg>
+  <div class="foot"><span>Data transaksi 212 warung mitra dan panel kunjungan 40 minimarket, Surabaya</span><span>04</span></div>
+</section>
+
+<section class="dark s5">
+  <h2>Toko Kita harus bisa di-chat, bukan hanya didatangi.</h2>
+  <div class="recs">
+    <div><b>1</b><h3>Satu nomor WhatsApp per toko</h3><p>Dipegang kasir yang sama setiap shift, supaya pelanggan dikenali.</p></div>
+    <div><b>2</b><h3>Antar 1 km, 15 menit</h3><p>Pakai kurir lingkungan, gratis di atas Rp 30.000.</p></div>
+    <div><b>3</b><h3>Uji di 12 toko, Januari</h3><p>Ukur pesanan chat per hari dan ulangan belanja tiap minggu.</p></div>
+  </div>
+  <div class="foot"><span>Toko Kita · Riset belanja harian 2026</span><span>05</span></div>
+</section>
+
+</body>
+</html>

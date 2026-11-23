@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BROWSER_TOOL_DOC, browserInputShape, EXECUTE_API_DOC, GUIDE_INDEX, guideText, type ExecuteResult, type RpcClient, type Shot } from '@archa/protocol';
+import { BROWSER_TOOL_DOC, browserInputShape, EXECUTE_API_DOC, PLACE_IMAGE_DOC, placeImageInputShape, GUIDE_INDEX, guideText, type ExecuteResult, type RpcClient, type Shot } from '@archa/protocol';
 import { connectCore } from './connect';
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
@@ -19,7 +19,7 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
   const defaultDoc = opts.doc ?? process.env.ARCHA_DOC_ID;
   const pick = (doc?: string) => doc || defaultDoc;
 
-  const server = new McpServer({ name: 'archadev', version: '0.4.0' });
+  const server = new McpServer({ name: 'archadev', version: '1.5.0' });
   const guard = async (fn: (c: RpcClient) => Promise<Content[]>) => {
     try {
       return { content: await fn(await getCore()) };
@@ -76,6 +76,26 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
       doc: docParam,
     },
   }, ({ doc, ...args }) => guard(async (c) => formatExecute(await c.call('agent.execute', { docId: pick(doc), ...args }))));
+
+  // Same as execute's svg(): the markup goes in as a tool argument, so the agent never escapes it inside JS.
+  server.registerTool('place_svg', {
+    description: 'Place SVG markup you wrote (logo, illustration, chart, icon, pattern) on the canvas as a drawing — never as text. Shapes become editable vector layers; gradients, text, filters or masks make it an exact image instead (the reply says which). Replies like execute (ids, screenshot, issues).',
+    inputSchema: {
+      svg: z.string().describe('Complete SVG markup: <svg viewBox="…">…</svg>'),
+      parent: z.string().optional().describe('Frame id or unique name to place it in; default the page (an empty spot)'),
+      x: z.number().optional(), y: z.number().optional(),
+      width: z.number().optional().describe('Size on the canvas; one side alone keeps the aspect ratio'),
+      height: z.number().optional(),
+      name: z.string().optional().describe('Layer name'),
+      mode: z.enum(['auto', 'vector', 'image']).optional().describe('auto (default) | vector (fail if not editable) | image'),
+      doc: docParam,
+    },
+  }, ({ svg, parent, doc, ...opts }) => guard(async (c) => formatExecute(await c.call('agent.execute', { docId: pick(doc), code: `svg(${JSON.stringify(svg)}, ${JSON.stringify(parent ?? null)}, ${JSON.stringify(opts)})` }))));
+
+  server.registerTool('inspect', {
+    description: 'Compact outline of layers as the design panel shows them: type, size, sizing, auto layout (gap/padding/align/justify), fills, strokes, effects, text and context notes people left on layers. No node = the current selection (else the page). Cheaper than get() for reading an existing design before editing it.',
+    inputSchema: { node: z.string().optional().describe('Node id or unique name'), depth: z.number().int().min(0).max(12).optional().describe('Levels of children (default 3)'), doc: docParam },
+  }, ({ node, depth, doc }) => guard(async (c) => [{ type: 'text', text: await c.call('agent.outline', { docId: pick(doc), node, depth }) }]));
 
   // ArchaDev's internal skill: short design guides, answered locally (no app round-trip).
   server.registerTool('read_guide', {
@@ -145,6 +165,52 @@ ${GUIDE_INDEX}`,
     return [{ type: 'text', text: 'ok' }];
   }));
 
+  server.registerTool('done', {
+    description: 'Call once when you have finished the request (after your last canvas change): your cursor on the canvas stops and disappears. Optional one-line summary for the activity feed.',
+    inputSchema: { summary: z.string().max(300).optional(), doc: docParam },
+  }, ({ summary, doc }) => guard(async (c) => {
+    await c.call('agent.done', { docId: pick(doc), summary });
+    return [{ type: 'text', text: 'Done — your cursor is put away. Now reply to the person with a 2-3 line summary.' }];
+  }));
+
+  // Orchestrate mode (blueprint AGENT_BRIDGE/06): only a lead thread may use these; others get an error.
+  server.registerTool('delegate', {
+    description: 'Orchestrate mode only: start one worker agent per task, in parallel on this canvas. Returns their names.',
+    inputSchema: {
+      tasks: z.array(z.object({
+        title: z.string().describe('Short task name'),
+        prompt: z.string().describe('Self-contained brief: the worker does not see your conversation'),
+        kind: z.string().optional().describe('research | design | copy | review | …'),
+        agent: z.enum(['claude', 'agy', 'codex']).optional().describe('Default: your own agent'),
+        model: z.string().optional(),
+        frame: z.string().optional().describe('Id of the frame the worker builds inside'),
+      })).min(1).max(8),
+    },
+  }, ({ tasks }) => guard(async (c) => {
+    const r = await c.call('orchestra.delegate', { tasks });
+    return [{ type: 'text', text: `Started ${r.workers.length} worker${r.workers.length === 1 ? '' : 's'}:\n${r.workers.map((w) => `- ${w.persona} (${w.agent}) — ${w.title} [${w.threadId}]`).join('\n')}\nCall wait_workers to collect their reports.` }];
+  }));
+
+  server.registerTool('wait_workers', {
+    description: 'Orchestrate mode only: wait until your workers finish (or the timeout) and get their reports. Call again while some are still working.',
+    inputSchema: {
+      workers: z.array(z.string()).optional().describe('Names or thread ids; default all'),
+      timeoutSec: z.number().min(5).max(600).optional().describe('Default 240'),
+    },
+  }, (args) => guard(async (c) => {
+    const r = await c.call('orchestra.wait', args);
+    const lines = r.workers.map((w) => `## ${w.persona} — ${w.title} (${w.status})\n${w.reply || '(no reply yet)'}`);
+    return [{ type: 'text', text: `${r.timedOut ? 'Timed out — some workers are still working; call wait_workers again.\n\n' : ''}${lines.join('\n\n') || 'No workers yet.'}` }];
+  }));
+
+  server.registerTool('tell_worker', {
+    description: 'Orchestrate mode only: send a follow-up message to one of your workers (queued if it is still working).',
+    inputSchema: { worker: z.string().describe('Worker name or thread id'), message: z.string() },
+  }, (args) => guard(async (c) => {
+    const r = await c.call('orchestra.tell', args);
+    return [{ type: 'text', text: r.queued ? 'Queued — it runs when the worker finishes its current turn.' : 'Sent.' }];
+  }));
+
   server.registerTool('browser', {
     description: BROWSER_TOOL_DOC,
     inputSchema: browserInputShape,
@@ -152,6 +218,11 @@ ${GUIDE_INDEX}`,
     const r = await c.call('agent.browser', args);
     return r.png ? [{ type: 'image', data: r.png, mimeType: 'image/png' }, { type: 'text', text: r.text }] : [{ type: 'text', text: r.text }];
   }));
+
+  server.registerTool('place_image', {
+    description: PLACE_IMAGE_DOC,
+    inputSchema: { ...placeImageInputShape, doc: docParam },
+  }, ({ doc, ...args }) => guard(async (c) => formatExecute(await c.call('agent.placeImage', { docId: pick(doc), ...args }))));
 
   await server.connect(new StdioServerTransport());
 }

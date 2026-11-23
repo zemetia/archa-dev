@@ -4,35 +4,153 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### Design fidelity
+- **Gradients and picture fills**: fills are now a stack of solid, linear gradient (CSS angles), radial gradient and image paints (crop / fit / stretch / tile), on any shape or text. Photo scrims are a real gradient instead of stacked translucent rectangles. `place_image { fillOf }` puts a downloaded photo into a frame's fills. The Fill panel switches between Solid / Linear / Radial / Image with editable stops.
+- **Rich text**: `spans` style ranges of one text node (colour, font, weight, italic, size, tracking, underline) — a two-tone headline is one layer. Spans follow edits to the text.
+- **Tokens bound to layers**: write `"$color/accent"` (or `bind()`) and the property follows the variable; changing the token restyles every bound layer in one undoable step. HTML export prints them as CSS variables.
+- **Components v2**: edits made on an instance survive a sync; components get text / boolean props and variant sets (`setProps(button, { label: "Buy", size: "lg" })`); Reset drops an instance's own changes.
+- **Built-in fonts**: Inter, Inter Tight, Geist, Geist Mono, DM Sans, Manrope, Plus Jakarta Sans, Space Grotesk, Outfit, Sora, Instrument Sans/Serif, Bricolage Grotesque, Fraunces, Playfair Display and JetBrains Mono ship with the app and draw the same on every machine.
+- **Grids**: frames take `wrap` (items per line) — 6 cards in a 3-column frame become two rows by themselves, like CSS `grid-template-columns: repeat(3, 1fr)`; `lineGap` sets the space between rows. Agents can write `columns: 3`, `gridTemplateColumns` or `rowGap`. Exports as CSS grid; the Auto layout panel has a Cols/Rows field.
+- **Glass that agents actually use**: frosted-glass (background blur) is now in the agents' core guide with a recipe, takes CSS-like shorthands (`backdropBlur: 16`, `backdropFilter: "blur(16px)"`), and a lint warns when the glass fill is opaque.
+- `.archa` format 4 (older files open unchanged).
+
 ### Files
 - **Images live next to the file, not inside it.** Saving `landing.archa` keeps its images in `landing-asset/images/` and the document only points at them (`asset:images/…`). Pasted, imported and agent-made images are written there as they arrive, so `.archa` files no longer carry base64 and stay small.
-- Opening an older file moves its embedded images out into the folder; save once to slim the file down. File format is now version 3 (older ArchaDev versions cannot open it).
+- Opening an older file moves its embedded images out into the folder; save once to slim the file down. File format is now version 5 (older ArchaDev versions cannot open it).
 - Agents can place a photo by its file path or URL instead of sending the image itself.
 - Exports (HTML, SVG, PDF) and published library components still include their images.
 
 ### Chat
 - **Every conversation is its own `.json` file** in `<name>-asset/chats/`, with its pasted images in `chats/attachments/`. Conversations travel with the design folder and load from there when you open it; they are never stored inside the `.archa`. History from earlier versions moves over on first open.
 
-### Design
-- **Gradients.** Fills can be linear or radial gradients, edited in the Design panel (Solid / Linear / Radial, angle, colour stops) and exported to SVG, HTML and PDF.
-- **Rich text.** One text node can mix colours, weights, fonts, underline and strikethrough. Styles stay on the right words when the text is edited.
-- **Token bindings.** A fill, radius, gap, padding, font size and more can be bound to a variable; change the variable and every bound layer follows. Editing the property by hand unbinds it. Undo covers both.
-- **Instance overrides survive sync.** Text, images or colours changed on a component instance are kept when the main is synced, and synced layers keep their ids.
-- **Twelve fonts built in**: Inter, Inter Tight, Roboto, Open Sans, Poppins, Montserrat, Plus Jakarta Sans, DM Sans, Manrope, Space Grotesk, Playfair Display, JetBrains Mono — drawn and measured exactly on every machine.
 
 ### Agents
 - MCP tools (`get_state`, `execute`, `screenshot`, `export_svg`, `say`) take a `doc` argument — a document id, `.archa` path or name — so an agent can work on any open document, not only the active one. New tools: `list_documents`, `open_document`, `new_document`, `save_document`.
 - Screenshots are no longer shrunk: agents get the full-size image plus a temporary file path. A tall page comes back as readable full-width slices, each labelled with its y range. Replies stay under the size MCP clients accept, so a long page no longer drops the connection. The in-app browser screenshots work the same way.
 - **Rebuild from a reference.** `reference` reads a PDF page (or image) into numbers — every text line with position, size and colour, boxes with their corner radius, the palette, the type scale — and puts its photos straight into the document's asset folder. `compare` diffs a build against the reference and names the layers in the worst regions, with a heat map. A built-in `rebuild` guide walks agents through it.
-- `execute` gains `image(path)` (the app reads the file and uses its real size), `bind()` for tokens and `fonts()`; fills accept CSS gradient strings and text accepts `runs` for rich text.
+- `execute` gains `image(path)`: the app reads the file, copies it into the asset folder and uses its real size.
 
 ### Canvas
-- **Text fits its box.** Layout now measures text with the real widths of the bundled fonts instead of an estimate, and the canvas draws with the same metrics, so hug-sized frames, centred text and wrapped paragraphs line up. SVG export keeps wrapped lines.
+- **Text fits its box.** Layout measures text with the real widths of the built-in fonts instead of an estimate, and the canvas draws with the same metrics, so hug-sized frames, centred text and wrapped paragraphs line up.
 - Outside strokes no longer erase the fill of the shape they belong to.
-- Fixed 823 lucide icons (arrows, search, x and more) that drew broken.
+- Fixed icons whose shapes are made of several paths (arrows, search, x and many more across lucide, Tabler, Phosphor and Heroicons) drawing broken lines.
 
 ### Settings
 - Claude Code installed through npm signs in again (it failed with `spawn … ENOENT` on Windows).
+
+## [1.5.0] - 2026-11-21
+
+### Pictures from the web
+- **Agents research and fetch images inside ArchaDev**, no Python: the browser tool can `search` Google (web or Images), list the `images` on a page, and `download` one (by URL, from the page, or as a screenshot of an element) — the agent sees a preview to choose from.
+- **`place_image`** puts a real photo or logo straight on the canvas; the file is also saved under `~/.archadev/downloads`.
+
+### Rotation
+- **Any layer can be rotated**, text included: drag the round knob above the selection (Shift snaps to 15°) or type the angle in the ↻ field. Resizing a rotated layer keeps its opposite corner in place; exports keep the rotation.
+
+### Text like Canva
+- The Text tool makes a text box with a set width: long text wraps instead of widening it, also when you edit existing text.
+- Drag a **corner** to scale the text with its box; drag a **side** to change the width. Text no longer has top/bottom handles.
+- **Text toolbar** over the canvas: font, size − / +, colour, **B** / *I* / U / S, aA case, alignment, bullet / numbered lists, letter and line spacing, transparency.
+- **Effects panel**: Drop, Glow, Echo, Outline, Background, Splice, Hollow, Neon, Glitch — each with its own sliders and colour — and **Curve** to bend text into an arc.
+
+### Agents
+- **`done`** tool: an agent calls it when it finishes, and its cursor leaves the canvas instead of idling.
+
+## [1.4.2] - 2026-11-21
+
+### Social posts
+- **Instagram content looks like posts, not web pages.** A new built-in guide `social` rides along automatically when a request mentions Instagram, feed, carousel, reels, 4:5 or 9:16: 1080×1350 frames, headlines of 96–130px, nothing under 26px, one hero at extreme scale, one overlap, no badges or card grids.
+- The **design-social** skill now builds on the canvas first, with a checked example (`examples/canvas-post.js`).
+- **Finding skills**: `/` in the chat also searches skill descriptions — `/instagram`, `/feed` or `/carousel` find **design-social** — and shows up to 12 in a scrolling list.
+- **Fewer false warnings**: text contrast is measured against the shape behind it (a sticker, a card), and a crop at the edge can be marked as intended with `absolute: true`.
+
+## [1.4.1] - 2026-11-21
+
+### Brand
+- **New ArchaDev logo** (gold "A"): in the title bar, the chat welcome, and as the app, installer and taskbar icon.
+
+## [1.4.0] - 2026-11-21
+
+### SVG
+- **AI-written SVG lands on the canvas as a drawing.** Agents get a `place_svg` tool and an `svg(markup, parent, opts)` helper in `execute`: shapes become editable vector layers; SVG with gradients, text, filters or masks is placed as an exact image (the agent is told which). SVG markup put into a text layer is placed as a drawing instead of showing the code.
+- **SVG in chat replies shows as a picture** with **Place on canvas**, Copy and the source — for ```svg blocks, bare `<svg>` markup and every `place_svg` step.
+- **One SVG parser everywhere** (file import, drag and drop, paste, My icons, chat, agents), now without the DOM: rotated and skewed shapes, arcs and `<style>` class rules stay vectors. Pasting SVG with gradients or text no longer does nothing — it lands as an image.
+- New built-in design guide `svg` and skill **design-svg** (logo marks, spot illustrations, charts, patterns).
+
+## [1.3.0] - 2026-11-20
+
+### Text
+- **Clean in-place editing**: the old text no longer shows doubled under the editor, and one edit makes one undo step.
+- **Enter saves**, Shift+Enter starts a new line.
+- **Font picker**: search every font installed on this computer, each previewed in its own face, with keyboard navigation; type a name that isn't installed to use it anyway.
+
+### Canvas
+- **Drag and drop photos** from Explorer (or a browser) onto the canvas: they land under the pointer, inside the frame there, side by side when you drop several. Dropping a photo on the chat composer attaches it to your message.
+- **Remove background**: right-click an image (or Design panel → Image) to cut the subject out, on this computer. The model (BiRefNet lite, MIT) downloads once (~224 MB); the photo never leaves your machine. Undo brings the original back.
+- **Drag layers out of frames**: a photo or any layer can now be dragged out of an auto-layout frame (dragging inside it still reorders) and stays visible while it leaves a clipping frame. Dropping into an auto-layout frame shows where it will land.
+
+### Export
+- **Multi-page PDF**: select several frames (Shift+click or drag a box) and export them as one PDF, a page each at its own size, in canvas order (left to right, top to bottom). From the Design panel's Export section or right-click **Export as PDF**. PNG, JPG and SVG with several layers save one file per layer into a folder.
+
+### Chat
+- **Expandable steps**: every step the agent takes (execute, inspect, screenshot…) opens to show what it did: the code it ran or the arguments, and what came back (or the error).
+- **Built-in design skills are on**: `design-website`, `design-pdf`, `design-slides`, `design-social` and `design-flows` now ship with the app and reach every chat run (Claude Code loads them as skills; Antigravity and Codex get them as a list to read). Turn one off in Settings → Skills; a library skill with the same name replaces it.
+- **`/skill` mentions**: type `/` in the composer to pick a skill or a built-in guide; its instructions go with that message, for every agent.
+- **Minimal by default**: agents now build only what you ask for, without filler sections, labels above headings, badges or extra copy, unless you ask for more.
+
+### Design skills
+- **Design taste rules** in every design skill: no labels above headings, one hero at real scale, layered depth with overlap, a repeated motif and a decoration budget, plus a self-check.
+- New examples: an annual report, a CV and a studio profile (PDF), a launch deck and a research deck (slides), and a new `design-social` skill with Instagram posts and a carousel.
+
+## [1.2.0] - 2026-11-20
+
+### Assets: icons and logos
+- **Assets panel** (grid button on the tool rail, or Shift+I): over 20,000 icons in one place. Lucide, Tabler (outline + filled), Phosphor (thin, light, regular, bold, fill), Heroicons (outline, solid, mini, micro) and about 3,500 brand logos in their brand colours. Search one set or all of them, pick a size and colour, then click to insert or drag onto the canvas.
+- **My icons**: upload your own SVG or PNG icons and logos. They are saved on this computer for every document; SVGs stay editable vectors.
+- Agents reach every set too: `icon("tabler:home")`, `icon("ph-fill:heart")`, `icon("logos:github")`, `icon("my:<name>")`, and `icons("query")` searches them all.
+
+### Fixes
+- The tool rail and the right-click menu scroll instead of running off a short window.
+
+## [1.1.0] - 2026-11-20
+
+### Design skills
+- **Four design skills for agents** in `skills/`: `design-website` (minimalist professional sites), `design-pdf` (designed PDF documents), `design-slides` (decks as editable PPTX or HTML/PDF) and `design-flows` (page maps, user flows, swimlanes, state diagrams). Import them in Settings → Skills.
+- Each skill ships a complete worked example, ArchaDev canvas snippets for `execute`, a reference of which ArchaDev tools to call (and the `execute` traps seen in real runs), and render scripts that use the installed Chrome/Edge: page screenshots at phone/tablet/desktop width, HTML → PDF with page previews, PPTX previews through PowerPoint, and Mermaid → SVG/PNG.
+- Every canvas snippet was run through the real executor, and every example was rendered and checked.
+
+### Web page objects
+- New web pages start as a phone (390 × 844) and empty; the link is asked once, then never shown.
+- The toolbar snaps to Phone / Tablet / Desktop and saves JPG screenshots: Wide (1440 × 900) or Object (as shown).
+- Page scrollbars are hidden; a wheel over the selected page scrolls it without double-clicking. The placeholder card drops the address strip.
+
+## [1.0.1] - 2026-11-20
+
+### Design panel
+- **Rebuilt right sidebar.** Layer name with type icon, then Create component, Context, Alignment, Position, Auto layout, Dimensions, Appearance, Text, Fill, Stroke, Effects, Code and Export.
+- **Alignment works everywhere.** One layer aligns inside its frame; several align to their bounds; distribute evens out 3+ layers. A layer inside auto layout now changes the parent's alignment instead of doing nothing, and a lone top-level layer says why it can't be aligned.
+- **Auto layout:** pick freeform / vertical / horizontal, place children with a 9-dot grid, gap with Space between / Space around, padding per axis or per side.
+- **Dimensions:** Fill width/height and Hug width/height checkboxes; typing a width or height makes that side fixed again (text switches to wrapping).
+- **Context:** a note for agents on any layer ("keep the price on one line"). Agents see it in their state and in `inspect`.
+- **Effects:** drop shadow, inner shadow, layer blur and background blur (frosted glass). Shadows now keep their size at every zoom.
+- **Fill opacity** can be typed again (the % field was read-only). **Code:** copy HTML + Tailwind or HTML + CSS to the clipboard, or export it.
+- `.archa` format 3 (new effect types, `space-around`); format 2 files open unchanged.
+
+### Agents
+- New `inspect` tool and `outline()` helper: a compact read of a design (sizes, layout, paints, text, context) instead of large `get()` JSON.
+- `align()`, `distribute()` and `wrap()` in `execute` use the same code as the design panel, so agents arrange layers in one call instead of computing x/y.
+- More CSS / Figma spellings are understood (`alignItems`, `justifyContent`, `flexDirection`, `borderRadius`, `stroke`, `blur` / `inset` / `backdrop` effects).
+- `get_state` includes an outline of the selected layers and every context note.
+
+### Canvas
+- **Connectors** (tool L) for workflows, flowcharts and page maps: drag from one layer to another; the line sticks to both and follows when they move. Elbow (90°) or straight, rounded corners, arrow / dot / no caps; drag an end handle onto another layer to reattach. Exported to SVG and HTML; agents create them with `insert(null, { type: "connector", start, end })`.
+- **Right-click menu**: paste here, copy, duplicate, bring to front / send to back, group (Ctrl+G), frame, ungroup (Ctrl+Shift+G), add / remove auto layout, create component, delete, and a pixel grid toggle.
+- Chat messages can be selected and copied.
+
+### Orchestrate mode
+- **Orchestrate** in the chat composer turns the agent you talk to into a team lead. It splits the job and sends other agents to research or build different sections of the same page at the same time, then checks and joins their work. Each worker has its own name, colour and cursor on the canvas, and can be Claude Code, Antigravity or Codex.
+- **Team view** (the Team button in the chat header) fills the window with the team as connected circles: which AI each agent is, its task and the prompt the lead gave it, live status and latest step. Hover shows the whole prompt; clicking an agent zooms into it and opens its chat. Back or Esc returns to the canvas.
+- When the whole team is done, the lead is told on its own and checks the result. Stopping the lead stops its team. Worker chats open from the team view and have a back arrow to the lead; History lists only the lead.
 
 ## [0.4.0] - 2026-11-19
 

@@ -1,9 +1,10 @@
-import { componentMeta, instanceOf, insertOpsFor, makeComponentOps, subtreeInput } from '@archa/core';
+import { componentMeta, instanceOf, insertOpsFor, makeComponentOps, subtreeInput, wrapOps } from '@archa/core';
 import { isContainer, type Node, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, toast, useStore } from './store';
-import { containerAt, originOf, pageRoot, selectionBounds, toWorld } from './geometry';
+import { containerAt, originOf, pageRoot, toWorld } from './geometry';
 import type { ArchaDocument } from '@archa/core';
-import { importFile, place, svgToNodes } from './importers';
+import { importFile, place, svgInput } from './importers';
+import { isSvgMarkup } from '@archa/formats';
 
 /* Editing commands shared by shortcuts and menus. Every change is one transaction. */
 
@@ -118,9 +119,12 @@ export async function pasteFrom(data: DataTransfer | null) {
     return;
   }
   const svg = text.trim();
-  if (/^(<\?xml[^>]*>\s*)?<svg[\s>]/i.test(svg)) {
-    const vector = svgToNodes(svg, 'Pasted SVG');
-    if (vector) return place(vector, undefined, 'Paste SVG');
+  if (isSvgMarkup(svg)) {
+    try {
+      return void await place(svgInput(svg, 'Pasted SVG'), undefined, 'Paste SVG');
+    } catch (e) {
+      return toast(`Paste failed: ${(e as Error).message}`, 'error');
+    }
   }
   return paste();
 }
@@ -145,39 +149,18 @@ export async function wrapInFrame(layout: boolean) {
       return;
     }
   }
-  await wrap(doc, ids, layout ? 'layout' : 'frame');
+  if (!ids.every((id) => doc.get(id)?.parentId === doc.get(ids[0]!)?.parentId)) { toast('Select layers with the same parent', 'error'); return; }
+  const { ops, rootId } = wrapOps(doc, ids, layout ? { layout: 'auto' } : {});
+  if (await commit(layout ? 'Wrap in auto layout' : 'Frame selection', ops)) select([rootId]);
 }
 
 /** Ctrl+G: wraps the selection in a group (no box of its own; sized to the selection). */
 export async function group() {
   const { doc, ids } = ctx();
-  if (doc && ids.length) await wrap(doc, ids, 'group');
-}
-
-async function wrap(doc: ArchaDocument, ids: string[], kind: 'frame' | 'layout' | 'group') {
-  const layout = kind === 'layout';
-  const parentId = doc.require(ids[0]!).parentId!;
-  if (!ids.every((id) => doc.get(id)?.parentId === parentId)) { toast('Select layers with the same parent', 'error'); return; }
-  const parent = doc.require(parentId);
-  const b = selectionBounds(doc, ids)!;
-  const o = originOf(doc, parentId);
-  const sorted = isContainer(parent) ? [...ids].sort((a, c) => parent.children.indexOf(a) - parent.children.indexOf(c)) : ids;
-  const index = isContainer(parent) ? parent.children.indexOf(sorted[0]!) : undefined;
-  const box = { x: Math.round(b.x - o.x), y: Math.round(b.y - o.y), width: Math.round(b.width), height: Math.round(b.height) };
-  const input = kind === 'group' ? { type: 'group', name: 'Group', ...box }
-    : { type: 'frame', name: layout ? 'Auto layout' : 'Frame', ...box, clip: false,
-      ...(layout ? { layout: b.width > b.height * 1.5 ? 'row' : 'column', gap: 12, sizing: { horizontal: 'hug', vertical: 'hug' } } : {}) };
-  const inserted = insertOpsFor(input as unknown as NodeInput, parentId, index);
-  const rootId = inserted.rootId;
-  const ops: Op[] = [...inserted.ops];
-  const byPos = layout ? [...sorted].sort((a, c) => (b.width > b.height * 1.5 ? doc.require(a).x - doc.require(c).x : doc.require(a).y - doc.require(c).y)) : sorted;
-  for (const id of byPos) {
-    const wb = doc.worldBounds(id);
-    ops.push({ op: 'move', id, parentId: rootId });
-    if (!layout) ops.push({ op: 'update', id, patch: { x: Math.round(wb.x - b.x), y: Math.round(wb.y - b.y) } });
-  }
-  const label = kind === 'group' ? 'Group selection' : layout ? 'Wrap in auto layout' : 'Frame selection';
-  if (await commit(label, ops)) select([rootId]);
+  if (!doc || !ids.length) return;
+  if (!ids.every((id) => doc.get(id)?.parentId === doc.get(ids[0]!)?.parentId)) { toast('Select layers with the same parent', 'error'); return; }
+  const { ops, rootId } = wrapOps(doc, ids, { type: 'group', name: 'Group' });
+  if (await commit('Group selection', ops)) select([rootId]);
 }
 
 /** Groups and frames that ungroup can dissolve. */

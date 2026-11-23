@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowUp, Copy, Crosshair, FileText, Hexagon, History, Loader2, Settings, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
-import { chatThreads, threadOf, type ChatImage, type ModelOption } from '@archa/protocol';
-import { runOfThread, select, toast, useStore } from '../lib/store';
+import { ArrowLeft, ArrowUp, BookOpen, Camera, Check, ChevronRight, Code2, Copy, Crosshair, FileText, Globe, History, ImagePlus, Layers, Loader2, MessageSquare, Network, ScanSearch, Settings, Shapes, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
+import { chatThreads, GUIDES, threadOf, type ChatImage, type ChatMessage, type ChatMode, type ModelOption } from '@archa/protocol';
+import { loadSkills, runOfThread, select, toast, useStore } from '../lib/store';
 import { imageFiles, MAX_CHAT_IMAGES, toChatImage } from '../lib/chatImages';
-import { assetUrl } from '../lib/assets';
+import { assetUrl } from '../lib/asset-urls';
 import { personaBg } from './persona';
 import { cn } from './controls';
 import { Dropdown, type DropdownOption } from './Dropdown';
 import { Markdown } from './Markdown';
+import { ArchaLogo } from './ArchaLogo';
+import { SvgBlock } from './SvgBlock';
+import { extractSvg, isSvgMarkup } from '@archa/formats';
 
 /*
  * Agent-first panel: launch a local agent on this canvas (launch mode) and see what
@@ -16,6 +19,12 @@ import { Markdown } from './Markdown';
  */
 
 const AGENT_DOT: Record<string, string> = { claude: 'bg-claude', agy: 'bg-agy', codex: 'bg-codex' };
+
+const TEAM_SUGGESTIONS = [
+  'Research three SaaS pricing pages, then design ours: hero, tiers, FAQ and footer in parallel',
+  'A landing page for a coffee brand — one worker per section, same style',
+  'A mobile banking app: onboarding, home and transfer screens built side by side',
+];
 
 const SUGGESTIONS = [
   'A pricing page with three tiers and a monthly / yearly toggle',
@@ -45,6 +54,11 @@ export function ChatThread() {
   const meta = useMemo(() => (thread ? chatThreads(chat.filter((c) => threadOf(c) === thread))[0] : undefined), [chat, thread]);
   const title = meta?.title ?? null;
   const persona = running?.persona ?? meta?.persona;
+  const role = meta?.orchestra;
+  const leadId = role ? ('lead' in role ? thread : role.parent) : null;
+  const leadName = useMemo(() => (role && 'parent' in role ? chatThreads(chat.filter((c) => threadOf(c) === role.parent))[0]?.persona : undefined), [chat, role]);
+  const teamSize = useMemo(() => (leadId ? new Set(chat.filter((c) => c.orchestra && 'parent' in c.orchestra && c.orchestra.parent === leadId).map(threadOf)).size : 0), [chat, leadId]);
+  const mode = useStore((s) => s.chatMode);
   const items = useMemo(() => {
     const own = chat.filter((c) => thread !== null && threadOf(c) === thread).map((c) => ({ ...c, nodeIds: [] as string[] }));
     // Listen-mode agents (connected through `archa mcp` from a terminal) are not threaded: show them with the newest conversation.
@@ -62,6 +76,10 @@ export function ChatThread() {
   return (
     <div className="flex min-h-0 flex-1 flex-col border-t border-line">
       <div className="flex h-10 shrink-0 items-center gap-2 px-4">
+        {role && 'parent' in role && (
+          <button title={`Back to ${leadName ?? 'the lead'}'s chat`} onClick={() => useStore.setState({ chatThread: role.parent })}
+            className="-ml-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:bg-panel-2 hover:text-fg"><ArrowLeft size={14} /></button>
+        )}
         {persona && <span title="Session name — its cursor on the canvas has this colour" className="flex shrink-0 items-center gap-1 rounded-full bg-panel-2 px-1.5 py-0.5 text-[10.5px] font-medium text-fg-muted"><span className={cn('h-1.5 w-1.5 rounded-full', personaBg(persona))} />{persona}</span>}
         <span className="min-w-0 truncate text-[12.5px] font-semibold" title={title ?? undefined}>{title ?? 'New chat'}</span>
         <div className="flex-1" />
@@ -69,6 +87,12 @@ export function ChatThread() {
           <span title={agents.map((a) => a.name).join(', ')} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-agent/15 px-2 py-0.5 text-[10.5px] font-medium text-agent">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-agent" />{agents.length}&nbsp;live
           </span>
+        )}
+        {leadId && (
+          <button title="Team view — the lead and its workers" onClick={() => useStore.setState({ orchestraView: leadId })}
+            className="flex h-7 shrink-0 items-center gap-1 rounded-lg bg-accent-soft px-2 text-[11px] font-medium text-accent-fg hover:bg-accent/30">
+            <Network size={13} />{teamSize > 0 ? teamSize : 'Team'}
+          </button>
         )}
         <button title="Chat history" onClick={() => useStore.setState({ leftTab: 'history' })}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:bg-panel-2 hover:text-fg"><History size={14} /></button>
@@ -90,11 +114,14 @@ export function ChatThread() {
           <div className="space-y-5 px-1 pt-6">
             <div>
               <div className="mb-3 flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft text-accent-fg"><Hexagon size={15} strokeWidth={2.4} /></span>
-                <span className="text-[14px] font-semibold tracking-tight">What should your agent design?</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft"><ArchaLogo size={20} /></span>
+                <span className="text-[14px] font-semibold tracking-tight">{mode === 'orchestrate' ? 'What should your team build?' : 'What should your agent design?'}</span>
               </div>
+              {mode === 'orchestrate' && (
+                <p className="mb-3 text-[11.5px] leading-relaxed text-fg-subtle">Orchestrate: the agent you talk to leads. It splits the work and sends other agents to research or build different sections at the same time, then checks and joins the result.</p>
+              )}
               <div className="flex flex-col items-start gap-1.5">
-                {SUGGESTIONS.map((t) => (
+                {(mode === 'orchestrate' ? TEAM_SUGGESTIONS : SUGGESTIONS).map((t) => (
                   <button key={t} onClick={() => { useStore.setState({ chatDraft: t }); focusComposer?.(); }}
                     className="group flex max-w-full items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-left text-[12px] text-fg-muted transition-colors hover:border-accent/50 hover:bg-accent-soft hover:text-fg">
                     <Sparkles size={12} className="shrink-0 text-fg-subtle group-hover:text-accent-fg" /><span className="truncate">{t}</span>
@@ -124,16 +151,11 @@ export function ChatThread() {
                     {m.images.map((src, i) => <img key={i} src={assetUrl(src, m.docId)} alt="" className="h-16 max-w-[120px] rounded-md border border-line object-cover" />)}
                   </div>
                 ) : null}
-                {m.text}
+                <MentionText text={m.text} />
               </div>
             )}
             {m.role === 'agent' && <AgentText agent={m.agent} persona={m.persona} label={agentLabel(m.agent)} text={m.text} />}
-            {m.role === 'tool' && (
-              <button onClick={() => m.nodeIds.length && select(m.nodeIds.filter((id) => useStore.getState().doc?.get(id)).slice(0, 50))}
-                className="flex w-full items-center gap-1.5 truncate px-1 text-left text-[11.5px] text-fg-subtle hover:text-fg-muted">
-                <Wrench size={11} className="shrink-0" /><span className="truncate">{m.text}</span>
-              </button>
-            )}
+            {m.role === 'tool' && <ToolRow m={m} pending={!!running && 'callId' in m && !!m.callId && m.runId === running.runId && m.result === undefined} />}
             {m.role === 'status' && <div className="flex items-center gap-1.5 px-1 text-[11px] text-fg-subtle"><UserRound size={11} className="shrink-0" /><span className="truncate">{m.text}</span></div>}
             {m.role === 'error' && <div className="whitespace-pre-wrap rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{m.text}</div>}
           </div>
@@ -142,6 +164,74 @@ export function ChatThread() {
         {running && !live && <div className="flex items-center gap-2 px-1 text-[12px] text-agent"><Loader2 size={13} className="animate-spin" />{running.persona} is working on the canvas…</div>}
         <div ref={end} />
       </div>
+    </div>
+  );
+}
+
+/** `/skill` mentions in a sent message, tinted so the person sees which skills went with it. */
+function MentionText({ text }: { text: string }) {
+  const parts = text.split(/((?:^|\s)\/[a-z0-9][a-z0-9-]*)/gi);
+  return parts.map((p, i) => (i % 2 ? <span key={i} className="whitespace-nowrap font-medium text-accent-fg">{p}</span> : p));
+}
+
+const TOOL_ICON: Record<string, typeof Wrench> = {
+  execute: Code2, inspect: ScanSearch, screenshot: Camera, get_state: Layers, read_guide: BookOpen, browser: Globe,
+  export_svg: Code2, place_svg: Shapes, delegate: Network, wait_workers: Network, tell_worker: Network,
+};
+
+/**
+ * One tool call the agent made. Collapsed: what it did in one line. Expanded: the full input (the code an
+ * execute ran, the node an inspect looked at…) and what the tool returned.
+ */
+type ToolItem = Pick<ChatMessage, 'text' | 'detail' | 'result' | 'failed'> & { nodeIds: string[] };
+
+function ToolRow({ m, pending }: { m: ToolItem; pending: boolean }) {
+  const [open, setOpen] = useState(false);
+  const tool = m.text.split(' · ')[0]!.trim();
+  const Icon = TOOL_ICON[tool] ?? Wrench;
+  const expandable = !!(m.detail || m.result);
+  const selectNodes = () => select(m.nodeIds.filter((id) => useStore.getState().doc?.get(id)).slice(0, 50));
+  return (
+    <div className="px-0.5">
+      <button onClick={() => (expandable ? setOpen(!open) : m.nodeIds.length && selectNodes())} aria-expanded={expandable ? open : undefined}
+        title={expandable ? (open ? 'Hide details' : 'Show what this step did') : m.text}
+        className={cn('group flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-[11.5px] text-fg-subtle hover:bg-panel-2 hover:text-fg-muted', open && 'text-fg-muted')}>
+        {expandable
+          ? <ChevronRight size={11} className={cn('shrink-0 transition-transform', open && 'rotate-90')} />
+          : <span className="w-[11px] shrink-0" />}
+        <Icon size={11} className={cn('shrink-0', m.failed && 'text-danger')} />
+        <span className="min-w-0 flex-1 truncate">{m.text}</span>
+        {pending && <Loader2 size={10} className="shrink-0 animate-spin" />}
+        {m.failed && <span className="shrink-0 text-[10px] text-danger">failed</span>}
+      </button>
+      {open && (
+        <div className="mb-1 ml-[18px] mt-0.5 space-y-1.5 rounded-lg border border-line bg-panel-2/60 p-1.5">
+          {tool === 'place_svg' && m.detail && isSvgMarkup(m.detail) && extractSvg(m.detail) && <SvgBlock code={extractSvg(m.detail)!} />}
+          {m.detail && <DetailBlock label={tool === 'execute' ? 'Code' : tool === 'place_svg' ? 'SVG' : 'Input'} text={m.detail} />}
+          {m.result !== undefined
+            ? <DetailBlock label={m.failed ? 'Error' : 'Result'} text={m.result} danger={m.failed} />
+            : pending && <div className="flex items-center gap-1.5 px-1 text-[10.5px] text-fg-subtle"><Loader2 size={10} className="animate-spin" />Waiting for the result…</div>}
+          {m.nodeIds.length > 0 && (
+            <button onClick={selectNodes} className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] text-fg-muted hover:bg-panel-3 hover:text-fg">
+              <Crosshair size={10} />Select {m.nodeIds.length === 1 ? 'the layer' : `${m.nodeIds.length} layers`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailBlock({ label, text, danger }: { label: string; text: string; danger?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div>
+      <div className="flex h-5 items-center px-1 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
+        <span className="flex-1">{label}</span>
+        <button title="Copy" onClick={() => { void navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); }}
+          className="flex h-5 w-5 items-center justify-center rounded hover:bg-panel-3 hover:text-fg">{copied ? <Check size={10} /> : <Copy size={10} />}</button>
+      </div>
+      <pre className={cn('max-h-64 select-text overflow-auto whitespace-pre-wrap break-words rounded-md bg-panel px-2 py-1.5 font-mono text-[10.5px] leading-relaxed', danger ? 'text-danger' : 'text-fg-muted')}>{text}</pre>
     </div>
   );
 }
@@ -194,6 +284,13 @@ export function ChatComposer() {
   const running = useStore((s) => runOfThread(s.runs, s.chatThread));
   const prompt = useStore((s) => s.chatDraft);
   const setPrompt = (chatDraft: string) => useStore.setState({ chatDraft });
+  // A thread keeps the mode it started in; the toggle picks the mode of a new chat.
+  const chatMode = useStore((s) => s.chatMode);
+  const threadRole = useStore((s) => (s.chatThread ? s.chat.find((m) => threadOf(m) === s.chatThread && m.orchestra)?.orchestra : undefined));
+  const threadStarted = useStore((s) => !!s.chatThread && s.chat.some((m) => threadOf(m) === s.chatThread));
+  const mode: ChatMode = threadStarted ? (threadRole && 'lead' in threadRole ? 'orchestrate' : 'chat') : chatMode;
+  const isWorker = !!threadRole && 'parent' in threadRole;
+  const setMode = (m: ChatMode) => { useStore.setState({ chatMode: m }); remember('archa.chatMode', m); };
   const [agent, setAgentState] = useState(() => remembered('archa.chatAgent', 'claude'));
   const [model, setModelState] = useState(() => remembered(`archa.chatModel.${agent}`, ''));
   const [account, setAccount] = useState('');
@@ -280,15 +377,71 @@ export function ChatComposer() {
   };
   useEffect(() => { reserved.current = null; }, [docId, agent, model, account]);
 
-  const onPaste = (e: React.ClipboardEvent) => {
-    const files = imageFiles(e.clipboardData);
-    if (!files.length) return;
-    e.preventDefault();
+  const addImages = (files: File[]) => {
     const room = MAX_CHAT_IMAGES - images.length;
     if (room <= 0) { toast(`Up to ${MAX_CHAT_IMAGES} images per message`, 'error'); return; }
     Promise.all(files.slice(0, room).map(toChatImage))
       .then((added) => setImages((list) => [...list, ...added].slice(0, MAX_CHAT_IMAGES)))
       .catch((err: Error) => toast(`Could not read the image: ${err.message}`, 'error'));
+  };
+  const onPaste = (e: React.ClipboardEvent) => {
+    const files = imageFiles(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    addImages(files);
+  };
+  // Photos dragged from Explorer onto the composer attach like pasted ones.
+  const [dropping, setDropping] = useState(false);
+  const onDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDropping(true);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    setDropping(false);
+    const files = imageFiles(e.dataTransfer);
+    if (files.length) addImages(files);
+    else toast('Only images can be attached', 'error');
+  };
+
+  // `/` opens a list of skills and guides; the picked one goes with the message (blueprint AGENT_BRIDGE/05).
+  const skills = useStore((s) => s.skills);
+  const [slash, setSlash] = useState<{ start: number; end: number; query: string } | null>(null);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const slashOptions = useMemo(() => {
+    if (!slash) return [];
+    const q = slash.query.toLowerCase();
+    const seen = new Set<string>();
+    const all: Array<{ name: string; description: string; source: string }> = [];
+    for (const s of skills?.skills ?? []) {
+      const name = s.name.toLowerCase();
+      if (s.error || seen.has(name) || !/^[a-z0-9][a-z0-9-]*$/.test(name)) continue;
+      seen.add(name);
+      all.push({ name, description: s.description, source: s.source === 'archadev' ? 'Skill' : s.source === 'builtin' ? 'Built-in' : `Skill · ${s.source}` });
+    }
+    for (const [name, g] of Object.entries(GUIDES)) if (!seen.has(name)) all.push({ name, description: `${g.title} — ${g.when}`, source: 'Guide' });
+    // Names first (prefix, then anywhere), then descriptions: "/instagram" finds design-social.
+    const rank = (o: { name: string; description: string }) => (o.name.startsWith(q) ? 0 : o.name.includes(q) ? 1 : o.description.toLowerCase().includes(q) ? 2 : 3);
+    return all.map((o) => [o, rank(o)] as const).filter(([, r]) => r < 3).sort((a, b) => a[1] - b[1]).map(([o]) => o).slice(0, 12);
+  }, [slash, skills]);
+  const readSlash = (el: HTMLTextAreaElement) => {
+    const caret = el.selectionStart ?? el.value.length;
+    const m = /(^|\s)\/([a-z0-9-]*)$/i.exec(el.value.slice(0, caret));
+    if (!m) { setSlash(null); return; }
+    if (!skills) void loadSkills();
+    setSlash({ start: caret - m[2]!.length - 1, end: caret, query: m[2]! });
+    setSlashIndex(0);
+  };
+  const pickSlash = (name: string) => {
+    if (!slash) return;
+    const next = `${prompt.slice(0, slash.start)}/${name} ${prompt.slice(slash.end)}`;
+    setPrompt(next);
+    setSlash(null);
+    const at = slash.start + name.length + 2;
+    requestAnimationFrame(() => { const el = input.current; if (el) { el.focus(); el.setSelectionRange(at, at); } });
   };
 
   const send = async (now = false) => {
@@ -298,7 +451,7 @@ export function ChatComposer() {
       const threadId = thread ?? reserved.current ?? undefined;
       const text = prompt.trim() || (images.length > 1 ? 'Use the attached images.' : 'Use the attached image.');
       const r = await client.call('chat.send', {
-        docId, agent, model: model || undefined, account: account || undefined, prompt: text, threadId, now: running ? now : undefined,
+        docId, agent, model: model || undefined, account: account || undefined, prompt: text, threadId, now: running ? now : undefined, mode: threadStarted ? undefined : mode,
         focus: focusNodes.map((n) => n.id), images: images.length ? images : undefined,
       });
       reserved.current = null;
@@ -313,11 +466,35 @@ export function ChatComposer() {
   const canSend = (!!prompt.trim() || images.length > 0) && !!available?.available && !sending;
 
   return (
-    <div className="shrink-0 rounded-2xl border border-line bg-panel p-2 transition-colors focus-within:border-accent/60">
+    <div onDragOver={onDragOver} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Element | null)) setDropping(false); }} onDrop={onDrop}
+      className={cn('relative shrink-0 rounded-2xl border border-line bg-panel p-2 transition-colors focus-within:border-accent/60', dropping && 'border-accent bg-accent-soft')}>
+      {dropping && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-2xl text-[12px] font-medium text-accent-fg">
+          <ImagePlus size={15} />Drop to attach
+        </div>
+      )}
+      {slash && slashOptions.length > 0 && (
+        <div role="listbox" className="absolute bottom-full left-0 right-0 z-20 mb-1.5 max-h-80 overflow-y-auto rounded-xl border border-line bg-panel-2 p-1 shadow-2xl shadow-black/40">
+          <div className="px-2 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">Skills · goes with this message</div>
+          {slashOptions.map((o, i) => (
+            <button key={o.name} role="option" aria-selected={i === slashIndex} onMouseEnter={() => setSlashIndex(i)}
+              ref={i === slashIndex ? (el) => { el?.scrollIntoView({ block: 'nearest' }); } : undefined}
+              onMouseDown={(e) => { e.preventDefault(); pickSlash(o.name); }}
+              className={cn('flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left', i === slashIndex && 'bg-panel-3')}>
+              <Sparkles size={12} className="mt-0.5 shrink-0 text-accent-fg" />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5 text-[12px] text-fg">/{o.name}<span className="text-[10px] text-fg-subtle">{o.source}</span></span>
+                <span className="block truncate text-[11px] text-fg-subtle">{o.description}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-1.5 px-1 pb-1">
         <span title="The agent works on this document" className="flex h-6 max-w-[140px] shrink-0 items-center gap-1 rounded-md border border-line px-1.5 text-[11px] text-fg-muted">
           <FileText size={11} className="shrink-0" /><span className="truncate">{docName ?? 'Canvas'}</span>
         </span>
+        <ModeToggle mode={mode} locked={threadStarted} worker={isWorker} onChange={setMode} />
         {focusNodes.length > 0 && (
           <span title={`The request is about: ${focusNodes.map((n) => n.name).join(', ')}`} className="flex h-6 min-w-0 items-center gap-1 rounded-md border border-accent/40 bg-accent-soft pl-1.5 text-[11px] text-accent-fg">
             <Crosshair size={11} className="shrink-0" />
@@ -337,10 +514,20 @@ export function ChatComposer() {
           ))}
         </div>
       )}
-      <textarea ref={input} value={prompt} onChange={(e) => setPrompt(e.target.value)} onFocus={warm} onPaste={onPaste} rows={3}
-        placeholder={running ? `${running.persona} is working — Enter queues a follow-up, Ctrl+Enter sends it now` : 'Describe what to design…'}
+      <textarea ref={input} value={prompt} onChange={(e) => { setPrompt(e.target.value); readSlash(e.target); }} onFocus={warm} onPaste={onPaste} rows={3}
+        onBlur={() => setSlash(null)} onClick={(e) => readSlash(e.currentTarget)}
+        placeholder={running ? `${running.persona} is working — Enter queues a follow-up, Ctrl+Enter sends it now` : mode === 'orchestrate' ? 'Describe the job — the lead splits it across a team…' : 'Describe what to design… (/ for skills)'}
         onKeyDown={(e) => {
           e.stopPropagation();
+          if (slash && slashOptions.length) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              setSlashIndex((i) => (i + (e.key === 'ArrowDown' ? 1 : slashOptions.length - 1)) % slashOptions.length);
+              return;
+            }
+            if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickSlash(slashOptions[slashIndex]!.name); return; }
+            if (e.key === 'Escape') { e.preventDefault(); setSlash(null); return; }
+          }
           if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(e.ctrlKey || e.metaKey); }
           else if (e.key === 'Backspace' && !prompt && images.length) setImages((list) => list.slice(0, -1));
         }}
@@ -370,5 +557,31 @@ export function ChatComposer() {
       </div>
       {available && !available.available && <p className="mt-1.5 px-1 text-[11px] text-warn">{available.label} CLI not found on PATH, or the archa CLI is not built (pnpm cli).</p>}
     </div>
+  );
+}
+
+/** Chat = one agent; Orchestrate = the agent leads a team of workers (blueprint AGENT_BRIDGE/06). Fixed once a thread starts. */
+function ModeToggle({ mode, locked, worker, onChange }: { mode: ChatMode; locked: boolean; worker: boolean; onChange: (m: ChatMode) => void }) {
+  if (locked) {
+    if (mode === 'chat' && !worker) return null;
+    return (
+      <span title={worker ? 'A worker in an orchestrated team' : 'This chat leads a team of agents'} className="flex h-6 shrink-0 items-center gap-1 rounded-md bg-accent-soft px-1.5 text-[11px] font-medium text-accent-fg">
+        <Network size={11} />{worker ? 'Worker' : 'Orchestrate'}
+      </span>
+    );
+  }
+  const item = (m: ChatMode, label: string, Icon: typeof Network, hint: string) => (
+    // The colour sits on a span: the base stylesheet makes buttons inherit theirs.
+    <button title={hint} onClick={() => onChange(m)} className={cn('flex h-[20px] items-center rounded px-1.5 text-[11px]', mode === m && (m === 'orchestrate' ? 'bg-accent-soft' : 'bg-panel-3'))}>
+      <span className={cn('flex items-center gap-1 transition-colors', mode !== m ? 'text-fg-subtle hover:text-fg-muted' : m === 'orchestrate' ? 'text-accent-fg' : 'text-fg')}>
+        <Icon size={11} />{label}
+      </span>
+    </button>
+  );
+  return (
+    <span className="flex h-6 shrink-0 items-center rounded-md border border-line p-px">
+      {item('chat', 'Chat', MessageSquare, 'One agent designs')}
+      {item('orchestrate', 'Orchestrate', Network, 'The agent leads a team: it sends other agents to research or build sections in parallel')}
+    </span>
   );
 }

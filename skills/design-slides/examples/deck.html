@@ -1,0 +1,164 @@
+<!doctype html>
+<!--
+  Example: 7-slide pitch deck as HTML slides (fictional "Arunika", bookkeeping for small shops).
+  Concept: one oversized number or statement per slide, warm paper background, one teal accent,
+  a recurring dot-and-rule motif top left (a brand mark, deliberately without a section label: no eyebrows). Every title is an action title; read only the titles and
+  the story still holds. Render to PDF:
+    node ../../design-pdf/scripts/render-pdf.mjs deck.html deck.pdf --preview
+  The same deck as an editable PPTX: deck.mjs.
+-->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Arunika: Pitch deck 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  @page { size: 1920px 1080px; margin: 0; }
+  :root { --paper: #f7f4ee; --ink: #171614; --muted: #6b6760; --rule: #ddd6ca; --accent: #0f766e; --soft: #dcefeb; --dark: #12201e; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  body { margin: 0; font-family: "Inter", sans-serif; color: var(--ink); }
+  .slide { width: 1920px; height: 1080px; padding: 96px 120px; position: relative; overflow: hidden; background: var(--paper);
+           break-after: page; display: flex; flex-direction: column; }
+  .slide:last-child { break-after: auto; }
+  .motif { position: absolute; top: 56px; left: 120px; display: flex; align-items: center; gap: 14px; font-size: 20px; color: var(--muted); letter-spacing: .06em; }
+  .motif::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+  .motif::after { content: ""; width: 80px; height: 1px; background: var(--rule); }
+  .no { position: absolute; bottom: 48px; right: 120px; font-size: 18px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  h1, h2, .huge, blockquote { font-family: "Instrument Serif", serif; font-weight: 400; letter-spacing: -0.02em; }
+  h2 { font-size: 72px; line-height: 1.05; max-width: 1400px; margin-top: 40px; }
+  p.sub { font-size: 30px; line-height: 1.45; color: var(--muted); max-width: 1100px; margin-top: 28px; }
+  .grow { flex: 1; }
+
+  .cover { background: var(--dark); color: #eef6f4; justify-content: flex-end; }
+  .cover .motif { color: #8fb3ad; } .cover .motif::after { background: #2c4440; }
+  .cover h1 { font-size: 168px; line-height: .92; max-width: 1500px; }
+  .cover p { font-size: 32px; color: #a9c7c1; margin-top: 40px; }
+
+  .bignum { display: grid; grid-template-columns: 1.1fr 1fr; gap: 96px; align-items: end; margin-top: auto; }
+  .huge { font-size: 340px; line-height: .8; color: var(--accent); letter-spacing: -0.04em; }
+  .bignum p:not(.huge) { font-size: 34px; line-height: 1.4; color: var(--muted); padding-bottom: 24px; }
+  .bignum p b { color: var(--ink); font-weight: 600; }
+  .src { font-size: 18px; color: var(--muted); margin-top: 88px; }
+
+  .split { display: grid; grid-template-columns: 5fr 7fr; gap: 96px; margin-top: 64px; flex: 1; }
+  .steps { list-style: none; display: grid; gap: 36px; align-content: start; }
+  .steps li { display: grid; grid-template-columns: 72px 1fr; font-size: 30px; line-height: 1.35; }
+  .steps li span { font-family: "Instrument Serif", serif; font-size: 48px; line-height: .9; color: var(--accent); }
+  .steps li small { display: block; font-size: 22px; color: var(--muted); margin-top: 6px; }
+  .phone { background: #fff; border: 1px solid var(--rule); border-radius: 40px; padding: 48px; display: flex; flex-direction: column; gap: 22px; align-self: start; }
+  .phone .t { font-size: 22px; color: var(--muted); }
+  .phone .v { font-family: "Instrument Serif", serif; font-size: 96px; line-height: 1; }
+  .phone .row { display: flex; justify-content: space-between; font-size: 26px; padding-top: 18px; border-top: 1px solid var(--rule); }
+  .phone .row b { color: var(--accent); font-weight: 600; }
+
+  .chart { display: flex; align-items: flex-end; gap: 40px; height: 460px; margin-top: auto; padding-bottom: 8px; border-bottom: 2px solid var(--ink); }
+  .bar { flex: 1; background: var(--rule); position: relative; border-radius: 6px 6px 0 0; }
+  .bar.hi { background: var(--accent); }
+  .bar em { position: absolute; top: -48px; left: 0; right: 0; text-align: center; font-style: normal; font-size: 28px; font-weight: 600; }
+  .bar.hi em { color: var(--accent); }
+  .axis { display: flex; gap: 40px; margin-top: 16px; } .axis span { flex: 1; text-align: center; font-size: 22px; color: var(--muted); }
+
+  .quote { background: var(--soft); }
+  blockquote { font-size: 104px; line-height: 1.05; max-width: 1500px; margin-top: auto; }
+  .who { font-size: 28px; margin-top: 48px; color: var(--muted); } .who b { color: var(--ink); font-weight: 600; }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 64px; align-items: start; }
+  .compare > div { padding: 48px; } .compare > div + div { background: #fff; border-radius: 24px; }
+  .compare h3 { font-size: 28px; color: var(--muted); font-weight: 600; margin-bottom: 32px; }
+  .compare div + div h3 { color: var(--accent); }
+  .compare li { font-size: 32px; line-height: 1.3; padding: 18px 0; border-top: 1px solid var(--rule); list-style: none; }
+
+  .ask { background: var(--accent); color: #f1fbf9; }
+  .ask .motif { color: #bfe3dd; } .ask .motif::before { background: #f1fbf9; } .ask .motif::after { background: #4fa59a; }
+  .ask h2 { font-size: 112px; margin-top: auto; }
+  .ask .uses { display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px; margin-top: 72px; padding-top: 36px; border-top: 1px solid #4fa59a; }
+  .ask .uses b { display: block; font-family: "Instrument Serif", serif; font-weight: 400; font-size: 64px; }
+  .ask .uses span { font-size: 26px; color: #bfe3dd; }
+</style>
+</head>
+<body>
+
+<section class="slide cover">
+  <div class="motif" aria-hidden="true"></div>
+  <h1>Pembukuan toko yang selesai sendiri.</h1>
+  <p>Dimas Aryo, CEO · Jakarta, November 2026</p>
+</section>
+
+<section class="slide">
+  <div class="motif" aria-hidden="true"></div>
+  <h2>64 juta UMKM masih mencatat di buku tulis, dan baru tahu rugi di akhir bulan.</h2>
+  <div class="bignum">
+    <p class="huge">1,5 jam</p>
+    <p>waktu rata-rata pemilik toko untuk <b>tutup buku setiap malam</b>: menyalin nota, menghitung kas, mencocokkan stok.</p>
+  </div>
+  <p class="src">Sumber: survei Arunika ke 312 toko di 9 kota, Agustus 2026.</p>
+  <span class="no">02</span>
+</section>
+
+<section class="slide">
+  <div class="motif" aria-hidden="true"></div>
+  <h2>Arunika membaca kasir dan bank, lalu menyusun laporannya sendiri.</h2>
+  <div class="split">
+    <ol class="steps">
+      <li><span>1</span><div>Hubungkan rekening &amp; kasir<small>Akses baca saja, 5 menit</small></div></li>
+      <li><span>2</span><div>Konfirmasi kategori yang ragu<small>Rata-rata 6 transaksi per hari</small></div></li>
+      <li><span>3</span><div>Terima laporan tiap pagi<small>Lewat WhatsApp, jam 07.00</small></div></li>
+    </ol>
+    <div class="phone">
+      <span class="t">Kas masuk kemarin · Toko Sumber Rejeki</span>
+      <span class="v">Rp 8,42 jt</span>
+      <div class="row"><span>QRIS</span><b>+ Rp 5,11 jt</b></div>
+      <div class="row"><span>Tunai</span><b>+ Rp 3,31 jt</b></div>
+      <div class="row"><span>Belanja stok</span><span>− Rp 2,15 jt</span></div>
+    </div>
+  </div>
+  <span class="no">03</span>
+</section>
+
+<section class="slide">
+  <div class="motif" aria-hidden="true"></div>
+  <h2>Toko berbayar tumbuh 38% per bulan sejak Mei.</h2>
+  <div class="chart">
+    <div class="bar" style="height:14%"><em>310</em></div>
+    <div class="bar" style="height:22%"><em>480</em></div>
+    <div class="bar" style="height:31%"><em>690</em></div>
+    <div class="bar" style="height:45%"><em>1.010</em></div>
+    <div class="bar" style="height:63%"><em>1.420</em></div>
+    <div class="bar hi" style="height:88%"><em>1.960</em></div>
+  </div>
+  <div class="axis"><span>Mei</span><span>Jun</span><span>Jul</span><span>Agu</span><span>Sep</span><span>Okt</span></div>
+  <span class="no">04</span>
+</section>
+
+<section class="slide quote">
+  <div class="motif" aria-hidden="true"></div>
+  <blockquote>“Dulu saya baru tahu rugi di akhir bulan. Sekarang saya tahu setiap pagi.”</blockquote>
+  <p class="who"><b>Sri Wahyuni</b> · Toko Sumber Rejeki, Klaten · pelanggan sejak Juni</p>
+  <span class="no">05</span>
+</section>
+
+<section class="slide">
+  <div class="motif" aria-hidden="true"></div>
+  <h2>Aplikasi kasir mencatat penjualan. Kami menutup bukunya.</h2>
+  <div class="compare">
+    <div><h3>Aplikasi kasir biasa</h3><ul>
+      <li>Hanya transaksi di kasirnya sendiri</li><li>Mutasi bank dicocokkan manual</li><li>Laporan pajak diekspor ke Excel</li></ul></div>
+    <div><h3>Arunika</h3><ul>
+      <li>Kasir, bank &amp; marketplace jadi satu</li><li>Pencocokan otomatis, 97% akurat</li><li>Laporan PPh Final UMKM siap kirim</li></ul></div>
+  </div>
+  <span class="no">06</span>
+</section>
+
+<section class="slide ask">
+  <div class="motif" aria-hidden="true"></div>
+  <h2>Kami mengumpulkan Rp 12 miliar untuk 20.000 toko dalam 18 bulan.</h2>
+  <div class="uses">
+    <div><b>45%</b><span>Integrasi 8 bank &amp; 5 POS baru</span></div>
+    <div><b>35%</b><span>Tim penjualan di 6 kota</span></div>
+    <div><b>20%</b><span>Operasional &amp; cadangan</span></div>
+  </div>
+</section>
+
+</body>
+</html>

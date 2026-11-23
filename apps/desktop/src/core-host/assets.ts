@@ -94,32 +94,64 @@ export function inlineSrc(assetDir: string, src: string): string {
   return `data:${mime};base64,${readFileSync(file).toString('base64')}`;
 }
 
-const mapNodeSrc = (n: Node, f: (src: string) => string): Node => (n.type === 'image' ? { ...n, src: f(n.src) } : n);
+type Paints = Array<{ type: string; src?: string }>;
 
-/** Rewrites image sources inside ops before they are applied, so no base64 ever lands in the document. */
-export function externalizeOps(assetDir: string, ops: Op[]): Op[] {
+/** Image paints in a fills list with their `src` mapped (other paints untouched); null when nothing changed. */
+function mapPaints(fills: unknown, f: (src: string) => string): Paints | null {
+  if (!Array.isArray(fills)) return null;
   let changed = false;
-  const out = ops.map((op) => {
-    if (op.op === 'insert' && op.node.type === 'image' && isExternalizable(op.node.src)) {
-      changed = true;
-      return { ...op, node: mapNodeSrc(op.node, (s) => externalizeSrc(assetDir, s)) };
+  const out = (fills as Paints).map((p) => {
+    if (p?.type !== 'image' || typeof p.src !== 'string') return p;
+    const src = f(p.src);
+    if (src === p.src) return p;
+    changed = true;
+    return { ...p, src };
+  });
+  return changed ? out : null;
+}
+
+/** A node (or node-shaped patch) with every image source mapped: an image node's `src` and image paints in `fills`. */
+function mapSources<T extends Record<string, unknown>>(n: T, isImage: boolean, f: (src: string) => string): T {
+  let out = n;
+  if (isImage && typeof n.src === 'string') {
+    const src = f(n.src);
+    if (src !== n.src) out = { ...out, src };
+  }
+  const fills = mapPaints(n.fills, f);
+  if (fills) out = { ...out, fills };
+  return out;
+}
+
+const mapNodeSrc = (n: Node, f: (src: string) => string): Node => mapSources(n as unknown as Record<string, unknown>, n.type === 'image', f) as unknown as Node;
+
+/**
+ * Rewrites image sources inside ops before they are applied — image node `src` and image paints in `fills` —
+ * so no base64 ever lands in the document.
+ */
+export function externalizeOps(assetDir: string, ops: Op[]): Op[] {
+  const out = (src: string) => (isExternalizable(src) ? externalizeSrc(assetDir, src) : src);
+  let changed = false;
+  const next = ops.map((op) => {
+    if (op.op === 'insert') {
+      const node = mapNodeSrc(op.node, out);
+      if (node !== op.node) { changed = true; return { ...op, node }; }
     }
-    if (op.op === 'update' && typeof op.patch.src === 'string' && isExternalizable(op.patch.src)) {
-      changed = true;
-      return { ...op, patch: { ...op.patch, src: externalizeSrc(assetDir, op.patch.src) } };
+    if (op.op === 'update') {
+      const patch = mapSources(op.patch, typeof op.patch.src === 'string', out);
+      if (patch !== op.patch) { changed = true; return { ...op, patch }; }
     }
     return op;
   });
-  return changed ? out : ops;
+  return changed ? next : ops;
 }
 
-/** Every data: image in a loaded document → asset files. Returns how many nodes changed. */
+/** Every data: image in a loaded document (image nodes and image paints) → asset files. Returns how many nodes changed. */
 export function externalizeData(assetDir: string, data: DocumentData): number {
   let n = 0;
+  const out = (src: string) => (src.startsWith('data:') ? externalizeSrc(assetDir, src) : src);
   for (const [id, node] of Object.entries(data.nodes)) {
-    if (node.type !== 'image' || !node.src.startsWith('data:')) continue;
-    const src = externalizeSrc(assetDir, node.src);
-    if (src !== node.src) { data.nodes[id] = { ...node, src }; n++; }
+    const next = mapNodeSrc(node, out);
+    if (next !== node) { data.nodes[id] = next; n++; }
   }
   return n;
 }

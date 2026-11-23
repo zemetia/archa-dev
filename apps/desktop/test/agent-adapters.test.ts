@@ -59,7 +59,34 @@ describe('agent adapters: stream parsers', () => {
     expect(ev).toContainEqual({ kind: 'session', id: 's9' });
     expect(ev.filter((e) => e.kind === 'delta').map((e) => (e as { text: string }).text)).toEqual(['Hel', 'Hello']);
     expect(ev).toContainEqual({ kind: 'text', text: 'Hello' });
-    expect(ev).toContainEqual({ kind: 'tool', text: 'execute · 2 lines' });
+    expect(ev).toContainEqual({ kind: 'tool', text: 'execute · a · 2 lines', detail: 'a\nb' });
+  });
+
+  it('tool rows carry their full input and get the result paired by call id', () => {
+    const ev = feed('claude', [
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu1', name: 'mcp__archadev__execute', input: { code: '// Hero section\nconst h = insert(...)' } }] } },
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu2', name: 'mcp__archadev__inspect', input: { node: 'n1', depth: 2 } }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu1', content: [{ type: 'text', text: 'OK (revision 4).' }, { type: 'image', source: {} }] }] } },
+    ]);
+    expect(ev[0]).toEqual({ kind: 'tool', text: 'execute · Hero section · 2 lines', detail: '// Hero section\nconst h = insert(...)', callId: 'tu1' });
+    expect(ev[1]).toEqual({ kind: 'tool', text: 'inspect · n1 · depth 2', detail: '{\n  "node": "n1",\n  "depth": 2\n}', callId: 'tu2' });
+    expect(ev[2]).toEqual({ kind: 'result', callId: 'tu1', text: 'OK (revision 4).', failed: false });
+  });
+
+  it('agy and codex pair results too, and long base64 is dropped from results', () => {
+    const agy = feed('agy', [
+      { event: 'step_update', step_update: { step_index: 7, state: 'ACTIVE', step_type: 'tool', tool_name: 'call_mcp_tool', tool_info: { parameters: { ToolName: 'screenshot', Arguments: { node: 'f1' } } } } },
+      { event: 'step_update', step_update: { step_index: 7, state: 'DONE', step_type: 'tool', tool_name: 'call_mcp_tool', tool_info: { output: `Screenshot of f1\n${'A'.repeat(5000)}` } } },
+    ]);
+    expect(agy).toEqual([
+      { kind: 'tool', text: 'screenshot · f1', detail: '{\n  "node": "f1"\n}', callId: 'agy-7' },
+      { kind: 'result', callId: 'agy-7', text: 'Screenshot of f1\n[binary]', failed: false },
+    ]);
+    const codex = feed('codex', [
+      { type: 'item.started', item: { id: 'i1', type: 'mcp_tool_call', tool: 'get_state', arguments: {} } },
+      { type: 'item.completed', item: { id: 'i1', type: 'mcp_tool_call', status: 'completed', result: { content: [{ type: 'text', text: 'Page: 2 frames' }] } } },
+    ]);
+    expect(codex).toEqual([{ kind: 'tool', text: 'get_state · read the canvas', callId: 'i1' }, { kind: 'result', callId: 'i1', text: 'Page: 2 frames', failed: false }]);
   });
 
   it('agy joins text deltas per step and unwraps call_mcp_tool', () => {
@@ -71,7 +98,7 @@ describe('agent adapters: stream parsers', () => {
       { event: 'result', result: { status: 'SUCCESS', response: 'Done designing.' } },
     ]);
     expect(ev).toContainEqual({ kind: 'session', id: 'c1' });
-    expect(ev).toContainEqual({ kind: 'tool', text: 'get_state' });
+    expect(ev).toContainEqual({ kind: 'tool', text: 'get_state · read the canvas', callId: 'agy-2' });
     expect(ev).toContainEqual({ kind: 'delta', text: 'Done ' });
     expect(ev).toContainEqual({ kind: 'text', text: 'Done designing.' });
   });
@@ -111,7 +138,7 @@ describe('agent adapters: stream parsers', () => {
     expect(feed('claude', [{ type: 'user', message: { content: [{ type: 'tool_result', content: [{ type: 'text', text: failed }] }] } }]))
       .toEqual([{ kind: 'tool', text: 'execute failed · insert: parent "x" not found' }]);
     expect(feed('agy', [{ event: 'step_update', step_update: { step_index: 4, state: 'DONE', step_type: 'tool', tool_name: 'call_mcp_tool', tool_info: { output: failed } } }]))
-      .toEqual([{ kind: 'tool', text: 'execute failed · insert: parent "x" not found' }]);
+      .toEqual([{ kind: 'tool', text: 'execute failed · insert: parent "x" not found' }, { kind: 'result', callId: 'agy-4', text: failed, failed: true }]);
     expect(feed('claude', [{ type: 'user', message: { content: [{ type: 'tool_result', content: 'OK (revision 4).' }] } }])).toEqual([]);
   });
 

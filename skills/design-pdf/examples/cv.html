@@ -1,0 +1,122 @@
+<!doctype html>
+<!--
+  Example: 1-page A4 CV (fictional product designer "Nadia Putri").
+  Concept: "one strong header, a calm body". The name is the biggest thing on the page; a cobalt
+  field holds three selected-work cards that overlap its lower edge (depth); the body is a strict
+  two-column grid with a hairline timeline. All text stays real text (ATS-friendly).
+  Render: node ../scripts/render-pdf.mjs cv.html cv.pdf --preview
+-->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Nadia Putri: CV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --ink: #121318; --muted: #686b76; --line: #e3e4ea; --paper: #ffffff; --cobalt: #2b43e8; --cobalt-deep: #1d30b8; --mist: #eef0ff;
+    --sans: "Inter Tight", system-ui, sans-serif; --serif: "Instrument Serif", Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font: 400 9.4pt/1.5 var(--sans); color: var(--ink); background: #888; }
+  .page { position: relative; width: 210mm; height: 297mm; overflow: hidden; background: var(--paper); }
+
+  header { position: absolute; left: 0; right: 0; top: 0; height: 104mm; background: var(--cobalt); color: #fff; padding: 18mm 18mm 0; }
+  header .top { display: flex; justify-content: space-between; font-size: 8.5pt; color: rgb(255 255 255 / .78); }
+  header h1 { margin-top: 15mm; font: 700 58pt/0.9 var(--sans); letter-spacing: -.045em; }
+  header h1 em { font: 400 italic 62pt/0.9 var(--serif); letter-spacing: -.01em; }
+  header p.pos { margin-top: 5mm; font-size: 12pt; max-width: 120mm; color: rgb(255 255 255 / .86); }
+
+  .work { position: absolute; left: 18mm; right: 18mm; top: 82mm; display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 5mm; }
+  .w { background: #fff; border-radius: 3mm; padding: 4mm; box-shadow: 0 .5mm 1mm rgb(18 19 24 / .08), 0 5mm 12mm -3mm rgb(18 19 24 / .25); }
+  .w .shot { height: 26mm; border-radius: 1.6mm; background: var(--mist); position: relative; overflow: hidden; }
+  .w h3 { margin-top: 3mm; font-size: 9pt; font-weight: 600; }
+  .w p { font-size: 7.6pt; color: var(--muted); }
+  /* tiny UI sketches inside the work cards: shapes only, no fake screenshots */
+  .ui1 i { position: absolute; display: block; border-radius: 1mm; }
+  .ui1 .a { left: 4mm; top: 4mm; width: 22mm; height: 2.4mm; background: var(--ink); }
+  .ui1 .b { left: 4mm; top: 9mm; width: 34mm; height: 1.6mm; background: #c9cdf8; }
+  .ui1 .c { left: 4mm; top: 15mm; width: 16mm; height: 6mm; background: var(--cobalt); border-radius: 3mm; }
+  .ui1 .d { right: 4mm; top: 4mm; width: 26mm; height: 18mm; background: #fff; box-shadow: 0 1mm 3mm rgb(43 67 232 / .2); }
+  .ui2 i { position: absolute; bottom: 4mm; width: 4mm; background: #c9cdf8; border-radius: .8mm .8mm 0 0; display: block; }
+  .ui3 i { position: absolute; display: block; border-radius: 50%; }
+
+  main { position: absolute; left: 18mm; right: 18mm; top: 136mm; display: grid; grid-template-columns: 1fr 2.1fr; gap: 12mm; }
+  h2 { font: 600 10pt var(--sans); padding-bottom: 2mm; border-bottom: .3mm solid var(--ink); margin-bottom: 4mm; }
+  aside section + section { margin-top: 8mm; }
+  aside p, aside li { font-size: 8.8pt; }
+  aside ul { list-style: none; display: grid; gap: 1.4mm; }
+  aside .muted { color: var(--muted); }
+  .job { display: grid; grid-template-columns: 26mm 1fr; gap: 4mm; padding-bottom: 4.5mm; margin-bottom: 4.5mm; border-bottom: .2mm solid var(--line); }
+  .job:last-child { border-bottom: 0; }
+  .job .when { font-size: 8pt; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: .5mm; }
+  .job h3 { font-size: 10pt; font-weight: 600; }
+  .job h3 span { font-weight: 400; color: var(--muted); }
+  .job p { margin-top: 1mm; color: #33353d; }
+  .job p strong { color: var(--cobalt-deep); font-weight: 600; }
+  footer { position: absolute; left: 18mm; right: 18mm; bottom: 12mm; display: flex; justify-content: space-between; font-size: 7.5pt; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="top"><span>Product Designer · Jakarta</span><span>nadia.putri@hey.com · +62 812 7781 0420 · nadiaputri.id</span></div>
+    <h1>Nadia <em>Putri</em></h1>
+    <p class="pos">Delapan tahun merancang aplikasi keuangan dan logistik yang dipakai jutaan orang di Indonesia.</p>
+  </header>
+
+  <div class="work">
+    <article class="w">
+      <div class="shot ui1" aria-hidden="true"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>
+      <h3>Bayar Nanti, Bayarin</h3><p>Checkout cicilan, konversi +22%</p>
+    </article>
+    <article class="w">
+      <div class="shot ui2" aria-hidden="true">
+        <i style="left:5mm;height:8mm"></i><i style="left:11mm;height:12mm"></i><i style="left:17mm;height:10mm"></i><i style="left:23mm;height:17mm;background:var(--cobalt)"></i><i style="left:29mm;height:14mm"></i>
+      </div>
+      <h3>Dasbor kurir, Kirimin</h3><p>Rute harian 4.000 kurir</p>
+    </article>
+    <article class="w">
+      <div class="shot ui3" aria-hidden="true">
+        <i style="left:6mm;top:5mm;width:16mm;height:16mm;background:var(--cobalt)"></i><i style="left:16mm;top:9mm;width:16mm;height:16mm;background:#c9cdf8;mix-blend-mode:multiply"></i>
+      </div>
+      <h3>Sistem desain, Belajarku</h3><p>212 komponen, 9 produk</p>
+    </article>
+  </div>
+
+  <main>
+    <aside>
+      <section>
+        <h2>Keahlian</h2>
+        <ul><li>Riset pengguna &amp; uji usabilitas</li><li>Desain interaksi &amp; prototipe</li><li>Sistem desain &amp; token</li><li>Fintech: KYC, cicilan, pembayaran</li><li>Figma, ArchaDev, Framer, SQL dasar</li></ul>
+      </section>
+      <section>
+        <h2>Pendidikan</h2>
+        <p>S1 Desain Komunikasi Visual</p><p class="muted">Institut Teknologi Bandung, 2016</p>
+      </section>
+      <section>
+        <h2>Bahasa</h2>
+        <p>Indonesia <span class="muted">· ibu</span></p><p>Inggris <span class="muted">· profesional (IELTS 7.5)</span></p>
+      </section>
+    </aside>
+
+    <section>
+      <h2>Pengalaman</h2>
+      <div class="job"><p class="when">2023 – sekarang</p><div><h3>Lead Product Designer <span>· Bayarin</span></h3>
+        <p>Memimpin 5 desainer untuk pembayaran dan cicilan. Checkout baru menaikkan konversi <strong>22%</strong> dan memangkas tiket bantuan soal transfer gagal setengahnya.</p></div></div>
+      <div class="job"><p class="when">2020 – 2023</p><div><h3>Senior Product Designer <span>· Kirimin</span></h3>
+        <p>Merancang aplikasi kurir dan dasbor rute. Waktu antar rata-rata turun dari 9 menjadi <strong>6,5 jam</strong> di Jabodetabek.</p></div></div>
+      <div class="job"><p class="when">2017 – 2020</p><div><h3>Product Designer <span>· Belajarku</span></h3>
+        <p>Membangun sistem desain pertama perusahaan: <strong>212 komponen</strong> yang kini dipakai sembilan produk.</p></div></div>
+      <div class="job"><p class="when">2016 – 2017</p><div><h3>UI Designer <span>· Studio Lini, Bandung</span></h3>
+        <p>Situs dan aplikasi untuk 14 klien UMKM dan pemerintah daerah.</p></div></div>
+    </section>
+  </main>
+
+  <footer><span>Portofolio lengkap dan studi kasus: nadiaputri.id/kerja</span><span>Diperbarui November 2026</span></footer>
+</div>
+</body>
+</html>

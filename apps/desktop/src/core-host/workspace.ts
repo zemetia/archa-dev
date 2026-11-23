@@ -2,15 +2,16 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { userInfo } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve as resolvePath } from 'node:path';
-import { ArchaDocument, DocumentError, DocumentSession, findEmptySpace, libraryInsertOps, subtreeHash } from '@archa/core';
+import { ArchaDocument, DocumentError, DocumentSession, findEmptySpace, libraryInsertOps, outline, subtreeHash } from '@archa/core';
 import { decodeArcha, encodeArcha, exportHtml, exportHtmlStandalone, exportSvg } from '@archa/formats';
 import { newId, opSchema, type Author, type Op } from '@archa/schema';
-import { browserCommandSchema, type Shot, type ActivityEntry, type TrailStep, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
+import { browserCommandSchema, placeImageSchema, type Shot, type ActivityEntry, type TrailStep, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
 import { z } from 'zod';
 import { AgentExecutor, describeState } from './execute';
 import { ADAPTERS, ChatRunner, findBin, type McpCommand } from './agents';
 import { AccountManager, parse, resolveCli } from './accounts';
 import { LibraryStore, libraryInsertSchema, libraryItemSchema, libraryPublishSchema } from './library';
+import { IconStore, iconsAddSchema, iconsRemoveSchema } from './icons';
 import { SkillManager } from './skills';
 import { McpServerManager } from './mcp-servers';
 import { callBrowser } from './main-bridge';
@@ -22,7 +23,7 @@ import { canvasFit, fitBudget, INLINE_BUDGET, INLINE_MAX_SIDE, MAX_SLICES, saveS
 const chatSendSchema = z.object({
   docId: z.string().min(1), agent: z.string().min(1), prompt: z.string().min(1).max(100_000),
   model: z.string().max(100).optional(), account: z.string().max(100).optional(), threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
-  now: z.boolean().optional(), focus: z.array(z.string().min(1).max(100)).max(50).optional(),
+  now: z.boolean().optional(), focus: z.array(z.string().min(1).max(100)).max(50).optional(), mode: z.enum(['chat', 'orchestrate']).optional(),
   images: z.array(z.object({
     mime: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
     data: z.string().min(1).max(15_000_000).regex(/^[A-Za-z0-9+/]+=*$/),
@@ -44,6 +45,16 @@ const exportSaveSchema = z.object({
   image: z.string().max(200_000_000).optional(),
 });
 const exportPageSchema = z.object({ docId: z.string().min(1), nodeId: z.string().min(1) });
+const exportCodeSchema = z.object({ docId: z.string().min(1), nodeId: z.string().min(1), style: z.enum(['css', 'tailwind']) });
+const outlineSchema = z.object({ docId: z.string().optional(), node: z.string().min(1).optional(), depth: z.number().int().min(0).max(12).optional() });
+const orchestraDelegateSchema = z.object({
+  tasks: z.array(z.object({
+    title: z.string().min(1).max(120), prompt: z.string().min(1).max(40_000), kind: z.string().max(40).optional(),
+    agent: z.enum(['claude', 'agy', 'codex']).optional(), model: z.string().max(100).optional(), frame: z.string().min(1).max(100).optional(),
+  })).min(1).max(8),
+});
+const orchestraWaitSchema = z.object({ workers: z.array(z.string().min(1).max(100)).max(8).optional(), timeoutSec: z.number().min(5).max(600).optional() });
+const orchestraTellSchema = z.object({ worker: z.string().min(1).max(100), message: z.string().min(1).max(40_000) });
 const chatThreadSchema = z.object({ docId: z.string().min(1), threadId: z.string().min(1).max(64) });
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -81,6 +92,7 @@ export class Workspace {
   readonly mcpServers = new McpServerManager(() => this.broadcast('mcp.changed', {}));
   readonly chat = new ChatRunner(this, mcpCommand);
   readonly library = new LibraryStore();
+  readonly icons = new IconStore();
 
   constructor() {
     this.newDoc('Untitled');
@@ -360,25 +372,51 @@ export class Workspace {
       this.trail(conn, s.id, [trailStep(s, 'read', id)]);
       return { svg: exportSvg(s.doc, id) };
     },
+    'agent.outline': (params, conn) => {
+      const { docId, node, depth } = parse(outlineSchema, params);
+      const s = this.session(docId);
+      const sel = (this.selection.get(s.id) ?? []).filter((id) => s.doc.get(id));
+      const ids = node ? [resolveRef(s, node)] : sel.length ? sel : [s.doc.pages[0]!.rootId];
+      const read = ids.filter((id) => id !== s.doc.pages[0]!.rootId).slice(0, 5);
+      if (read.length) this.trail(conn, s.id, read.map((id) => trailStep(s, 'read', id)));
+      const head = node ? '' : sel.length ? `Selection (${sel.length}):\n` : 'Nothing selected — the page:\n';
+      return head + ids.map((id) => outline(s.doc, id, depth ?? (id === s.doc.pages[0]!.rootId ? 1 : 3))).join('\n');
+    },
     'agent.say': ({ docId, text, nodeId }, conn) => {
       const s = this.session(docId);
       const id = nodeId ? resolveRef(s, nodeId) : null;
       this.log(s.id, conn.author, 'say', text, id ? [id] : [], conn.client.runId);
       if (id) this.trail(conn, s.id, [trailStep(s, 'focus', id)]);
     },
+    'agent.done': ({ docId, summary }, conn) => {
+      const s = this.session(docId);
+      this.log(s.id, conn.author, 'done', summary?.trim() ? summary.trim().slice(0, 300) : 'Done', [], conn.client.runId);
+      this.broadcast('agent.done', { docId: s.id, author: conn.author, ...(conn.client.runId ? { runId: conn.client.runId } : {}) });
+    },
     'agent.browser': async (params, conn) => {
       const parsed = browserCommandSchema.safeParse(params);
       if (!parsed.success) throw new DocumentError('VALIDATION', `Invalid browser input: ${parsed.error.issues[0]?.path.join('.')} ${parsed.error.issues[0]?.message}`);
       const cmd = parsed.data;
-      const reply = await callBrowser(cmd, conn.author.name ?? conn.author.id);
-      const detail = cmd.url ?? cmd.ref ?? cmd.selector ?? cmd.key ?? (cmd.text !== undefined ? `"${cmd.text.slice(0, 40)}"` : '');
+      const { text, png } = await callBrowser(cmd, conn.author.name ?? conn.author.id);
+      const detail = (cmd.url ?? cmd.query ?? cmd.ref ?? cmd.selector ?? cmd.key ?? (cmd.text !== undefined ? `"${cmd.text.slice(0, 40)}"` : '')).slice(0, 120);
       this.log(this.session().id, conn.author, 'browser', `Browser · ${cmd.action}${detail ? ` ${detail}` : ''}`, [], conn.client.runId);
-      return reply;
+      // The canvas-ready copy of a download stays here; the agent gets the text and the preview.
+      return { text, png };
+    },
+    'agent.placeImage': async (params, conn) => {
+      const { docId, url, ref, selector, capture, path, ...place } = parse(placeImageSchema, params);
+      if (!url && !ref && !selector) throw new DocumentError('VALIDATION', 'place_image needs url (web address, data: URL or file path), or ref/selector of an image on the open browser page.');
+      const s = this.session(docId);
+      const { image } = await callBrowser({ action: 'download', url, ref, selector, capture, path }, conn.author.name ?? conn.author.id);
+      if (!image?.embed) throw new DocumentError('VALIDATION', `ArchaDev cannot show ${image?.mime ?? 'that file'} on the canvas. Saved to ${image?.path ?? '?'} — use capture: true with the element on the browser page for a PNG.`);
+      const r = await this.executor(conn).placeImage(s, image.embed, { ...place, name: place.name ?? basename(image.path).replace(/(-\d+)?\.[^.]+$/, ''), naturalWidth: image.width || undefined, naturalHeight: image.height || undefined });
+      if (r.ok) r.output.push(`Saved file: ${image.path} (${image.mime}, from ${image.source.slice(0, 200)})`);
+      return r;
     },
     'app.info': () => {
       const m = mcpCommand();
       return {
-        version: '0.4.0',
+        version: '1.5.0',
         user: userName(),
         cliPath: cliPath(),
         mcpCommand: [m.command, ...m.args],
@@ -418,15 +456,26 @@ export class Workspace {
       const doc = new ArchaDocument(inlineData(this.assetDir(s), s.doc.toData()), s.revision);
       return { html: exportHtmlStandalone(doc, nodeId), width: n.width, height: n.height };
     },
+    'export.code': (params) => {
+      const { docId, nodeId, style } = parse(exportCodeSchema, params);
+      const s = this.session(docId);
+      if (style === 'css') return { code: exportHtmlStandalone(s.doc, nodeId) };
+      const [page] = exportHtml(s.doc, nodeId, { style: 'tailwind', inlineAssets: true });
+      return { code: String(page!.data) };
+    },
     'chat.send': (params) => {
       const p = parse(chatSendSchema, params);
-      return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId, { now: p.now, focus: p.focus, images: p.images });
+      return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId, { now: p.now, focus: p.focus, images: p.images, mode: p.mode });
     },
     'chat.warm': (params) => {
       const p = parse(chatWarmSchema, params);
       return this.chat.warmUp(this.session(p.docId).id, p.agent, p.model, p.account, p.threadId);
     },
     'chat.stop': ({ runId }) => this.chat.stop(runId),
+    // Team tools of an orchestrate lead; the connection's thread is the lead (blueprint AGENT_BRIDGE/06).
+    'orchestra.delegate': (params, conn) => this.chat.delegate(conn.threadId, parse(orchestraDelegateSchema, params).tasks),
+    'orchestra.wait': (params, conn) => { const p = parse(orchestraWaitSchema, params ?? {}); return this.chat.wait(conn.threadId, p.workers, p.timeoutSec); },
+    'orchestra.tell': (params, conn) => { const p = parse(orchestraTellSchema, params); return this.chat.tell(conn.threadId, p.worker, p.message); },
     'chat.runs': () => this.chat.active(),
     'chat.list': ({ docId }) => this.chat.list(this.session(docId).id),
     'library.list': () => this.library.list(),
@@ -440,6 +489,9 @@ export class Workspace {
       const p = parse(libraryItemSchema, params);
       this.library.remove(p.library, p.id);
     },
+    'icons.custom.list': () => this.icons.list(),
+    'icons.custom.add': (params) => this.icons.add(parse(iconsAddSchema, params).icons),
+    'icons.custom.remove': (params) => { this.icons.remove(parse(iconsRemoveSchema, params).name); },
     'library.insert': (params, conn) => {
       const p = parse(libraryInsertSchema, params);
       const s = this.session(p.docId);
