@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Ban, X } from 'lucide-react';
-import { hexToColor, textEffectSchema, textNodeSchema, type Color, type TextEffect, type TextEffectType, type TextNode } from '@archa/schema';
+import { paintColor, hexToColor, textEffectSchema, textNodeSchema, type Color, type TextEffect, type TextEffectType, type TextNode } from '@archa/schema';
 import { drawText } from '@archa/render';
 import { useStore } from '../lib/store';
 import { commitPatch, previewPatch } from '../lib/livePatch';
@@ -83,7 +83,7 @@ export function TextEffectsPanel() {
 function EffectControls({ node, fx }: { node: TextNode; fx: TextEffect }) {
   const meta = EFFECTS.find((e) => e.type === fx.type)!;
   const with_ = (p: Partial<TextEffect>) => ({ ...fx, ...p });
-  const fallback = meta.color ? hexToColor(meta.color) : node.fills.find((f) => f.visible)?.color ?? hexToColor('#000000');
+  const fallback = meta.color ? hexToColor(meta.color) : (node.fills.find((f) => f.visible) && paintColor(node.fills.find((f) => f.visible)!)) || hexToColor('#000000');
   return (
     <div className="mt-3 space-y-3 rounded-xl bg-panel-2 p-3">
       {meta.params.map((p) => (

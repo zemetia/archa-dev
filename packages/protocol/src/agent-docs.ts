@@ -1,3 +1,5 @@
+import { BUNDLED_FONTS } from './fonts';
+
 /** Shared text for agents: MCP tool descriptions and the launched-run system prompt. Written by us (clean-room). */
 
 export const EXECUTE_API_DOC = `Run a JavaScript snippet against the open ArchaDev document. The whole snippet is ONE transaction: if anything throws, nothing changes.
@@ -11,12 +13,18 @@ API (ids are strings; any ref may be a node id or a unique node name):
   find(visitor, { under: ref, limit? })              visitor(node) returns true to collect, 'skip' to prune
   findEmptySpace(width, height) -> { x, y }          place new top-level frames here so they never overlap
   components() -> [{ id, name, description, width, height, instances }]
-  makeComponent(frameRef, description) -> id         turn a finished frame into a reusable component (the "main")
-  instance(componentRef, parentRef | null, { x?, y?, index?, name? }) -> id   linked copy of a component; restyle via the main, not the copy
-  syncInstances(componentRef) -> count               after editing a main, push the change to every instance
+  makeComponent(frameRef, description, { props?, set?, variant? }) -> id   turn a finished frame into a reusable component (the "main").
+      props: { label: { type: "text", node: labelRef }, showIcon: { type: "boolean", node: iconRef } } (text sets that layer's text, boolean shows/hides it)
+      set + variant: mains with the same set are variants, e.g. makeComponent(btnLg, "", { set: "Button", variant: { size: "lg", tone: "primary" } })
+  instance(componentRef, parentRef | null, { x?, y?, index?, name?, props? }) -> id   linked copy; props may include variant values ({ label: "Buy", size: "lg" })
+  setProps(instanceRef, { label: "Buy now", showIcon: false, size: "sm" })   set props; a variant value swaps the instance to that variant
+  syncInstances(componentRef) -> count               after editing a main, push the change to every instance. Edits made on one instance (its text, a fill) are overrides and survive the sync
+  resetInstance(instanceRef)                         drop an instance's overrides and props (back to its main)
   fromLibrary("library:id", parentRef | null, { x?, y? }) -> id   place a shared library component (first use adds a local main, then instances)
-  variables() -> [{ name, type, value }]              the document's tokens (colours as hex)
-  setVariable(name, value) -> name                   create/update a token: "#hex" = colour, number = number, else string
+  variables() -> [{ name, type, value, bound }]       the document's tokens (colours as hex), bound = layers following it
+  setVariable(name, value) -> name                   create/update a token: "#hex" = colour, number = number, else string. Every layer bound to it updates
+  Tokens: write "$name" as a value to bind it — fills: ["$color/accent"], strokes: ["$color/border"], cornerRadius: "$radius/md", gap: "$space/4", padding: "$space/6", fontSize: "$type/h1".
+      Bound layers follow setVariable; setting a bound property to a literal unbinds it. bind(ref, { fill | stroke | cornerRadius | gap | padding | "fills.1.color": "color/x" }), unbind(ref, paths?)
   resolveComment(id)                                 mark a review comment done after you changed what it asked
   align(refs, "left"|"center"|"right"|"top"|"middle"|"bottom", { to?: "parent"|"selection" })   one layer aligns in its parent, several to their bounds; layers in auto layout set the parent's align/justify instead
   distribute(refs, "horizontal"|"vertical", { gap? })  equal spacing (3+ layers), or pack with a fixed gap
@@ -34,16 +42,33 @@ API (ids are strings; any ref may be a node id or a unique node name):
 
 Node props: name (always set one), x, y, width, height, visible, opacity, rotation (degrees clockwise about the box centre; x/y/width/height stay the upright box), absolute (opt out of the parent's auto layout), context (a note for agents),
   sizing: { horizontal, vertical } each "fixed"|"hug"|"fill" (shorthand sizing: "hug"),
-  fills: ["#hex" | { color: "#hex" }], strokes: ["#hex" | { color, width, align: "inside"|"center"|"outside" }],
-  effects: [{ type: "drop-shadow"|"inner-shadow", color, x, y, blur } | { type: "layer-blur"|"background-blur", radius }]   background-blur = frosted glass, needs a translucent fill
+  fills: stack bottom → top (the last one is on top), each "#hex" | "$token" | { color } | { type: "linear-gradient", angle (CSS degrees: 180 = top→bottom, 90 = left→right), stops: ["#hex", ...] or [{ position 0–1, color }] }
+    | { type: "radial-gradient", center: { x, y }, radius: { x, y } (fractions of the box), stops } | { type: "image", src (data:/https URL), fit "crop"|"fit"|"fill"|"tile", opacity }.
+    Photo with a scrim: fills [image, { type: "linear-gradient", angle: 180, stops: ["#00000000", "#000000b3"] }]. For a web photo use place_image { fillOf: frame } instead of src.
+  strokes: ["#hex" | { color, width, align: "inside"|"center"|"outside" }],
+  effects: [{ type: "drop-shadow"|"inner-shadow", color, x, y, blur } | { type: "layer-blur"|"background-blur", radius }]
+    GLASS (frosted / blurred nav, card or panel over a photo or gradient) = background-blur: it blurs whatever is BEHIND the layer, so give the layer a
+    see-through fill and put it over content: { fills: ["#ffffff1f"], strokes: [{ color: "#ffffff33", width: 1 }], backdropBlur: 16 } (dark glass fill "#0b0b0e80").
+    Shorthands: backdropBlur: 16 (= CSS backdrop-filter: blur(16px), also accepted) adds a background-blur; blur: 8 (= CSS filter: blur(8px)) blurs the layer itself.
+    Lint "effect/blur-hidden" means the glass fill is opaque or missing.
   frame: layout "none"|"row"|"column", gap, padding (number, [y, x], [t, r, b, l] or {top,right,bottom,left}), align (cross axis) "start"|"center"|"end",
     justify (main axis) "start"|"center"|"end"|"space-between"|"space-around", clip, cornerRadius. CSS names work too (alignItems, justifyContent, flexDirection, borderRadius).
+    GRID = wrap: N → at most N items per line, the next item starts a new line (like CSS grid-template-columns: repeat(N, 1fr)).
+      layout "row" + wrap 3 → 3 columns, rows added as needed (6 items = 2 rows, 7 items = 3 rows); layout "column" + wrap 3 → 3 per column, then a new column.
+      gap = space between items in a line, lineGap = space between lines (default = gap). Columns share the frame width equally (fixed/fill frame)
+      or are as wide as their widest item (hug frame); children with sizing.horizontal "fill" take the whole cell. justify/align place an item inside its cell.
+      Shorthands: columns: 3 (or gridTemplateColumns: "repeat(3, 1fr)", layout: "grid") = layout "row" + wrap 3; rows: 2 = layout "column" + wrap 2; rowGap / columnGap work.
+      Example card grid: insert(page, { type: "frame", name: "Features", layout: "row", columns: 3, gap: 24, rowGap: 32, sizing: { horizontal: "fill", vertical: "hug" },
+        children: items.map((t) => ({ type: "frame", name: t, layout: "column", padding: 24, sizing: { horizontal: "fill", vertical: "hug" }, children: [...] })) })
   rect: cornerRadius · polygon: sides (3+) · path: d (SVG path data), viewBox {x,y,width,height} stretched to width/height, fillRule, lineCap, lineJoin
   image: src (data: URL), fit "crop"|"fit"|"fill", cornerRadius · sticky: text, fontSize (a note on the canvas, not part of a screen) · embed: url (live web page on the canvas, for reference)
   connector: a line for flowcharts, workflows and page maps: start, end (a node id, or { nodeId, side: "auto"|"top"|"right"|"bottom"|"left" }, or a free point { x, y }),
     routing "elbow" (90°, default)|"straight", cornerRadius (elbow rounding, default 8), startCap/endCap "none"|"arrow"|"dot" (default end arrow), strokes. Insert it on the page (parent null) AFTER the nodes it joins; it follows them when they move, so never set its x/y/width/height
   text: text, fontFamily, fontSize, fontWeight (100–900), lineHeight (multiplier), letterSpacing, textAlign, textSizing "auto-width"|"auto-height"|"fixed",
     fontStyle "normal"|"italic", underline, strikethrough, textCase "none"|"upper"|"lower"|"title", list "none"|"bullet"|"number" (one item per line),
+    spans: rich text in ONE node — [{ start, end, color | fills, fontWeight, fontStyle, fontSize, fontFamily, letterSpacing, underline }] over character offsets of text
+      (a two-tone headline: text "Design faster", spans [{ start: 7, end: 13, color: "#8b5cf6" }]). Never split one sentence into several text nodes for styling.
+    fontFamily: bundled (render everywhere, export as Google Fonts): ${BUNDLED_FONTS.join(', ')}; other names need the font installed.
     curve -100…100 (bends one line into an arc; + arches up), textEffect null | { type: "drop"|"glow"|"echo"|"outline"|"background"|"splice"|"hollow"|"neon"|"glitch",
     color?, offset, direction (deg, 0 = right, 90 = down), blur, transparency, thickness, roundness, spread, intensity } (sliders 0–100, scale with the font size). Use effects sparingly: posters and social posts, not UI copy.
 Text with no fills gets a readable ink automatically (reported under "Auto-fixed"); still set fills deliberately.

@@ -1,6 +1,9 @@
 import { commentSchema, isContainer, nodeSchema, variableSchema, type Node, type Op, type InsertOp } from '@archa/schema';
 import { ArchaDocument, DocumentError } from './document';
 import { runLayout } from './layout';
+import { boundTo, brokenBindings, resolveBindings } from './bindings';
+import { remapSpans } from './text';
+import { trackOverrides } from './components';
 
 const IMMUTABLE_KEYS = new Set(['id', 'type', 'parentId', 'children']);
 
@@ -47,7 +50,8 @@ function applyOne(doc: ArchaDocument, op: Op, touched: Set<string>): Op[] {
   switch (op.op) {
     case 'insert': {
       const raw = { ...op.node, parentId: op.parentId, children: isContainerType(op.node.type) ? [] : undefined };
-      const node = parseNode(raw);
+      let node = parseNode(raw);
+      if (node.bindings) node = parseNode(resolveBindings(doc, node));
       if (doc.nodes.has(node.id)) throw new DocumentError('VALIDATION', `id "${node.id}" already exists`);
       if (node.type === 'page') throw new DocumentError('VALIDATION', 'pages cannot be inserted as nodes');
       const parent = doc.container(op.parentId);
@@ -61,12 +65,24 @@ function applyOne(doc: ArchaDocument, op: Op, touched: Set<string>): Op[] {
       const prev = doc.require(op.id);
       const bad = Object.keys(op.patch).find((k) => IMMUTABLE_KEYS.has(k));
       if (bad) throw new DocumentError('VALIDATION', `"${prev.name}".${bad} cannot be changed with update${bad === 'parentId' || bad === 'children' ? ' — use move' : ''}`);
-      const next = parseNode({ ...prev, ...op.patch });
-      const before: Record<string, unknown> = {};
-      for (const k of Object.keys(op.patch)) before[k] = structuredClone((prev as Record<string, unknown>)[k]);
+      const patch = { ...op.patch };
+      // Rich text: spans stay on the same characters when only the text changes.
+      if (prev.type === 'text' && typeof patch.text === 'string' && !('spans' in patch) && prev.spans.length) patch.spans = remapSpans(prev.text, patch.text, prev.spans);
+      Object.assign(patch, trackOverrides(doc, prev, patch));
+      let next = parseNode({ ...prev, ...patch });
+      // A bound property edited to another value is an override: it leaves its token.
+      if (!('bindings' in patch)) {
+        const broken = brokenBindings(doc, next, Object.keys(patch));
+        if (broken.length) {
+          const b = { ...next.bindings };
+          for (const path of broken) delete b[path];
+          next = parseNode({ ...next, bindings: Object.keys(b).length ? b : undefined });
+        }
+      }
+      if (next.bindings) next = parseNode(resolveBindings(doc, next));
       doc.nodes.set(op.id, next);
       touched.add(op.id);
-      return [{ op: 'update', id: op.id, patch: before }];
+      return [{ op: 'update', id: op.id, patch: changedKeys(prev, next) }];
     }
     case 'move': {
       const node = doc.require(op.id);
@@ -88,7 +104,16 @@ function applyOne(doc: ArchaDocument, op: Op, touched: Set<string>): Op[] {
       const prev = doc.variables.get(v.id);
       doc.variables.set(v.id, v);
       touched.add(`variable:${v.id}`);
-      return [prev ? { op: 'setVariable', variable: prev } : { op: 'deleteVariable', id: v.id }];
+      // Every node bound to the token takes its new value in the same transaction.
+      const restore: Op[] = [];
+      for (const n of boundTo(doc, v.id)) {
+        const next = parseNode(resolveBindings(doc, n));
+        if (next === n) continue;
+        restore.push({ op: 'update', id: n.id, patch: changedKeys(n, next) });
+        doc.nodes.set(n.id, next);
+        touched.add(n.id);
+      }
+      return [prev ? { op: 'setVariable', variable: prev } : { op: 'deleteVariable', id: v.id }, ...restore];
     }
     case 'deleteVariable': {
       const prev = doc.variables.get(op.id);
@@ -129,6 +154,17 @@ function applyOne(doc: ArchaDocument, op: Op, touched: Set<string>): Op[] {
       return restore;
     }
   }
+}
+
+/** The previous values of every property that differs (the inverse patch of an update). */
+function changedKeys(prev: Node, next: Node): Record<string, unknown> {
+  const before: Record<string, unknown> = {};
+  const a = prev as Record<string, unknown>, b = next as Record<string, unknown>;
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (a[k] === b[k] || (typeof a[k] === 'object' && JSON.stringify(a[k]) === JSON.stringify(b[k]))) continue;
+    before[k] = structuredClone(a[k]);
+  }
+  return before;
 }
 
 const isContainerType = (t: unknown) => t === 'frame' || t === 'group' || t === 'page';

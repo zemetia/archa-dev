@@ -137,6 +137,15 @@ export function LayoutSection({ node: f }: { node: FrameNode }) {
             </div>
           </div>
 
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <NumberField label={<span title={mainIsH ? 'Items per row before a new row (0 = one row) — like grid-template-columns' : 'Items per column before a new column (0 = one column) — like grid-template-rows'}>{mainIsH ? 'Cols' : 'Rows'}</span>}
+              value={f.wrap} min={0} max={100} onCommit={(v) => set({ wrap: Math.round(v) }, 'Grid wrap')} />
+            {f.wrap > 0 && (
+              <NumberField label={<span title="Space between lines (null = same as gap)">{mainIsH ? <MoveVertical size={12} /> : <MoveHorizontal size={12} />}</span>}
+                value={f.lineGap ?? f.gap} min={0} onCommit={(lineGap) => set({ lineGap }, 'Line gap')} />
+            )}
+          </div>
+
           <div className="mt-3 mb-1 flex items-center justify-between text-[11px] text-fg-subtle">
             Padding
             <IconButton title={perSide ? 'Same padding per axis' : 'Padding per side'} active={perSide} className="h-6 w-6"

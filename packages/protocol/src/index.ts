@@ -9,6 +9,7 @@ export * from './agent-docs';
 export * from './design-guides';
 export * from './browser';
 export * from './settings';
+export * from './fonts';
 
 /* ----------------------------------------------------------------------------
  * One protocol for every client: renderer (MessagePort), CLI / MCP (socket).

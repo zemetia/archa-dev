@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ALargeSmall, Bold, Italic, List, ListOrdered, Minus, Plus, Strikethrough, TextAlignCenter, TextAlignEnd, TextAlignStart, Underline } from 'lucide-react';
-import { colorToHex, hexToColor, type TextNode } from '@archa/schema';
+import { paintColor, colorToHex, hexToColor, type TextNode } from '@archa/schema';
 import { useStore } from '../lib/store';
 import { commitPatch, previewPatch } from '../lib/livePatch';
 import { cn, ColorField } from './controls';
@@ -27,7 +27,8 @@ export function TextToolbar() {
   if (n?.type !== 'text' || n.locked) return null;
   const set = (patch: Record<string, unknown>, label: string) => commitPatch(n.id, patch, label);
   const next = <T,>(list: T[], v: T) => list[(list.indexOf(v) + 1) % list.length]!;
-  const ink = n.fills.find((f) => f.visible)?.color ?? hexToColor('#000000');
+  const first = n.fills.find((f) => f.visible);
+  const ink = (first && paintColor(first)) || hexToColor('#000000');
   const bold = n.fontWeight >= 600;
 
   return (

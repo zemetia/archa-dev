@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Circle, CircleDashed, CornerDownRight, Eraser, Eye, EyeOff, Loader2, MoveUpRight, Minus, Plus, Square, SquareDashed, TextAlignCenter, TextAlignEnd, TextAlignStart } from 'lucide-react';
-import { hexToColor, type Effect, type EffectType, type Node, type Paint, type Stroke } from '@archa/schema';
+import { colorToHex, hexToColor, paintColor, type Effect, type EffectType, type GradientPaint, type GradientStop, type Node, type Paint, type PaintType, type Stroke } from '@archa/schema';
 import { Check, ColorField, IconButton, MenuButton, NumberField, Section, Segmented, Select } from '../controls';
 import { EMBED_DEVICES } from '../../canvas/EmbedLayer';
 import { useStore } from '../../lib/store';
@@ -94,18 +94,111 @@ function RowTools<T extends { visible: boolean }>({ items, i, onChange }: { item
 
 const addButton = (title: string, onClick: () => void) => <IconButton title={title} className="h-7 w-7" onClick={onClick}><Plus size={14} /></IconButton>;
 
+const PAINT_TYPES: Array<{ value: PaintType; label: string }> = [
+  { value: 'solid', label: 'Solid' }, { value: 'linear-gradient', label: 'Linear' }, { value: 'radial-gradient', label: 'Radial' }, { value: 'image', label: 'Image' },
+];
+
+/** Switching a paint's kind keeps its colour: a solid becomes a gradient from that colour to transparent, and back. */
+function convertPaint(p: Paint, type: PaintType): Paint {
+  if (p.type === type) return p;
+  const c = paintColor(p) ?? hexToColor('#d4d4d8');
+  const stops = p.type === 'linear-gradient' || p.type === 'radial-gradient' ? p.stops : [{ position: 0, color: c }, { position: 1, color: { ...c, a: 0 } }];
+  switch (type) {
+    case 'solid': return { type, color: c, visible: p.visible };
+    case 'linear-gradient': return { type, stops, angle: 180, visible: p.visible };
+    case 'radial-gradient': return { type, stops, center: { x: 0.5, y: 0.5 }, radius: { x: 0.5, y: 0.5 }, visible: p.visible };
+    case 'image': return { type, src: '', fit: 'crop', scale: 1, opacity: 1, visible: p.visible };
+  }
+}
+
+function pickImage(onPick: (src: string) => void) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml';
+  input.onchange = () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === 'string') onPick(reader.result); };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+function GradientStops({ p, u }: { p: GradientPaint; u: (patch: Partial<GradientPaint>) => void }) {
+  const stops = p.stops;
+  const setStop = (i: number, patch: Partial<GradientStop>) => u({ stops: stops.map((st, j) => (j === i ? { ...st, ...patch } : st)) });
+  const addStop = () => {
+    const sorted = [...stops].sort((a, b) => a.position - b.position);
+    const last = sorted.at(-1)!;
+    u({ stops: [...stops, { position: Math.min(1, (sorted.at(-2)!.position + last.position) / 2 + 0.25), color: last.color }] });
+  };
+  return (
+    <div className="space-y-1.5">
+      {stops.map((st, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <div className="w-[68px] shrink-0"><NumberField label={<span title="Stop position">%</span>} value={Math.round(st.position * 100)} min={0} max={100} onCommit={(v) => setStop(i, { position: v / 100 })} /></div>
+          <ColorField color={st.color} onCommit={(color) => setStop(i, { color })} />
+          <IconButton title="Remove stop" className="h-7 w-7 shrink-0" disabled={stops.length <= 2} onClick={() => u({ stops: stops.filter((_, j) => j !== i) })}><Minus size={13} /></IconButton>
+        </div>
+      ))}
+      <button className="flex h-7 items-center gap-1 rounded-md px-1.5 text-[11.5px] text-fg-muted hover:bg-panel-2 hover:text-fg" onClick={addStop}><Plus size={12} />Add stop</button>
+    </div>
+  );
+}
+
 export function FillSection({ node: n, set }: { node: Extract<Node, { fills: Paint[] }>; set: SetProps }) {
   const onChange = (fills: Paint[]) => set({ fills }, 'Fill');
   const fresh = (): Paint => ({ type: 'solid', color: hexToColor(n.type === 'text' ? '#111111' : n.type === 'sticky' ? '#fde68a' : n.fills.length ? '#000000' : '#d4d4d8'), visible: true });
   return (
     <ListSection title="Fill" items={n.fills} onChange={onChange} add={addButton('Add fill', () => onChange([...n.fills, fresh()]))}
       render={(p, u, i) => (
-        <div className="flex items-center gap-1">
-          <ColorField color={p.color} onCommit={(color) => u({ color })} />
-          <RowTools items={n.fills} i={i} onChange={onChange} />
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1">
+            {p.type === 'solid'
+              ? <ColorField color={p.color} onCommit={(color) => u({ color })} />
+              : <div className="h-8 min-w-0 flex-1 rounded-lg ring-1 ring-line" style={{ background: paintPreview(p) }} title={p.type === 'image' ? 'Picture fill' : 'Gradient'} />}
+            <div className="w-[84px] shrink-0">
+              <Select title="Fill type" value={p.type} options={PAINT_TYPES} onChange={(type) => onChange(n.fills.map((f, j) => (j === i ? convertPaint(f, type) : f)))} />
+            </div>
+            <RowTools items={n.fills} i={i} onChange={onChange} />
+          </div>
+          {p.type === 'linear-gradient' && (
+            <div className="space-y-1.5 pr-[60px]">
+              <NumberField label={<span title="Angle (0 = up, 90 = right, 180 = down)">Angle</span>} value={p.angle} step={15} suffix="°" onCommit={(angle) => u({ angle } as Partial<Paint>)} />
+              <GradientStops p={p} u={(patch) => u(patch as Partial<Paint>)} />
+            </div>
+          )}
+          {p.type === 'radial-gradient' && (
+            <div className="space-y-1.5 pr-[60px]">
+              <div className="grid grid-cols-2 gap-2">
+                <NumberField label={<span title="Centre X">X</span>} value={Math.round(p.center.x * 100)} suffix="%" onCommit={(x) => u({ center: { ...p.center, x: x / 100 } } as Partial<Paint>)} />
+                <NumberField label={<span title="Centre Y">Y</span>} value={Math.round(p.center.y * 100)} suffix="%" onCommit={(y) => u({ center: { ...p.center, y: y / 100 } } as Partial<Paint>)} />
+                <NumberField label={<span title="Width of the ellipse">W</span>} value={Math.round(p.radius.x * 100)} min={0} suffix="%" onCommit={(x) => u({ radius: { ...p.radius, x: x / 100 } } as Partial<Paint>)} />
+                <NumberField label={<span title="Height of the ellipse">H</span>} value={Math.round(p.radius.y * 100)} min={0} suffix="%" onCommit={(y) => u({ radius: { ...p.radius, y: y / 100 } } as Partial<Paint>)} />
+              </div>
+              <GradientStops p={p} u={(patch) => u(patch as Partial<Paint>)} />
+            </div>
+          )}
+          {p.type === 'image' && (
+            <div className="grid grid-cols-2 gap-2 pr-[60px]">
+              <button className="flex h-8 items-center justify-center rounded-lg bg-panel-2 text-[12px] text-fg-muted hover:bg-panel-3 hover:text-fg" onClick={() => pickImage((src) => u({ src } as Partial<Paint>))}>{p.src ? 'Replace…' : 'Choose…'}</button>
+              <Select title="Image fit" value={p.fit} onChange={(fit) => u({ fit } as Partial<Paint>)} options={[{ value: 'crop', label: 'Crop' }, { value: 'fit', label: 'Fit' }, { value: 'fill', label: 'Stretch' }, { value: 'tile', label: 'Tile' }]} />
+              <NumberField label={<span title="Picture opacity">Op</span>} value={Math.round(p.opacity * 100)} min={0} max={100} suffix="%" onCommit={(v) => u({ opacity: v / 100 } as Partial<Paint>)} />
+            </div>
+          )}
         </div>
       )} />
   );
+}
+
+/** CSS preview of a gradient or picture paint for the fill row swatch. */
+function paintPreview(p: Paint): string {
+  const stops = (list: GradientStop[]) => [...list].sort((a, b) => a.position - b.position).map((st) => `${colorToHex(st.color, true)} ${Math.round(st.position * 100)}%`).join(', ');
+  if (p.type === 'linear-gradient') return `linear-gradient(${p.angle}deg, ${stops(p.stops)})`;
+  if (p.type === 'radial-gradient') return `radial-gradient(ellipse ${p.radius.x * 100}% ${p.radius.y * 100}% at ${p.center.x * 100}% ${p.center.y * 100}%, ${stops(p.stops)})`;
+  if (p.type === 'image') return p.src ? `center / cover no-repeat url("${p.src}")` : 'var(--color-panel-2)';
+  return colorToHex(p.color, true);
 }
 
 export function StrokeSection({ node: n, set }: { node: Extract<Node, { strokes: Stroke[] }>; set: SetProps }) {
@@ -168,7 +261,7 @@ export function EffectsSection({ node: n, set }: { node: Extract<Node, { effects
           ) : (
             <NumberField label="Blur" value={fx.radius} min={0} suffix="px" onCommit={(radius) => u({ radius } as Partial<Effect>)} />
           )}
-          {fx.type === 'background-blur' && !n.fills.some((f) => f.visible && f.color.a < 1) && (
+          {fx.type === 'background-blur' && !n.fills.some((f) => f.visible && (paintColor(f)?.a ?? 1) < 1) && (
             <p className="text-[11px] text-fg-subtle">Shows through a fill below 100% opacity.</p>
           )}
         </div>

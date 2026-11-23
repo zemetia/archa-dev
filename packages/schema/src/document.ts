@@ -5,8 +5,9 @@ import type { Comment, Variable } from './variables';
 /**
  * 2: polygon, path, image, sticky and embed nodes; document variables and comments.
  * 3: inner-shadow, layer-blur and background-blur effects; justify "space-around".
+ * 4: gradient and image paints, rich-text spans, token bindings (`node.bindings`), grid frames (`wrap`, `lineGap`).
  */
-export const FORMAT_VERSION = 3;
+export const FORMAT_VERSION = 4;
 
 export const pageRefSchema = z.object({ id: z.string(), name: z.string(), rootId: z.string() });
 export type PageRef = z.infer<typeof pageRefSchema>;
