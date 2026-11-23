@@ -69,6 +69,7 @@ export const placeImageInputShape = {
   ref: z.string().max(32).optional().describe('Or: an image on the open browser page, by ref from browser images/snapshot'),
   selector: z.string().max(1000).optional().describe('Or: an image on the open browser page, by CSS selector'),
   capture: z.boolean().optional().describe('With ref/selector: place a screenshot of the element instead of its file'),
+  fillOf: z.string().max(200).optional().describe('Or: put the picture into this frame/rect\'s fills (a hero background behind its gradients) instead of a new layer'),
   parent: z.string().max(200).optional().describe('Frame id or unique name to place it in; default the page (an empty spot)'),
   x: z.number().optional(), y: z.number().optional(),
   width: z.number().positive().max(20_000).optional().describe('Size on the canvas; one side alone keeps the aspect ratio'),

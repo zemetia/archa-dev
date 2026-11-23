@@ -1,17 +1,59 @@
 import { z } from 'zod';
-import { colorSchema } from './color';
+import { colorSchema, type Color } from './color';
 
 export const nodeIdSchema = z.string().min(1).describe('Node id');
 export type NodeId = string;
 
 const sizingModeSchema = z.enum(['fixed', 'hug', 'fill']).describe('fixed: own size · hug: fit children/text · fill: take the remaining space of an auto-layout parent');
 
-export const paintSchema = z.object({
-  type: z.literal('solid'),
+export const gradientStopSchema = z.object({
+  position: z.number().min(0).max(1).describe('0 = start of the gradient, 1 = end'),
   color: colorSchema,
+});
+export type GradientStop = z.infer<typeof gradientStopSchema>;
+
+const stops = z.array(gradientStopSchema).min(2).describe('At least two colour stops; alpha in a stop colour fades it out');
+
+export const solidPaintSchema = z.object({ type: z.literal('solid'), color: colorSchema, visible: z.boolean().default(true) });
+export const linearGradientSchema = z.object({
+  type: z.literal('linear-gradient'),
+  stops,
+  angle: z.number().default(180).describe('CSS angle in degrees: 0 = to top, 90 = to right, 180 = to bottom'),
   visible: z.boolean().default(true),
 });
+export const radialGradientSchema = z.object({
+  type: z.literal('radial-gradient'),
+  stops,
+  center: z.object({ x: z.number(), y: z.number() }).default({ x: 0.5, y: 0.5 }).describe('Centre as a fraction of the box (0–1)'),
+  radius: z.object({ x: z.number().min(0), y: z.number().min(0) }).default({ x: 0.5, y: 0.5 }).describe('Ellipse radii as a fraction of width / height'),
+  visible: z.boolean().default(true),
+});
+export const imagePaintSchema = z.object({
+  type: z.literal('image'),
+  src: z.string().describe('data: URL or http(s) URL of the picture'),
+  fit: z.enum(['fill', 'fit', 'crop', 'tile']).default('crop').describe('fill: stretch · fit: contain · crop: cover · tile: repeat at natural size × scale'),
+  scale: z.number().positive().default(1).describe('tile only: size of one tile'),
+  opacity: z.number().min(0).max(1).default(1),
+  visible: z.boolean().default(true),
+});
+/** A fill layer. Fills stack bottom → top (the last paint is on top), like CSS backgrounds in reverse. */
+export const paintSchema = z.discriminatedUnion('type', [solidPaintSchema, linearGradientSchema, radialGradientSchema, imagePaintSchema]);
 export type Paint = z.infer<typeof paintSchema>;
+export type SolidPaint = z.infer<typeof solidPaintSchema>;
+export type GradientPaint = z.infer<typeof linearGradientSchema> | z.infer<typeof radialGradientSchema>;
+export type ImagePaint = z.infer<typeof imagePaintSchema>;
+export type PaintType = Paint['type'];
+
+/**
+ * One colour standing in for a paint, for checks that need a single colour (contrast, readable ink,
+ * outlines): the solid colour, the stop in the middle of a gradient, null for pictures.
+ */
+export function paintColor(p: Paint): Color | null {
+  if (p.type === 'solid') return p.color;
+  if (p.type === 'image') return null;
+  const sorted = [...p.stops].sort((a, b) => a.position - b.position);
+  return (sorted.find((s) => s.position >= 0.5) ?? sorted.at(-1)!).color;
+}
 
 export const strokeSchema = z.object({
   color: colorSchema,
@@ -56,6 +98,7 @@ const base = {
   sizing: z.object({ horizontal: sizingModeSchema, vertical: sizingModeSchema }).default({ horizontal: 'fixed', vertical: 'fixed' }),
   absolute: z.boolean().default(false).describe('Opt out of the parent auto-layout and keep x/y'),
   meta: z.record(z.string(), z.unknown()).default({}),
+  bindings: z.record(z.string(), z.string()).optional().describe('Token bindings: property path (e.g. "fills.0.color", "cornerRadius", "padding") → variable id. The property follows the variable'),
 };
 
 const visual = {
@@ -106,6 +149,24 @@ export const textEffectSchema = z.object({
 export type TextEffect = z.infer<typeof textEffectSchema>;
 export type TextEffectType = TextEffect['type'];
 
+/**
+ * Rich text: a style for the characters [start, end) of `text` (UTF-16 offsets). Unset fields keep the
+ * node's own style. Spans may not overlap; later spans win where they do.
+ */
+export const textSpanSchema = z.object({
+  start: z.number().int().min(0),
+  end: z.number().int().min(0),
+  fills: z.array(paintSchema).optional().describe('Colour of these characters'),
+  fontFamily: z.string().optional(),
+  fontSize: z.number().min(1).optional(),
+  fontWeight: z.number().int().min(100).max(900).optional(),
+  fontStyle: z.enum(['normal', 'italic']).optional(),
+  letterSpacing: z.number().optional(),
+  underline: z.boolean().optional(),
+  strikethrough: z.boolean().optional(),
+});
+export type TextSpan = z.infer<typeof textSpanSchema>;
+
 export const textNodeSchema = z.object({
   ...base, ...visual,
   type: z.literal('text'),
@@ -124,6 +185,7 @@ export const textNodeSchema = z.object({
   list: z.enum(['none', 'bullet', 'number']).default('none').describe('Each line (paragraph) becomes a list item'),
   textEffect: textEffectSchema.nullable().default(null),
   curve: z.number().min(-100).max(100).default(0).describe('Bends the text along an arc on one line: + arches up, − sags down'),
+  spans: z.array(textSpanSchema).default([]).describe('Rich text: styles for ranges of `text`, e.g. a two-tone headline'),
 });
 
 export const polygonNodeSchema = z.object({ ...base, ...visual, type: z.literal('polygon'), sides: z.number().int().min(3).max(64).default(3).describe('Regular polygon inscribed in the box; 3 = triangle') });

@@ -12,7 +12,7 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 |---|---|---|
 | [`nodes.ts`](../../../packages/schema/src/nodes.ts) | zod schemas for every node type, paints, strokes, effects; `NodeInput` | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
 | [`ops.ts`](../../../packages/schema/src/ops.ts) | `insert` / `update` / `move` / `delete`, `setVariable` / `deleteVariable`, `setComment` / `deleteComment`, `Transaction` | [DOCUMENT_MODEL/02](../DOCUMENT_MODEL/02-ops-transactions-undo.md) |
-| [`document.ts`](../../../packages/schema/src/document.ts) | `FORMAT_VERSION` (3), page refs, document meta, `.archa` manifest | [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md), [FILE_FORMATS/03](../FILE_FORMATS/03-migrations-validation.md) |
+| [`document.ts`](../../../packages/schema/src/document.ts) | `FORMAT_VERSION` (4), page refs, document meta, `.archa` manifest | [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md), [FILE_FORMATS/03](../FILE_FORMATS/03-migrations-validation.md) |
 | [`variables.ts`](../../../packages/schema/src/variables.ts) | Document variables (single theme) and review comments | [DESIGN_SYSTEM/01](../DESIGN_SYSTEM/01-variables-themes.md), [AGENT_BRIDGE/04](../AGENT_BRIDGE/04-review-loop.md) |
 | [`color.ts`](../../../packages/schema/src/color.ts) | oklch colour storage, hex ↔ oklch, CSS output, contrast ratio | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
 | [`ids.ts`](../../../packages/schema/src/ids.ts), [`index.ts`](../../../packages/schema/src/index.ts) | `newId()`; re-exports | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
@@ -25,6 +25,7 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 | [`node.ts`](../../../packages/protocol/src/node.ts) | Node-only: `archaHome()`, `runtimeFile()`, `socketPath()` (custom `ARCHA_HOME` → own pipe) | [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md), [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md) |
 | [`agent-docs.ts`](../../../packages/protocol/src/agent-docs.ts) | `EXECUTE_API_DOC` (tool description) and `DESIGNER_PROMPT` (chat-run system prompt) — our own text | [MCP/02](../MCP/02-execute-api.md), [MCP/04](../MCP/04-local-skill.md) |
 | [`design-guides.ts`](../../../packages/protocol/src/design-guides.ts) | Compiled-in design guides for `read_guide`; `guidesFor(request)` picks guides for a chat turn | [MCP/04](../MCP/04-local-skill.md), [MCP/01](../MCP/01-transports-tools.md) |
+| [`fonts.ts`](../../../packages/protocol/src/fonts.ts) | Generated `BUNDLED_FONTS` list (agent docs, font picker) | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) |
 | [`browser.ts`](../../../packages/protocol/src/browser.ts) | `browser` tool: actions, zod command schema, replies, main ↔ core bridge messages, tool doc | [BROWSER](../BROWSER.md) |
 | [`settings.ts`](../../../packages/protocol/src/settings.ts) | Skills and MCP-server types (secrets never cross — only keys) | [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
 
@@ -37,10 +38,11 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 | [`session.ts`](../../../packages/core/src/session.ts) | `DocumentSession`: revisions, `baseRevision` check, per-author undo / redo, listeners | [DOCUMENT_MODEL/02](../DOCUMENT_MODEL/02-ops-transactions-undo.md), [ARCHITECTURE/04](../ARCHITECTURE/04-single-writer-sync.md) |
 | [`factory.ts`](../../../packages/core/src/factory.ts) | `insertOpsFor` (friendly input → ordered inserts), `normaliseInput` (CSS / Figma spellings) | [MCP/02](../MCP/02-execute-api.md), [DOCUMENT_MODEL/02](../DOCUMENT_MODEL/02-ops-transactions-undo.md) |
 | [`layout.ts`](../../../packages/core/src/layout.ts) | Auto layout (own flexbox subset, not Yoga yet), approximate text metrics, `setTextMeasure` | [DOCUMENT_MODEL/03](../DOCUMENT_MODEL/03-layout.md) |
-| [`text.ts`](../../../packages/core/src/text.ts) | `displayParagraphs` (case + list markers; curve = one line), `applyCase`, `curveAngle`, `curveBox` — shared by layout, renderer and exporters | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
+| [`text.ts`](../../../packages/core/src/text.ts) | `displayParagraphs` (case + list markers; curve = one line), `applyCase`, `curveAngle`, `curveBox`, rich text `styledParagraphs` / `remapSpans` — shared by layout, renderer and exporters |
+| [`bindings.ts`](../../../packages/core/src/bindings.ts) | Token bindings: `resolveBindings`, `brokenBindings`, `boundTo`, `bindTokens` (`"$name"` values → bindings), `findVariable`; used by `apply.ts` | [DESIGN_SYSTEM/01](../DESIGN_SYSTEM/01-variables-themes.md) | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
 | [`arrange.ts`](../../../packages/core/src/arrange.ts) | Align / distribute / wrap ops; auto-layout children move the parent's align / justify | [DOCUMENT_MODEL/03](../DOCUMENT_MODEL/03-layout.md), [APP_UI/04](../APP_UI/04-design-panel.md) |
 | [`connectors.ts`](../../../packages/core/src/connectors.ts) | Connector routing (elbow / straight, run at the end of `runLayout`) and the shared line + cap geometry for render and export | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
-| [`components.ts`](../../../packages/core/src/components.ts) | Components v1 via `meta.component` / `meta.instanceOf`: make, instance, sync, detach, library refs | [DESIGN_SYSTEM/02](../DESIGN_SYSTEM/02-components-libraries.md) |
+| [`components.ts`](../../../packages/core/src/components.ts) | Components v2 via `meta.component` / `meta.instanceOf` / `meta.sourceId`: make (props, variant sets), instance, override tracking, sync keeping overrides, reset, `setPropsOps`, detach, library refs | [DESIGN_SYSTEM/02](../DESIGN_SYSTEM/02-components-libraries.md) |
 | [`hash.ts`](../../../packages/core/src/hash.ts) | FNV-1a `selfHash`, `contentHash`, `subtreeHash` | [DOCUMENT_MODEL/04](../DOCUMENT_MODEL/04-hashing.md), [CACHE/01](../CACHE/01-layers-keys.md) |
 | [`lint.ts`](../../../packages/core/src/lint.ts) | Structural checks returned in every agent reply | [MCP/03](../MCP/03-response-contract-lint.md) |
 | [`outline.ts`](../../../packages/core/src/outline.ts) | Compact text tree of a node (`inspect`), `meta.context` notes | [MCP/01](../MCP/01-transports-tools.md), [APP_UI/04](../APP_UI/04-design-panel.md) |
@@ -60,7 +62,9 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 | File | Does | Governed by |
 |---|---|---|
 | [`draw.ts`](../../../packages/render/src/draw.ts) | `drawNode` per type, text wrapping, sticky layout, per-node animation transform | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) |
-| [`text.ts`](../../../packages/render/src/text.ts) | `drawText`: lines or curved letters, underline/strike, the 9 text effects; `fontString`, `layoutLines` | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
+| [`text.ts`](../../../packages/render/src/text.ts) | `drawText`: rich-text lines or curved letters, underline/strike per run, the 9 text effects; `fontString`, `layoutLines` |
+| [`paint.ts`](../../../packages/render/src/paint.ts) | Paints → canvas: `canvasPaint`, `fillPaint` (elliptical radial), image placement, `paintImageSources` | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) |
+| [`fonts.ts`](../../../packages/render/src/fonts.ts) | `requestFont` / `preloadFonts` / `onFontLoaded`: web fonts for canvas and one-shot renders | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) | [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) |
 | [`scene.ts`](../../../packages/render/src/scene.ts) | `drawPage` (top-level frames from cache, animating ones live), `renderNodePng` / `renderNodeImage` | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md), [RENDERING/03](../RENDERING/03-export.md) |
 | [`cache.ts`](../../../packages/render/src/cache.ts) | `FrameBitmapCache` keyed by subtree hash + zoom bucket (L4) | [CACHE/01](../CACHE/01-layers-keys.md), [CACHE/02](../CACHE/02-render-tiles.md) |
 | [`images.ts`](../../../packages/render/src/images.ts) | Decoded image cache; placeholder until loaded | [CACHE/01](../CACHE/01-layers-keys.md) |
@@ -71,7 +75,7 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 | File | Does | Governed by |
 |---|---|---|
 | [`archa.ts`](../../../packages/formats/src/archa.ts) | `encodeArcha` / `decodeArcha` (fflate zip), migrations on open, `FormatError` | [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) |
-| [`migrations/archa/index.ts`](../../../packages/formats/src/migrations/archa/index.ts), [`v1-to-v2.ts`](../../../packages/formats/src/migrations/archa/v1-to-v2.ts), [`v2-to-v3.ts`](../../../packages/formats/src/migrations/archa/v2-to-v3.ts) | Pure JSON migrations per `formatVersion` step | [FILE_FORMATS/03](../FILE_FORMATS/03-migrations-validation.md) |
+| [`migrations/archa/index.ts`](../../../packages/formats/src/migrations/archa/index.ts), [`v1-to-v2.ts`](../../../packages/formats/src/migrations/archa/v1-to-v2.ts), [`v2-to-v3.ts`](../../../packages/formats/src/migrations/archa/v2-to-v3.ts), [`v3-to-v4.ts`](../../../packages/formats/src/migrations/archa/v3-to-v4.ts) | Pure JSON migrations per `formatVersion` step | [FILE_FORMATS/03](../FILE_FORMATS/03-migrations-validation.md) |
 | [`svg.ts`](../../../packages/formats/src/svg.ts) | `exportSvg` of a node subtree (text stays text) | [RENDERING/03](../RENDERING/03-export.md) |
 | [`import/svg.ts`](../../../packages/formats/src/import/svg.ts) | `importSvg` (SVG markup → vector frame or image node, DOM-free), `svgDataUrl`, `isSvgMarkup`, `extractSvg` | [FILE_FORMATS/04](../FILE_FORMATS/04-importers.md), [MCP/02](../MCP/02-execute-api.md) |
 | [`export/html.ts`](../../../packages/formats/src/export/html.ts) | Node → HTML + CSS or Tailwind; standalone page for PDF | [DESIGN_SYSTEM/04](../DESIGN_SYSTEM/04-code-export.md) |

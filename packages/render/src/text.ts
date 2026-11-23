@@ -1,57 +1,116 @@
-import { colorToCss, hexToColor, type Color, type TextEffect, type TextNode } from '@archa/schema';
-import { curveAngle, curveBox, displayParagraphs } from '@archa/core';
+import { colorToCss, hexToColor, paintColor, type Color, type TextEffect, type TextNode } from '@archa/schema';
+import { curveAngle, curveBox, styledParagraphs, type RunStyle } from '@archa/core';
+import { canvasPaint } from './paint';
+import { requestFont } from './fonts';
 
 /*
- * Text drawing (blueprint RENDERING/01): lines or a curved run, decorations, and the Canva-style
- * effects. Effect sliders are 0–100 and scale with the font size so a look holds at any size.
+ * Text drawing (blueprint RENDERING/01): lines or a curved run, rich-text pieces, decorations, and
+ * the Canva-style effects. Effect sliders are 0–100 and scale with the font size so a look holds at any size.
  */
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
-/** One piece of text to paint: a line, or one letter of a curved run, at (x, y) turned by `angle`. */
-type Run = { text: string; x: number; y: number; angle: number; width: number };
+/**
+ * One piece of text to paint: part of a line (x = its left edge), or one letter of a curved run
+ * (x = the letter's centre). y is the em middle; `angle` turns it.
+ */
+type Run = { text: string; x: number; y: number; angle: number; width: number; style: RunStyle; font: string };
+type Bit = { text: string; style: RunStyle; font: string };
+/** A wrapped line: its pieces, measured; `size` is its largest font size. */
+type Line = { pieces: Array<Bit & { width: number }>; width: number; size: number };
 
-export const fontString = (n: TextNode) => `${n.fontStyle === 'italic' ? 'italic ' : ''}${n.fontWeight} ${n.fontSize}px "${n.fontFamily}", Inter, system-ui, sans-serif`;
+const fontOf = (st: Pick<RunStyle, 'fontStyle' | 'fontWeight' | 'fontSize' | 'fontFamily'>) =>
+  `${st.fontStyle === 'italic' ? 'italic ' : ''}${st.fontWeight} ${st.fontSize}px "${st.fontFamily}", Inter, system-ui, sans-serif`;
+export const fontString = (n: TextNode) => fontOf(n);
 
-/** Wraps text into lines for fixed / auto-height boxes; auto-width keeps hard breaks only. */
-export function layoutLines(ctx: Ctx, n: TextNode): string[] {
-  ctx.font = fontString(n);
-  const hard = displayParagraphs(n);
-  if (n.textSizing === 'auto-width' || n.curve) return hard;
-  const out: string[] = [];
-  for (const para of hard) {
-    let line = '';
-    for (const w of para.split(/(\s+)/)) {
-      const next = line + w;
-      if (line && ctx.measureText(next).width > n.width) {
-        out.push(line.trimEnd());
-        line = w.trimStart();
-      } else line = next;
+/** Distance from the em middle to the baseline, as a share of the font size (typical UI sans). */
+const MID_TO_BASELINE = 0.365;
+const isSpace = (s: string) => /^\s/.test(s);
+
+function setSpacing(ctx: Ctx, px: number) {
+  if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D).letterSpacing = `${px}px`;
+}
+
+function measure(ctx: Ctx, b: Bit): number {
+  ctx.font = b.font;
+  setSpacing(ctx, b.style.letterSpacing);
+  return ctx.measureText(b.text).width;
+}
+
+/** Wraps styled paragraphs into lines for fixed / auto-height boxes; auto-width and curves keep hard breaks only. */
+function layoutRich(ctx: Ctx, n: TextNode): Line[] {
+  const wrap = !(n.textSizing === 'auto-width' || n.curve);
+  const out: Line[] = [];
+  for (const para of styledParagraphs(n)) {
+    // A word keeps all its pieces, so a word half bold, half regular still wraps as one word.
+    const words: Bit[][] = [];
+    for (const p of para) {
+      const font = fontOf(p.style);
+      for (const part of p.text.split(/(\s+)/)) {
+        if (!part) continue;
+        const last = words.at(-1);
+        if (last && isSpace(part) === isSpace(last[0]!.text)) last.push({ text: part, style: p.style, font });
+        else words.push([{ text: part, style: p.style, font }]);
+      }
     }
-    out.push(line);
+    const width = (bits: Bit[]) => bits.reduce((w, b) => w + measure(ctx, b), 0);
+    const size = para[0]?.style.fontSize ?? n.fontSize;
+    let line: Bit[] = [];
+    const flush = () => {
+      const pieces = line.map((b) => ({ ...b, width: measure(ctx, b) }));
+      out.push({ pieces, width: pieces.reduce((w, p) => w + p.width, 0), size: pieces.length ? Math.max(...pieces.map((p) => p.style.fontSize)) : size });
+      line = [];
+    };
+    for (const word of words) {
+      if (wrap && line.length && !isSpace(word[0]!.text) && width(line) + width(word) > n.width) {
+        // The space before a wrapped word stays on the line it ends.
+        while (line.length && isSpace(line.at(-1)!.text)) line.pop();
+        flush();
+      }
+      if (wrap && !line.length && isSpace(word[0]!.text) && out.length) continue;
+      line.push(...word);
+    }
+    flush();
   }
   return out;
 }
 
+/** Wrapped lines as plain strings. */
+export function layoutLines(ctx: Ctx, n: TextNode): string[] {
+  return layoutRich(ctx, n).map((l) => l.pieces.map((p) => p.text).join(''));
+}
+
 function runsOf(ctx: Ctx, n: TextNode): Run[] {
-  const lh = n.fontSize * n.lineHeight;
-  const lines = layoutLines(ctx, n);
+  const lines = layoutRich(ctx, n);
   if (!n.curve) {
-    const x = n.textAlign === 'center' ? n.width / 2 : n.textAlign === 'right' ? n.width : 0;
-    return lines.map((text, i) => ({ text, x, y: lh * i + lh / 2, angle: 0, width: ctx.measureText(text).width }));
+    const runs: Run[] = [];
+    let top = 0;
+    for (const line of lines) {
+      const lh = line.size * n.lineHeight;
+      // Pieces of different sizes share a baseline.
+      const baseline = top + lh / 2 + line.size * MID_TO_BASELINE;
+      let x = n.textAlign === 'center' ? (n.width - line.width) / 2 : n.textAlign === 'right' ? n.width - line.width : 0;
+      for (const p of line.pieces) {
+        runs.push({ text: p.text, x, y: baseline - p.style.fontSize * MID_TO_BASELINE, angle: 0, width: p.width, style: p.style, font: p.font });
+        x += p.width;
+      }
+      top += lh;
+    }
+    return runs;
   }
   // Curved: letters along an arc whose length is the line's width, centred in the box.
-  const chars = [...lines[0]!];
-  const widths = chars.map((ch) => ctx.measureText(ch).width + n.letterSpacing);
+  const chars = (lines[0]?.pieces ?? []).flatMap((p) => [...p.text].map((ch) => ({ text: ch, style: p.style, font: p.font })));
+  const lh = (lines[0]?.size ?? n.fontSize) * n.lineHeight;
+  const widths = chars.map((c) => measure(ctx, { ...c, style: { ...c.style, letterSpacing: 0 } }) + c.style.letterSpacing);
   const total = widths.reduce((a, b) => a + b, 0);
   const box = curveBox(total, lh, n.curve);
   const r = total / Math.abs(curveAngle(n.curve));
   const up = n.curve > 0 ? 1 : -1;
   const cx = n.width / 2, cy = (n.height - box.height) / 2 + box.cy;
   let at = -total / 2;
-  return chars.map((text, i) => {
+  return chars.map((c, i) => {
     const t = (at + widths[i]! / 2) / r;
     at += widths[i]!;
-    return { text, x: cx + r * Math.sin(t), y: cy - up * r * Math.cos(t), angle: up * t, width: widths[i]! };
+    return { ...c, x: cx + r * Math.sin(t), y: cy - up * r * Math.cos(t), angle: up * t, width: widths[i]! };
   });
 }
 
@@ -59,26 +118,38 @@ const hex = (s: string) => hexToColor(s);
 const css = (c: Color, alpha = 1) => colorToCss({ ...c, a: c.a * alpha });
 /** A paler, less saturated version of a colour: the hot core of a neon tube. */
 const pale = (c: Color, k: number): Color => ({ ...c, l: Math.min(1, c.l + (1 - c.l) * k), c: c.c * (1 - k * 0.7) });
+const firstPaint = (st: RunStyle) => st.fills.find((f) => f.visible);
 
 export function drawText(ctx: Ctx, n: TextNode, deviceScale: number) {
-  const fill = n.fills.find((f) => f.visible);
+  const fill = firstPaint(n) ?? n.spans.flatMap((sp) => sp.fills ?? []).find((f) => f.visible);
   const fx = n.textEffect;
   if (!fill && !fx) return;
-  const ink = fill?.color ?? hex('#000000');
+  const ink = (fill && paintColor(fill)) ?? hex('#000000');
   ctx.save();
-  ctx.font = fontString(n);
   ctx.textBaseline = 'middle';
-  ctx.textAlign = n.curve ? 'center' : n.textAlign;
-  if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D).letterSpacing = n.curve ? '0px' : `${n.letterSpacing}px`;
+  ctx.textAlign = n.curve ? 'center' : 'left';
   const runs = runsOf(ctx, n);
+  for (const r of runs) void requestFont(r.font);
   const fs = n.fontSize;
 
-  const paint = (style: string, mode: 'fill' | 'stroke' = 'fill', dx = 0, dy = 0) => {
+  /** Paints every run in one style (effects), or, with `style` null, each run in its own fills. */
+  const paint = (style: string | null, mode: 'fill' | 'stroke' = 'fill', dx = 0, dy = 0) => {
     for (const r of runs) {
+      const paints = style === null ? r.style.fills.filter((f) => f.visible) : [null];
+      if (!paints.length) continue;
       ctx.save();
+      const alpha = ctx.globalAlpha;
+      ctx.font = r.font;
+      setSpacing(ctx, n.curve ? 0 : r.style.letterSpacing);
       ctx.translate(r.x + dx, r.y + dy);
       if (r.angle) ctx.rotate(r.angle);
-      if (mode === 'fill') { ctx.fillStyle = style; ctx.fillText(r.text, 0, 0); } else { ctx.strokeStyle = style; ctx.strokeText(r.text, 0, 0); }
+      for (const p of paints) {
+        // Gradients and pictures span the whole text box, not each run: shift them by the run's origin.
+        const s = p ? canvasPaint(ctx, p, n.width, n.height, r.x + dx, r.y + dy) : style;
+        if (!s) continue;
+        ctx.globalAlpha = alpha * (p?.type === 'image' ? p.opacity : 1);
+        if (mode === 'fill') { ctx.fillStyle = s; ctx.fillText(r.text, 0, 0); } else { ctx.strokeStyle = s; ctx.strokeText(r.text, 0, 0); }
+      }
       ctx.restore();
     }
   };
@@ -93,14 +164,14 @@ export function drawText(ctx: Ctx, n: TextNode, deviceScale: number) {
   let main: 'fill' | 'stroke' | 'none' = fill ? 'fill' : 'none';
   if (fx) main = drawEffect(fx, { n, ink, fs, runs, ctx, paint, blurred, stroke }) ?? main;
 
-  if (main === 'fill' && fill) paint(css(ink));
-  decorate(ctx, n, runs, css(ink));
+  if (main === 'fill' && fill) paint(null);
+  decorate(ctx, n, runs);
   ctx.restore();
 }
 
 type EffectKit = {
   n: TextNode; ink: Color; fs: number; runs: Run[]; ctx: Ctx;
-  paint: (style: string, mode?: 'fill' | 'stroke', dx?: number, dy?: number) => void;
+  paint: (style: string | null, mode?: 'fill' | 'stroke', dx?: number, dy?: number) => void;
   blurred: (px: number, draw: () => void) => void;
   stroke: (width: number) => void;
 };
@@ -140,7 +211,7 @@ function drawEffect(fx: TextEffect, k: EffectKit): 'none' | void {
       ctx.fillStyle = css(color ?? hex('#fde047'), opaque);
       for (const r of k.runs) {
         if (!r.text.trim()) continue;
-        const left = k.n.curve ? r.x - r.width / 2 : ctx.textAlign === 'center' ? r.x - r.width / 2 : ctx.textAlign === 'right' ? r.x - r.width : r.x;
+        const left = k.n.curve ? r.x - r.width / 2 : r.x;
         const w = r.width + pad * 2, h = lh + pad * 0.6;
         const rr = Math.min(w, h) / 2 * (fx.roundness / 100);
         ctx.save();
@@ -177,15 +248,18 @@ function drawEffect(fx: TextEffect, k: EffectKit): 'none' | void {
   }
 }
 
-/** Underline and strikethrough under each straight line (curved text has none). */
-function decorate(ctx: Ctx, n: TextNode, runs: Run[], style: string) {
-  if ((!n.underline && !n.strikethrough) || n.curve) return;
-  const t = Math.max(1, n.fontSize * 0.06);
-  ctx.fillStyle = style;
+/** Underline and strikethrough under each straight run, in the run's colour (curved text has none). */
+function decorate(ctx: Ctx, n: TextNode, runs: Run[]) {
+  if (n.curve) return;
   for (const r of runs) {
-    if (!r.width) continue;
-    const left = n.textAlign === 'center' ? r.x - r.width / 2 : n.textAlign === 'right' ? r.x - r.width : r.x;
-    if (n.underline) ctx.fillRect(left, r.y + n.fontSize * 0.4, r.width, t);
-    if (n.strikethrough) ctx.fillRect(left, r.y - t / 2 + n.fontSize * 0.02, r.width, t);
+    if (!r.width || (!r.style.underline && !r.style.strikethrough)) continue;
+    const p = firstPaint(r.style);
+    const c = p ? paintColor(p) : null;
+    if (!c) continue;
+    const fs = r.style.fontSize;
+    const t = Math.max(1, fs * 0.06);
+    ctx.fillStyle = colorToCss(c);
+    if (r.style.underline) ctx.fillRect(r.x, r.y + fs * 0.4, r.width, t);
+    if (r.style.strikethrough) ctx.fillRect(r.x, r.y - t / 2 + fs * 0.02, r.width, t);
   }
 }

@@ -122,6 +122,44 @@ describe('place_image', () => {
     expect(photo.parentId).toBe(doc.findByName('Hero')[0]!.id);
   });
 
+  it('puts the picture into the fills of a frame, under its scrim (fillOf)', async () => {
+    const { ws, agent, docId } = setup();
+    await ws.handlers['agent.execute']({ docId, code: `insert(null, { type: 'frame', name: 'Hero', width: 1200, height: 600, fills: ['#111111', { type: 'linear-gradient', stops: ['#00000000', '#000000b3'] }] })` }, agent);
+    const r = await ws.handlers['agent.placeImage']({ docId, url: 'https://x.com/sunset.jpg', fillOf: 'Hero' }, agent);
+    expect(r.ok).toBe(true);
+    const hero = ws.session(docId).doc.findByName('Hero')[0]!;
+    expect(hero.type === 'frame' && hero.fills.map((f) => f.type)).toEqual(['image', 'linear-gradient']);
+    expect(ws.session(docId).doc.findByName('sunset-beach')).toEqual([]);
+  });
+
+  it('binds "$token" values, follows setVariable, and drives component props and variants', async () => {
+    const { ws, agent, docId } = setup();
+    const run = (code: string) => ws.handlers['agent.execute']({ docId, code }, agent);
+    const r = await run(`
+      setVariable('color/accent', '#8b5cf6'); setVariable('radius/md', 10);
+      card = insert(null, { type: 'frame', name: 'Card', width: 200, height: 80, fills: ['$color/accent'], cornerRadius: '$radius/md', children: [
+        { type: 'text', name: 'Title', text: 'Design faster', fills: ['#ffffff'], spans: [{ start: 7, end: 13, color: '$color/accent', fontWeight: 'bold' }] },
+      ] });
+      sm = insert(null, { type: 'frame', name: 'Btn', x: 400, layout: 'row', padding: 8, sizing: 'hug', fill: '#000000', children: [{ type: 'text', name: 'Label', text: 'Go', fill: '#ffffff' }] });
+      lg = insert(null, { type: 'frame', name: 'Btn', x: 400, y: 200, layout: 'row', padding: 16, sizing: 'hug', fill: '#000000', children: [{ type: 'text', name: 'Label', text: 'Go', fill: '#ffffff' }] });
+      makeComponent(sm, 'Button', { set: 'Button', variant: { size: 'sm' }, props: { label: { type: 'text', node: children(sm)[0].id } } });
+      makeComponent(lg, 'Button', { set: 'Button', variant: { size: 'lg' }, props: { label: { type: 'text', node: children(lg)[0].id } } });
+      b = instance(sm, null, { x: 700, name: 'Buy', props: { label: 'Buy now', size: 'lg' } });
+    `);
+    expect(r.ok).toBe(true);
+    await run(`setVariable('color/accent', '#ef4444')`);
+    const doc = ws.session(docId).doc;
+    const card = doc.findByName('Card')[0]!;
+    const title = doc.findByName('Title')[0]!;
+    expect(card.type === 'frame' && card.fills[0]!.type === 'solid' && card.fills[0]!.color).toEqual(doc.variables.size && [...doc.variables.values()].find((v) => v.name === 'color/accent')!.value);
+    expect(card.type === 'frame' && card.cornerRadius).toBe(10);
+    expect(title.type === 'text' && title.spans[0]).toMatchObject({ start: 7, end: 13, fontWeight: 700, fills: [{ color: card.type === 'frame' && card.fills[0]!.type === 'solid' ? card.fills[0]!.color : null }] });
+    const buy = doc.findByName('Buy')[0]!;
+    expect(buy.type === 'frame' && buy.padding.top).toBe(16);
+    expect(doc.children(buy.id)[0]).toMatchObject({ text: 'Buy now' });
+    expect(String(await ws.handlers['agent.state']({ docId }, agent))).toMatch(/variant of "Button" size=lg · props label:text/);
+  });
+
   it('needs a source', async () => {
     const { ws, agent, docId } = setup();
     await expect(Promise.resolve().then(() => ws.handlers['agent.placeImage']({ docId }, agent))).rejects.toThrow(/needs url/);

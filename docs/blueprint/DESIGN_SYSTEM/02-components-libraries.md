@@ -12,11 +12,13 @@ Linked copies with no `.archa` format change. Code: `packages/core/src/component
 
 | Concept | v1 model |
 |---|---|
-| Component (main) | A **frame** with `meta.component = { description }`. No nested mains; instances cannot become mains until detached |
+| Component (main) | A **frame** with `meta.component = { description, props?, set?, variant? }`. No nested mains; instances cannot become mains until detached |
 | Instance | A full copy with `meta.instanceOf = <main id>`; nested instances inside a main stay linked |
-| Sync | `syncInstanceOps`: the instance takes the main's props + children again, keeps its name, x/y, parent sizing. Never automatic |
+| Overrides (v2) | Copied layers keep `meta.sourceId`; `apply.ts` (`trackOverrides`) records each property edited on an instance in that node's `meta.overrides` (patches that set `meta` themselves are not tracked) |
+| Sync | `syncInstanceOps`: rebuilds from the main, puts overrides and prop values back, keeps layer ids (matched by source layer, else name path), name and x/y. `{ reset: true }` drops overrides and props. Never automatic |
+| Props / variants (v2) | `props`: text (a text layer's text) or boolean (a layer's visibility), set per instance in `meta.props`. Mains sharing `set` are variants (`variant: { size: 'lg' }`); `setPropsOps` swaps to the matching main |
 | Library link | A main inserted from a library carries `meta.libraryRef = "<library>:<id>"`; later inserts become instances of it |
-| Agents | `describeState` lists components (name, id, size, instances, description) and library items; `execute` adds `components()`, `makeComponent`, `instance`, `syncInstances`, `fromLibrary`; DESIGNER_PROMPT step 7 says reuse before building |
+| Agents | `describeState` lists components (name, id, size, instances, description) and library items; `execute` adds `components()`, `makeComponent(frame, desc, { props, set, variant })`, `instance(…, { props })`, `setProps`, `syncInstances`, `resetInstance`, `fromLibrary`; DESIGNER_PROMPT step 7 says reuse before building |
 | Storage | Libraries: `ARCHA_HOME/libraries/<name>/{library.json, components/<id>.json, components/<id>.png}` (`core-host/library.ts`, zod at the RPC boundary) |
 
 The table below is the Phase 7 target (instance nodes + per-property overrides). Moving to it needs `formatVersion` 2 + a migration from v1 `meta` markers.
@@ -83,5 +85,5 @@ Built-in icon set (open-licence, e.g. Lucide) as a global library; `icon` lookup
 
 **Linked from:** [APP_UI/04](../APP_UI/04-design-panel.md)
 
-**Code:** [`apps/desktop/src/core-host/library.ts`](../../../apps/desktop/src/core-host/library.ts) · [`apps/desktop/src/renderer/ui/ComponentsPanel.tsx`](../../../apps/desktop/src/renderer/ui/ComponentsPanel.tsx) · [`apps/desktop/src/renderer/ui/LibraryPanel.tsx`](../../../apps/desktop/src/renderer/ui/LibraryPanel.tsx) · [`apps/desktop/test/library.test.ts`](../../../apps/desktop/test/library.test.ts) · [`packages/core/src/components.ts`](../../../packages/core/src/components.ts) · [`packages/core/test/components.test.ts`](../../../packages/core/test/components.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
+**Code:** [`apps/desktop/src/core-host/library.ts`](../../../apps/desktop/src/core-host/library.ts) · [`apps/desktop/src/renderer/ui/ComponentsPanel.tsx`](../../../apps/desktop/src/renderer/ui/ComponentsPanel.tsx) · [`apps/desktop/src/renderer/ui/LibraryPanel.tsx`](../../../apps/desktop/src/renderer/ui/LibraryPanel.tsx) · [`apps/desktop/test/library.test.ts`](../../../apps/desktop/test/library.test.ts) · [`packages/core/src/components.ts`](../../../packages/core/src/components.ts) · [`packages/core/test/components.test.ts`](../../../packages/core/test/components.test.ts) · [`packages/core/test/fidelity.test.ts`](../../../packages/core/test/fidelity.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
 <!-- backlinks:end -->

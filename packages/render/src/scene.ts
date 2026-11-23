@@ -2,6 +2,9 @@ import type { ArchaDocument } from '@archa/core';
 import { FrameBitmapCache, zoomBucket } from './cache';
 import { drawNode, type AnimMap } from './draw';
 import { preloadImages } from './images';
+import { paintImageSources } from './paint';
+import { preloadFonts } from './fonts';
+import { fontString } from './text';
 
 export type Camera = { x: number; y: number; zoom: number };
 
@@ -49,7 +52,11 @@ export function renderNodePng(doc: ArchaDocument, nodeId: string, scale: number)
 /** Renders one node to base64 PNG or JPEG. JPEG has no alpha, so it is drawn on white. */
 export async function renderNodeImage(doc: ArchaDocument, nodeId: string, scale: number, format: 'png' | 'jpeg', quality = 0.92): Promise<string> {
   const node = doc.require(nodeId);
-  await preloadImages([...doc.walk(nodeId)].flatMap((n) => (n.type === 'image' ? [n.src] : [])));
+  const nodes = [...doc.walk(nodeId)];
+  await Promise.all([
+    preloadImages(nodes.flatMap((n) => [...(n.type === 'image' ? [n.src] : []), ...('fills' in n ? paintImageSources(n) : [])])),
+    preloadFonts(nodes.flatMap((n) => (n.type === 'text' ? [fontString(n), ...n.spans.map((s) => fontString({ ...n, ...Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined)) }))] : []))),
+  ]);
   const w = Math.max(1, Math.round(node.width * scale));
   const h = Math.max(1, Math.round(node.height * scale));
   const canvas = new OffscreenCanvas(w, h);

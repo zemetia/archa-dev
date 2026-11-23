@@ -1,4 +1,4 @@
-import { contrastRatio, hasVisual, isContainer, type Color, type Issue, type Node } from '@archa/schema';
+import { contrastRatio, hasVisual, isContainer, paintColor, type Color, type Issue, type Node } from '@archa/schema';
 import type { ArchaDocument } from './document';
 
 /**
@@ -40,10 +40,11 @@ function check(doc: ArchaDocument, n: Node, issues: Issue[]) {
     if (overflowX || overflowY) push(issues, n, 'layout/clipped', `clipped by "${parent.name}" (${overflowX ? 'horizontally' : 'vertically'})`, 'resize the parent, use hug sizing, or move the node inside; if the crop is intended (a bleed off the edge), set absolute: true');
   }
 
-  if (n.type === 'text' && n.fills[0] && parent) {
+  const ink = n.type === 'text' && n.fills[0] ? paintColor(n.fills[0]) : null;
+  if (ink && parent) {
     const back = backdrop(doc, n, parent);
-    if (back) {
-      const ratio = contrastRatio(n.fills[0].color, back.color);
+    if (back && n.type === 'text') {
+      const ratio = contrastRatio(ink, back.color);
       const large = n.fontSize >= 24 || (n.fontSize >= 18.5 && n.fontWeight >= 700);
       if (ratio < (large ? 3 : 4.5)) push(issues, n, 'a11y/contrast', `contrast ${ratio.toFixed(2)}:1 on "${back.name}" is below WCAG AA`, 'darken/lighten the text or the background');
     }
@@ -68,7 +69,13 @@ function check(doc: ArchaDocument, n: Node, issues: Issue[]) {
 function backdrop(doc: ArchaDocument, n: Node, parent: Node): { color: Color; name: string } | null {
   const b = doc.worldBounds(n.id);
   const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
-  const solid = (m: Node) => (hasVisual(m) && m.type !== 'text' && m.visible && m.opacity >= 0.5 ? m.fills.find((f) => f.visible && f.color.a >= 0.5) : undefined);
+  // A picture fill makes the backdrop unknown: the topmost visible paint decides, a photo stops the search.
+  const solid = (m: Node): { color: Color } | undefined => {
+    if (!hasVisual(m) || m.type === 'text' || !m.visible || m.opacity < 0.5) return undefined;
+    const top = m.fills.filter((f) => f.visible).reverse().find((f) => f.type === 'image' || (paintColor(f)?.a ?? 0) >= 0.5);
+    const c = top ? paintColor(top) : null;
+    return c ? { color: c } : undefined;
+  };
   const under = (m: Node) => { const r = doc.worldBounds(m.id); return cx >= r.x && cx <= r.x + r.width && cy >= r.y && cy <= r.y + r.height; };
   const siblings = isContainer(parent) ? parent.children : [];
   for (let i = siblings.indexOf(n.id) - 1; i >= 0; i--) {

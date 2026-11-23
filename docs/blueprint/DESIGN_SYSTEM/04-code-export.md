@@ -76,5 +76,5 @@ Not a generator — an **agent task** guided by `references/guides/code-export.m
 
 **Linked from:** [RENDERING/03](../RENDERING/03-export.md)
 
-**Code:** [`apps/desktop/src/main/pdf.ts`](../../../apps/desktop/src/main/pdf.ts) · [`packages/formats/src/export/html.ts`](../../../packages/formats/src/export/html.ts) · [`packages/formats/src/export/tailwind.ts`](../../../packages/formats/src/export/tailwind.ts) · [`packages/formats/test/html.test.ts`](../../../packages/formats/test/html.test.ts)
+**Code:** [`apps/desktop/src/main/pdf.ts`](../../../apps/desktop/src/main/pdf.ts) · [`packages/formats/src/export/html.ts`](../../../packages/formats/src/export/html.ts) · [`packages/formats/src/export/tailwind.ts`](../../../packages/formats/src/export/tailwind.ts) · [`packages/formats/test/fidelity.test.ts`](../../../packages/formats/test/fidelity.test.ts) · [`packages/formats/test/html.test.ts`](../../../packages/formats/test/html.test.ts)
 <!-- backlinks:end -->

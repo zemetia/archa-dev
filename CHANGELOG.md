@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### Design fidelity
+- **Gradients and picture fills**: fills are now a stack of solid, linear gradient (CSS angles), radial gradient and image paints (crop / fit / stretch / tile), on any shape or text. Photo scrims are a real gradient instead of stacked translucent rectangles. `place_image { fillOf }` puts a downloaded photo into a frame's fills. The Fill panel switches between Solid / Linear / Radial / Image with editable stops.
+- **Rich text**: `spans` style ranges of one text node (colour, font, weight, italic, size, tracking, underline) — a two-tone headline is one layer. Spans follow edits to the text.
+- **Tokens bound to layers**: write `"$color/accent"` (or `bind()`) and the property follows the variable; changing the token restyles every bound layer in one undoable step. HTML export prints them as CSS variables.
+- **Components v2**: edits made on an instance survive a sync; components get text / boolean props and variant sets (`setProps(button, { label: "Buy", size: "lg" })`); Reset drops an instance's own changes.
+- **Built-in fonts**: Inter, Inter Tight, Geist, Geist Mono, DM Sans, Manrope, Plus Jakarta Sans, Space Grotesk, Outfit, Sora, Instrument Sans/Serif, Bricolage Grotesque, Fraunces, Playfair Display and JetBrains Mono ship with the app and draw the same on every machine.
+- `.archa` format 4 (older files open unchanged).
+
 ## [1.5.0] - 2026-11-21
 
 ### Pictures from the web

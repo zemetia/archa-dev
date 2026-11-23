@@ -1,7 +1,7 @@
 import type { FrameNode, Node, TextNode } from '@archa/schema';
 import type { ArchaDocument } from './document';
 import { routeConnectors } from './connectors';
-import { curveBox, displayParagraphs } from './text';
+import { curveBox, styledParagraphs, type RunStyle } from './text';
 
 export type TextMeasure = (node: TextNode, maxWidth?: number) => { width: number; height: number };
 
@@ -18,27 +18,32 @@ function charEm(ch: string): number {
 
 /**
  * Approximate text metrics so the core can lay out without a DOM (CLI, core host).
- * Word-wraps like the renderer; the renderer draws the real glyphs.
+ * Word-wraps like the renderer (rich-text pieces keep their own size); the renderer draws the real glyphs.
  */
 export const approxMeasure: TextMeasure = (node, maxWidth) => {
-  const weight = 1 + (node.fontWeight - 400) / 3000;
-  const width = (s: string) => [...s].reduce((w, ch) => w + charEm(ch) * node.fontSize * weight + node.letterSpacing, 0);
-  const lineH = node.fontSize * node.lineHeight;
-  const paras = displayParagraphs(node);
+  const em = (ch: string, st: RunStyle) => charEm(ch) * st.fontSize * (1 + (st.fontWeight - 400) / 3000) + st.letterSpacing;
+  const paras = styledParagraphs(node).map((pieces) => pieces.flatMap((p) => [...p.text].map((ch) => ({ ch, w: em(ch, p.style), size: p.style.fontSize }))));
+  // A line is as tall as its largest letters.
+  const lineH = (chars: Array<{ size: number }>) => Math.max(node.fontSize, ...chars.map((c) => c.size)) * node.lineHeight;
+  const sum = (chars: Array<{ w: number }>) => chars.reduce((a, c) => a + c.w, 0);
   // Curved text is one line bent into an arc; its box is the arc's.
-  if (node.curve) { const b = curveBox(width(paras[0]!), lineH, node.curve); return { width: b.width, height: b.height }; }
+  if (node.curve) { const b = curveBox(sum(paras[0]!), lineH(paras[0]!), node.curve); return { width: b.width, height: b.height }; }
   if (maxWidth === undefined) {
-    return { width: Math.ceil(Math.max(1, ...paras.map(width))), height: Math.ceil(paras.length * lineH) };
+    return { width: Math.ceil(Math.max(1, ...paras.map(sum))), height: Math.ceil(paras.reduce((h, p) => h + lineH(p), 0)) };
   }
-  let lines = 0;
+  let height = 0;
   for (const para of paras) {
-    let line = '';
-    lines++;
-    for (const word of para.split(/(\s+)/)) {
-      if (line && width(line + word) > maxWidth) { lines++; line = word.trimStart(); } else line += word;
+    let line: typeof para = [], word: typeof para = [];
+    const flush = () => { height += lineH(line); line = []; };
+    for (const c of [...para, null]) {
+      if (c && !/\s/.test(c.ch)) { word.push(c); continue; }
+      if (line.length && sum(line) + sum(word) > maxWidth) { const trimmed = word; flush(); line = trimmed; } else line.push(...word);
+      word = [];
+      if (c) line.push(c);
     }
+    flush();
   }
-  return { width: maxWidth, height: Math.ceil(lines * lineH) };
+  return { width: maxWidth, height: Math.ceil(height) };
 };
 
 let measure: TextMeasure = approxMeasure;

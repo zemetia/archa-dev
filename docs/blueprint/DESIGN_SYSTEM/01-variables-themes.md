@@ -48,6 +48,12 @@ type VariableCollection = {
 
 ---
 
+## Bindings (built, v4)
+
+`node.bindings` maps a property path (`fills.0.color`, `cornerRadius`, `gap`, `padding`, `spans.1.fills.0.color`, `fills.0.stops.1.color`) to a variable id (`packages/core/src/bindings.ts`). The core writes the value into the node on insert/update and, in the same transaction, into every bound node on `setVariable` (undo restores both) — render, export and hashing still read plain values. Editing a bound property by hand to another value drops that binding. Agents write `"$color/accent"` as a value (`bindTokens`) or call `bind`/`unbind`; HTML export prints bound values as `var(--token)` with a `:root` block.
+
+---
+
 ## Contrast
 
 Every colour variable used as text is measured against the surfaces it sits on (from the profile's declared pairs and from actual usage). Result exposed in the Variables panel and as lint `a11y/contrast`. The check follows the variable's declared job: an accent declared "fill only" is not reported as text.
@@ -64,5 +70,5 @@ Table view: rows = variables, columns = theme combinations; inline edit with col
 
 **Linked from:** [APP_UI/01](../APP_UI/01-shell-tools-panels.md) · [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md)
 
-**Code:** [`apps/desktop/src/renderer/ui/RailPanels.tsx`](../../../apps/desktop/src/renderer/ui/RailPanels.tsx) · [`packages/schema/src/variables.ts`](../../../packages/schema/src/variables.ts)
+**Code:** [`apps/desktop/src/renderer/ui/RailPanels.tsx`](../../../apps/desktop/src/renderer/ui/RailPanels.tsx) · [`packages/core/src/bindings.ts`](../../../packages/core/src/bindings.ts) · [`packages/core/test/fidelity.test.ts`](../../../packages/core/test/fidelity.test.ts) · [`packages/schema/src/variables.ts`](../../../packages/schema/src/variables.ts)
 <!-- backlinks:end -->

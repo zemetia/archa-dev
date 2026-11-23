@@ -34,7 +34,21 @@ export function normaliseInput(input: Record<string, unknown>): Record<string, u
   for (const key of ['fills', 'strokes', 'effects'] as const) {
     if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).map((p) => normalisePaint(p, key));
   }
-  if (typeof out.fill === 'string') { out.fills = [normalisePaint(out.fill, 'fills')]; delete out.fill; }
+  if (typeof out.fill === 'string' || (out.fill && typeof out.fill === 'object')) { out.fills = [normalisePaint(out.fill, 'fills')]; delete out.fill; }
+  // Rich-text spans take the same colour shorthands as the node: color / fill / fills.
+  if (Array.isArray(out.spans)) {
+    out.spans = (out.spans as unknown[]).map((sp) => {
+      if (!sp || typeof sp !== 'object') return sp;
+      const o = { ...(sp as Record<string, unknown>) };
+      const short = o.fills ?? o.fill ?? o.color;
+      delete o.fill; delete o.color;
+      if (short !== undefined) o.fills = (Array.isArray(short) ? short : [short]).map((p) => normalisePaint(p, 'fills'));
+      if (typeof o.fontWeight === 'string') o.fontWeight = WEIGHT[o.fontWeight.toLowerCase()] ?? (Number(o.fontWeight) || o.fontWeight);
+      if (o.italic === true) { o.fontStyle = 'italic'; delete o.italic; }
+      if (o.bold === true) { o.fontWeight = 700; delete o.bold; }
+      return o;
+    });
+  }
   // A note for agents on this layer (design panel → Context) lives in meta.
   if (typeof out.context === 'string') { out.meta = { ...(out.meta as object | undefined), context: out.context }; delete out.context; }
   if (typeof out.stroke === 'string') { out.strokes = [normalisePaint(out.stroke, 'strokes')]; delete out.stroke; }
@@ -88,6 +102,7 @@ const EFFECT_TYPES: Record<string, string> = {
   blur: 'layer-blur', 'layer_blur': 'layer-blur', layerblur: 'layer-blur', filter: 'layer-blur',
   backdrop: 'background-blur', 'backdrop-blur': 'background-blur', 'backdrop-filter': 'background-blur', 'background_blur': 'background-blur', backgroundblur: 'background-blur', glass: 'background-blur',
 };
+const PAINT_TYPES: Record<string, string> = { linear: 'linear-gradient', gradient: 'linear-gradient', 'linear_gradient': 'linear-gradient', lineargradient: 'linear-gradient', radial: 'radial-gradient', 'radial_gradient': 'radial-gradient', radialgradient: 'radial-gradient', img: 'image', picture: 'image', photo: 'image', color: 'solid' };
 const LAYOUT: Record<string, string> = { horizontal: 'row', vertical: 'column', col: 'column', flex: 'row', stack: 'column', vstack: 'column', hstack: 'row', absolute: 'none' };
 const TEXT_ALIGN: Record<string, string> = { start: 'left', end: 'right', middle: 'center' };
 const TEXT_SIZING: Record<string, string> = { auto: 'auto-width', hug: 'auto-width', 'width-auto': 'auto-width', autowidth: 'auto-width', wrap: 'auto-height', fill: 'auto-height', 'height-auto': 'auto-height', autoheight: 'auto-height', 'fixed-width': 'auto-height', none: 'fixed' };
@@ -102,7 +117,28 @@ function normalisePaint(p: unknown, key: 'fills' | 'strokes' | 'effects'): unkno
   if (p && typeof p === 'object') {
     const o = { ...(p as Record<string, unknown>) };
     if (typeof o.color === 'string') o.color = hexToColor(o.color);
-    if (key === 'fills' && !o.type) o.type = 'solid';
+    if (key === 'fills') {
+      o.type = typeof o.type === 'string' ? PAINT_TYPES[o.type.toLowerCase()] ?? o.type : o.stops ? 'linear-gradient' : o.src ? 'image' : 'solid';
+      // Stops as bare colours spread evenly; stop colours as hex.
+      if (Array.isArray(o.stops)) {
+        const list = o.stops as unknown[];
+        o.stops = list.map((st, i) => {
+          const at = list.length > 1 ? i / (list.length - 1) : 0;
+          if (typeof st === 'string') return { position: at, color: hexToColor(st) };
+          const so = { ...(st as Record<string, unknown>) };
+          if (typeof so.color === 'string') so.color = hexToColor(so.color);
+          if (so.position === undefined) so.position = typeof so.offset === 'number' ? so.offset : at;
+          if (typeof so.position === 'number' && so.position > 1) so.position = so.position / 100;
+          delete so.offset;
+          return so;
+        });
+      }
+      if (o.type === 'radial-gradient') {
+        if (typeof o.radius === 'number') o.radius = { x: o.radius, y: o.radius };
+        if (Array.isArray(o.center)) o.center = { x: o.center[0], y: o.center[1] };
+      }
+      if (o.type === 'image' && typeof o.fit === 'string') o.fit = ({ cover: 'crop', contain: 'fit', stretch: 'fill', repeat: 'tile' } as Record<string, string>)[o.fit] ?? o.fit;
+    }
     if (key === 'effects') {
       if (o.inset === true && !o.type) o.type = 'inner-shadow';
       delete o.inset;

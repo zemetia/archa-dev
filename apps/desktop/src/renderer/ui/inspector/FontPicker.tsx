@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '../controls';
-import { FALLBACK_FONTS, loadLocalFonts } from '../../lib/fonts';
+import { BUNDLED_FONTS, FALLBACK_FONTS, loadLocalFonts } from '../../lib/fonts';
 
 const MENU_HEIGHT = 320;
 
@@ -108,7 +108,8 @@ export function FontPicker({ value, onChange }: { value: string; onChange: (fami
                 <span className="flex w-3.5 shrink-0 justify-center text-accent">{f === value && <Check size={13} />}</span>
                 {f === custom
                   ? <span className="truncate">Use “{f}”</span>
-                  : <span className="truncate" style={{ fontFamily: `"${f}", Inter, system-ui, sans-serif` }}>{f}</span>}
+                  : <span className="min-w-0 flex-1 truncate" style={{ fontFamily: `"${f}", Inter, system-ui, sans-serif` }}>{f}</span>}
+                {BUNDLED_FONTS.includes(f) && <span title="Ships with ArchaDev: looks the same on every machine" className="shrink-0 text-[10.5px] text-fg-subtle">Built-in</span>}
               </div>
             ))}
           </div>

@@ -56,8 +56,9 @@ restore
 | Rule | Detail |
 |---|---|
 | Shaping | CanvasKit `ParagraphBuilder`; results cached in L2 |
-| Fonts | Loaded from asset store / system / Google Fonts download into `~/.archadev/cache/fonts/` |
+| Fonts | Loaded from asset store / system / Google Fonts download into `~/.archadev/cache/fonts/`. **Built:** 16 OFL families ship with the app (`scripts/gen-fonts.mjs` → `renderer/lib/bundled-fonts.ts` + `protocol/src/fonts.ts`, registered under their real names); `render/src/fonts.ts` requests each face the canvas draws with and repaints when it arrives; one-shot renders wait for their faces |
 | Missing font | Fallback stack + soft issue `text/font-missing` |
+| Paints (built) | `render/src/paint.ts`: CSS-angle linear gradients (`linearGradientLine`, shared with SVG export), elliptical radial gradients (unit circle in a scaled space), image patterns placed like `fit`; text runs shift the paint so a gradient spans the whole text box. Rich-text pieces share a baseline |
 | Editing | DOM `contenteditable` mirror on the overlay layer; committed as one transaction on blur/Enter |
 
 ---
@@ -83,5 +84,5 @@ The same `draw/` code runs in all contexts. Golden-image tests render fixtures i
 
 **Linked from:** [ARCHITECTURE/01](../ARCHITECTURE/01-processes.md) · [REFERENCE](../REFERENCE.md)
 
-**Code:** [`apps/desktop/src/main/embed-shot.ts`](../../../apps/desktop/src/main/embed-shot.ts) · [`apps/desktop/src/renderer/canvas/Canvas.tsx`](../../../apps/desktop/src/renderer/canvas/Canvas.tsx) · [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`apps/desktop/src/renderer/canvas/TextEditor.tsx`](../../../apps/desktop/src/renderer/canvas/TextEditor.tsx) · [`packages/core/src/shapes.ts`](../../../packages/core/src/shapes.ts) · [`packages/render/src/draw.ts`](../../../packages/render/src/draw.ts) · [`packages/render/src/scene.ts`](../../../packages/render/src/scene.ts) · [`packages/render/src/text.ts`](../../../packages/render/src/text.ts)
+**Code:** [`apps/desktop/src/main/embed-shot.ts`](../../../apps/desktop/src/main/embed-shot.ts) · [`apps/desktop/src/renderer/canvas/Canvas.tsx`](../../../apps/desktop/src/renderer/canvas/Canvas.tsx) · [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`apps/desktop/src/renderer/canvas/TextEditor.tsx`](../../../apps/desktop/src/renderer/canvas/TextEditor.tsx) · [`apps/desktop/src/renderer/lib/bundled-fonts.ts`](../../../apps/desktop/src/renderer/lib/bundled-fonts.ts) · [`apps/desktop/src/renderer/lib/fonts.ts`](../../../apps/desktop/src/renderer/lib/fonts.ts) · [`packages/core/src/shapes.ts`](../../../packages/core/src/shapes.ts) · [`packages/protocol/src/fonts.ts`](../../../packages/protocol/src/fonts.ts) · [`packages/render/src/draw.ts`](../../../packages/render/src/draw.ts) · [`packages/render/src/fonts.ts`](../../../packages/render/src/fonts.ts) · [`packages/render/src/paint.ts`](../../../packages/render/src/paint.ts) · [`packages/render/src/scene.ts`](../../../packages/render/src/scene.ts) · [`packages/render/src/text.ts`](../../../packages/render/src/text.ts) · [`scripts/gen-fonts.mjs`](../../../scripts/gen-fonts.mjs)
 <!-- backlinks:end -->

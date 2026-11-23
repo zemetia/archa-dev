@@ -1,6 +1,7 @@
 import { colorToCss, isContainer, type ConnectorNode, type EmbedNode, type ImageNode, type Node, type PathNode, type StickyNode, type VisualNode } from '@archa/schema';
 import { connectorGeometry, connectorStroke, polygonPoints, viewBoxMatrix, type ArchaDocument } from '@archa/core';
 import { imageFor } from './images';
+import { canvasPaint, fillPaint } from './paint';
 import { drawText } from './text';
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -150,7 +151,7 @@ function shape(ctx: Ctx, node: VisualNode, path: () => Path2D | void, phase: 'al
 
 function paintFills(ctx: Ctx, node: VisualNode, path: () => Path2D | void, fill: (p: Path2D | void) => void) {
   const k = deviceScale(ctx);
-  const solid = node.fills.find((f) => f.visible);
+  const first = node.fills.find((f) => f.visible);
   for (const fx of node.effects) {
     if (!fx.visible || fx.type !== 'drop-shadow') continue;
     ctx.save();
@@ -160,7 +161,8 @@ function paintFills(ctx: Ctx, node: VisualNode, path: () => Path2D | void, fill:
     ctx.shadowOffsetX = fx.x * k;
     ctx.shadowOffsetY = fx.y * k;
     const p = path();
-    ctx.fillStyle = solid ? colorToCss(solid.color) : 'rgba(0,0,0,1)';
+    // The shadow takes the shape of the fill (a gradient that fades out casts a fading shadow).
+    ctx.fillStyle = (first && first.type !== 'radial-gradient' && canvasPaint(ctx, first, node.width, node.height)) || 'rgba(0,0,0,1)';
     fill(p);
     ctx.restore();
   }
@@ -176,9 +178,7 @@ function paintFills(ctx: Ctx, node: VisualNode, path: () => Path2D | void, fill:
   }
   for (const f of node.fills) {
     if (!f.visible) continue;
-    const p = path();
-    ctx.fillStyle = colorToCss(f.color);
-    fill(p);
+    fillPaint(ctx, f, node.width, node.height, path() ?? undefined, fill);
   }
   for (const fx of node.effects) {
     if (!fx.visible || fx.type !== 'inner-shadow') continue;

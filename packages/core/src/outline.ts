@@ -1,4 +1,4 @@
-import { colorToHex, isContainer, type Node } from '@archa/schema';
+import { colorToHex, isContainer, type Node, type Paint } from '@archa/schema';
 import type { ArchaDocument } from './document';
 
 /** Free-text notes a person attached to a layer for agents (design panel → Context). Stored in `meta.context`. */
@@ -8,6 +8,9 @@ export const contextOf = (n: Node | undefined): string => {
 };
 
 const hex = (c: Parameters<typeof colorToHex>[0]) => colorToHex(c, c.a < 1).toLowerCase();
+const paintText = (p: Paint) => p.type === 'solid' ? hex(p.color)
+  : p.type === 'image' ? `image ${p.fit}`
+  : `${p.type === 'linear-gradient' ? `linear ${p.angle}°` : 'radial'}(${p.stops.map((s) => `${hex(s.color)} ${Math.round(s.position * 100)}%`).join(', ')})`;
 const short = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 /** One compact line per node: what the design panel shows, in words an agent reads quickly. */
@@ -33,12 +36,13 @@ export function describeNode(doc: ArchaDocument, n: Node): string {
   if (n.type === 'text') {
     const style = [n.fontStyle === 'italic' && 'italic', n.underline && 'underline', n.strikethrough && 'strike', n.textCase !== 'none' && n.textCase, n.list !== 'none' && `${n.list} list`, n.curve && `curve ${n.curve}`, n.textEffect && `effect ${n.textEffect.type}`].filter(Boolean);
     if (style.length) parts.push(style.join(' '));
+    if (n.spans.length) parts.push(`${n.spans.length} styled span${n.spans.length === 1 ? '' : 's'}`);
   }
   if (n.type === 'sticky') parts.push(`"${short(n.text, 60)}"`);
   if (n.type === 'embed') parts.push(n.url || 'no url');
   if (n.type === 'image') parts.push(`fit ${n.fit}`);
   if ('fills' in n) {
-    const fills = n.fills.filter((f) => f.visible).map((f) => hex(f.color));
+    const fills = n.fills.filter((f) => f.visible).map(paintText);
     if (fills.length) parts.push(`fill ${fills.join('+')}`);
     const strokes = n.strokes.filter((s) => s.visible).map((s) => `${s.width}px ${hex(s.color)} ${s.align}`);
     if (strokes.length) parts.push(`stroke ${strokes.join('+')}`);
@@ -50,6 +54,8 @@ export function describeNode(doc: ArchaDocument, n: Node): string {
   if (n.locked) parts.push('locked');
   if (n.meta?.component) parts.push('component');
   if (typeof n.meta?.instanceOf === 'string') parts.push(`instance of "${n.meta.instanceOf}"`);
+  const bound = Object.entries(n.bindings ?? {}).map(([path, v]) => `${path}=${doc.variables.get(v)?.name ?? v}`);
+  if (bound.length) parts.push(`tokens ${bound.join(' ')}`);
   return parts.join(' · ');
 }
 

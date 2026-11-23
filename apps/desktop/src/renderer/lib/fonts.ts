@@ -1,6 +1,9 @@
-/** Font families offered by the font picker: every family installed on this machine, with a fixed list as the fallback. */
+import { BUNDLED_FONTS } from '@archa/protocol';
 
-export const FALLBACK_FONTS = ['Inter', 'Segoe UI', 'Georgia', 'Times New Roman', 'Arial', 'Consolas', 'Courier New', 'Trebuchet MS', 'Verdana'];
+/** Font families offered by the font picker: the fonts the app ships, then every family installed on this machine. */
+
+export { BUNDLED_FONTS };
+export const FALLBACK_FONTS = [...BUNDLED_FONTS, 'Segoe UI', 'Georgia', 'Times New Roman', 'Arial', 'Consolas', 'Courier New', 'Trebuchet MS', 'Verdana'];
 
 type LocalFont = { family: string };
 let pending: Promise<string[]> | null = null;
@@ -14,12 +17,13 @@ export function loadLocalFonts(): Promise<string[]> {
   const query = (window as unknown as { queryLocalFonts?: () => Promise<LocalFont[]> }).queryLocalFonts;
   pending = (query ? query.call(window) : Promise.resolve([] as LocalFont[]))
     .then((fonts) => {
-      const families = new Set([...FALLBACK_FONTS, ...fonts.map((f) => f.family)]);
-      return [...families].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      // Built-in fonts first (they look the same on every machine), then the installed ones A–Z.
+      const installed = new Set([...FALLBACK_FONTS, ...fonts.map((f) => f.family)].filter((f) => !BUNDLED_FONTS.includes(f)));
+      return [...BUNDLED_FONTS, ...[...installed].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))];
     })
     .catch(() => {
       pending = null;
-      return [...FALLBACK_FONTS].sort();
+      return [...FALLBACK_FONTS];
     });
   return pending;
 }

@@ -14,7 +14,7 @@
 | `.archadev` `formatVersion` | Project folder layout | Folder or config file shape changes |
 | App SemVer | Release | Independent of both |
 
-Adding an **optional** property does not bump `formatVersion`.
+Adding an **optional** property does not bump `formatVersion` (but new enum values an older app would reject do: v3 → v4 added paint types, so v4 bumped with an identity migration and fixture `archa-v4`).
 
 ---
 
@@ -70,5 +70,5 @@ Quarantine guarantees an older or buggy app never destroys data it does not unde
 
 **Linked from:** [BEST_PRACTICE/03](../BEST_PRACTICE/03-git-changelog-release.md) · [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) · [FILE_FORMATS/02](./02-archadev-project.md)
 
-**Code:** [`packages/formats/src/migrations/archa/index.ts`](../../../packages/formats/src/migrations/archa/index.ts) · [`packages/formats/src/migrations/archa/v1-to-v2.ts`](../../../packages/formats/src/migrations/archa/v1-to-v2.ts) · [`packages/formats/src/migrations/archa/v2-to-v3.ts`](../../../packages/formats/src/migrations/archa/v2-to-v3.ts) · [`packages/formats/test/archa.test.ts`](../../../packages/formats/test/archa.test.ts) · [`packages/schema/src/document.ts`](../../../packages/schema/src/document.ts)
+**Code:** [`packages/formats/src/migrations/archa/index.ts`](../../../packages/formats/src/migrations/archa/index.ts) · [`packages/formats/src/migrations/archa/v1-to-v2.ts`](../../../packages/formats/src/migrations/archa/v1-to-v2.ts) · [`packages/formats/src/migrations/archa/v2-to-v3.ts`](../../../packages/formats/src/migrations/archa/v2-to-v3.ts) · [`packages/formats/src/migrations/archa/v3-to-v4.ts`](../../../packages/formats/src/migrations/archa/v3-to-v4.ts) · [`packages/formats/test/archa.test.ts`](../../../packages/formats/test/archa.test.ts) · [`packages/schema/src/document.ts`](../../../packages/schema/src/document.ts)
 <!-- backlinks:end -->

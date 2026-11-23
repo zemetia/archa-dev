@@ -25,7 +25,7 @@ export function ComponentRow({ node: n }: { node: Node }) {
       <div className="border-b border-line px-4 py-2.5">
         <div className="mb-2 truncate text-[11.5px] text-fg-muted">Instance of <span className="text-accent-fg">{m?.name ?? 'a deleted component'}</span></div>
         <div className="grid grid-cols-3 gap-1.5">
-          <button disabled={!m} className={smallBtn} title="Copy the main's current look onto this instance" onClick={() => run('Sync instance', () => syncInstanceOps(doc, n.id))}><RefreshCw size={12} />Reset</button>
+          <button disabled={!m} className={smallBtn} title="Drop this instance's own changes and take the main's look again" onClick={() => run('Reset instance', () => syncInstanceOps(doc, n.id, { reset: true }))}><RefreshCw size={12} />Reset</button>
           <button disabled={!m} className={smallBtn} onClick={() => m && revealNode(m.id)}><Crosshair size={12} />Main</button>
           <button className={smallBtn} onClick={() => run('Detach instance', () => detachOps(doc, n.id))}><Unlink size={12} />Detach</button>
         </div>
@@ -38,7 +38,7 @@ export function ComponentRow({ node: n }: { node: Node }) {
       <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
         <Component size={14} className="shrink-0 text-accent-fg" />
         <span className="min-w-0 flex-1 truncate text-[11.5px] text-fg-muted">Component · {count} instance{count === 1 ? '' : 's'}</span>
-        <button disabled={!count} className={smallBtn} title="Push this main's changes to every instance"
+        <button disabled={!count} className={smallBtn} title="Push this main's changes to every instance (their own edits stay)"
           onClick={() => run('Sync instances', () => instancesOf(doc, n.id).flatMap((i) => syncInstanceOps(doc, i.id)))}><RefreshCw size={12} />Sync</button>
       </div>
     );

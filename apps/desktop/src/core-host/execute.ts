@@ -1,11 +1,11 @@
 import { getQuickJS, shouldInterruptAfterDeadline, type QuickJSContext, type QuickJSWASMModule } from 'quickjs-emscripten';
 import {
-  alignOps, applyOps, contextOf, distributeOps, DocumentError, findEmptySpace, insertOpsFor, outline, wrapOps, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, subtreeInput, syncInstanceOps,
+  alignOps, applyOps, bindTokens, boundTo, contextOf, distributeOps, DocumentError, findEmptySpace, findVariable, insertOpsFor, outline, wrapOps, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, setPropsOps, subtreeInput, syncInstanceOps,
   type ArchaDocument, type DocumentSession,
 } from '@archa/core';
 import { CUSTOM_SET, customIconNode, getIcon, ICON_SETS, iconNode, iconSetMeta, loadAllIconSets, loadedIconSet, parseIconRef, searchIcons, searchNames } from '@archa/icons';
 import { importSvg, isSvgMarkup, type SvgImportMode } from '@archa/formats';
-import { colorToHex, hexToColor, isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
+import { paintColor, colorToHex, hexToColor, isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
 import type { ExecuteResult, TrailAction, TrailStep } from '@archa/protocol';
 import type { Connection, Workspace } from './workspace';
 
@@ -29,9 +29,13 @@ var getSelection = () => __call('selection', []);
 var findEmptySpace = (width, height) => __call('space', [width, height]);
 var screenshot = (ref, opts) => __call('screenshot', [ref, opts || {}]);
 var components = () => __call('components', []);
-var makeComponent = (ref, description) => __call('makeComponent', [ref, description || '']);
+var makeComponent = (ref, description, opts) => __call('makeComponent', [ref, description || '', opts || {}]);
 var instance = (component, parent, opts) => __call('instance', [component, parent, opts || {}]);
 var syncInstances = (component) => __call('syncInstances', [component]);
+var setProps = (ref, values) => __call('setProps', [ref, values || {}]);
+var resetInstance = (ref) => __call('resetInstance', [ref]);
+var bind = (ref, map) => __call('bind', [ref, map || {}]);
+var unbind = (ref, paths) => __call('unbind', [ref, paths === undefined ? null : [].concat(paths)]);
 var copy = (ref, parent, opts) => __call('copy', [ref, parent, opts || {}]);
 var fromLibrary = (ref, parent, opts) => __call('fromLibrary', [ref, parent, opts || {}]);
 var variables = () => __call('variables', []);
@@ -55,6 +59,8 @@ var find = (visitor, opts) => {
 
 type Pending = { code: string; createdAt: number };
 export type ImagePlacement = {
+  /** Put the picture into this layer's fills instead of placing a new image layer. */
+  fillOf?: string;
   parent?: string; x?: number; y?: number; width?: number; height?: number; index?: number;
   name?: string; fit?: 'crop' | 'fit' | 'fill'; cornerRadius?: number; naturalWidth?: number; naturalHeight?: number;
 };
@@ -210,7 +216,7 @@ export class AgentExecutor {
           st.output.push('insert: that text was SVG markup, so it was placed as a drawing — use svg(markup, parent, opts) for SVG');
           return this.hostCall('svg', [text, parentId, { name: n, x, y, index }]);
         }
-        const { ops, rootId, created } = insertOpsFor(input, parentId, index ?? undefined);
+        const { ops, rootId, created } = insertOpsFor(withTokens(doc, input), parentId, index ?? undefined);
         commit(ops);
         st.created.push(...created);
         step('create', rootId);
@@ -227,7 +233,13 @@ export class AgentExecutor {
         // `context` is the person's note on the layer (design panel → Context); it lives in meta, next to component data.
         if ('context' in patch) { merged.meta = { ...cur.meta, ...(merged.meta as object | undefined), context: String(patch.context ?? '') }; delete merged.context; }
         else if (merged.meta && typeof merged.meta === 'object') merged.meta = { ...cur.meta, ...(merged.meta as object) };
-        const norm = normaliseInput({ ...merged, type: cur.type });
+        // "$color/accent" values bind the property to that token; bindings of replaced properties go.
+        const tokened = bindTokens(doc, merged, tokenHex);
+        if (tokened.bindings) {
+          const kept = Object.fromEntries(Object.entries(cur.bindings ?? {}).filter(([path]) => !(path.split('.')[0]! in patch)));
+          tokened.bindings = { ...kept, ...(tokened.bindings as Record<string, string>) };
+        }
+        const norm = normaliseInput({ ...tokened, type: cur.type });
         delete norm.type;
         if (!('name' in patch)) delete norm.name;
         commit([{ op: 'update', id, patch: norm }]);
@@ -281,14 +293,22 @@ export class AgentExecutor {
         return listComponents(doc);
       case 'makeComponent': {
         const id = ref(args[0]);
-        commit(makeComponentOps(doc, id, String(args[1] ?? '')));
+        const opts = (args[2] ?? {}) as { props?: Record<string, { type: 'text' | 'boolean'; node: string }>; set?: string; variant?: Record<string, string> };
+        const props = opts.props ? Object.fromEntries(Object.entries(opts.props).map(([k, v]) => [k, { type: v.type, node: ref(v.node) }])) : undefined;
+        commit(makeComponentOps(doc, id, String(args[1] ?? ''), { props, set: opts.set, variant: opts.variant }));
         st.changed.set(id, doc.require(id).name);
         step('edit', id);
         return id;
       }
       case 'instance': {
-        const [c, parent, opts] = args as [string, string | null | undefined, { x?: number; y?: number; index?: number; name?: string }];
+        const [c, parent, opts] = args as [string, string | null | undefined, { x?: number; y?: number; index?: number; name?: string; props?: Record<string, string | boolean> }];
         const main = ref(c);
+        // Props may name a variant ("size: lg"): place the right main, then set the rest.
+        if (opts?.props && Object.keys(opts.props).length) {
+          const id = this.hostCall('instance', [c, parent, { ...opts, props: undefined }]) as string;
+          this.hostCall('setProps', [id, opts.props]);
+          return id;
+        }
         const { ops, rootId, created } = instanceOps(doc, main, parent ? ref(parent) : st.pageRoot, opts ?? {});
         step('focus', main);
         commit(ops);
@@ -337,8 +357,45 @@ export class AgentExecutor {
         for (const inst of list) { commit(syncInstanceOps(doc, inst.id)); st.changed.set(inst.id, inst.name); step('edit', inst.id); }
         return list.length;
       }
+      case 'setProps': {
+        const id = ref(args[0]);
+        commit(setPropsOps(doc, id, (args[1] ?? {}) as Record<string, string | boolean>));
+        st.changed.set(id, doc.require(id).name);
+        step('edit', id);
+        return null;
+      }
+      case 'resetInstance': {
+        const id = ref(args[0]);
+        commit(syncInstanceOps(doc, id, { reset: true }));
+        st.changed.set(id, doc.require(id).name);
+        step('edit', id);
+        return null;
+      }
+      case 'bind': {
+        const id = ref(args[0]);
+        const cur = doc.require(id);
+        const bindings: Record<string, string> = { ...cur.bindings };
+        for (const [path, name] of Object.entries((args[1] ?? {}) as Record<string, string>)) {
+          const v = findVariable(doc, String(name));
+          if (!v) throw new Error(`bind: no variable "${String(name)}" — variables: ${[...doc.variables.values()].map((x) => x.name).slice(0, 30).join(', ') || 'none (setVariable first)'}`);
+          bindings[BIND_ALIASES[path] ?? path] = v.id;
+        }
+        commit([{ op: 'update', id, patch: { bindings } }]);
+        st.changed.set(id, cur.name);
+        step('edit', id);
+        return null;
+      }
+      case 'unbind': {
+        const id = ref(args[0]);
+        const cur = doc.require(id);
+        const paths = args[1] as string[] | null;
+        const bindings = Object.fromEntries(Object.entries(cur.bindings ?? {}).filter(([path]) => paths && !paths.map((x) => BIND_ALIASES[x] ?? x).includes(path)));
+        commit([{ op: 'update', id, patch: { bindings: Object.keys(bindings).length ? bindings : undefined } }]);
+        st.changed.set(id, cur.name);
+        return null;
+      }
       case 'variables':
-        return [...doc.variables.values()].map((v) => ({ name: v.name, type: v.type, value: v.type === 'color' ? colorToHex(v.value, true) : v.value }));
+        return [...doc.variables.values()].map((v) => ({ name: v.name, type: v.type, value: v.type === 'color' ? colorToHex(v.value, true) : v.value, bound: boundTo(doc, v.id).length }));
       case 'setVariable': {
         const [name, value] = args as [string, unknown];
         if (!name) throw new Error('setVariable(name, value): name is required');
@@ -408,6 +465,19 @@ export class AgentExecutor {
         const [key, o] = args as [string, ImagePlacement];
         const src = this.blobs.get(key);
         if (!src) throw new Error('That image is no longer available — call place_image again.');
+        if (o.fillOf) {
+          // A picture fill under the layer's gradients (scrims stay on top); solid fills give way to it.
+          const id = ref(o.fillOf);
+          const target = doc.require(id);
+          if (!('fills' in target)) throw new Error(`place_image fillOf: "${target.name}" is a ${target.type} and has no fills`);
+          const fit = o.fit ?? 'crop';
+          const fills = [{ type: 'image' as const, src, fit, scale: 1, opacity: 1, visible: true }, ...target.fills.filter((f) => f.type !== 'solid' && f.type !== 'image')];
+          commit([{ op: 'update', id, patch: { fills } }]);
+          st.changed.set(id, target.name);
+          st.output.push(`image: placed as the picture fill of "${target.name}" (fit ${fit}); its gradients stay on top`);
+          step('edit', id);
+          return id;
+        }
         const parentId = o.parent ? ref(o.parent) : st.pageRoot;
         const nw = o.naturalWidth || 300, nh = o.naturalHeight || 200;
         let w = Number(o.width) || 0, h = Number(o.height) || 0;
@@ -483,11 +553,24 @@ function finishTrail(doc: ArchaDocument, steps: TrailStep[]): TrailStep[] {
   return list.length <= MAX ? list : Array.from({ length: MAX }, (_, i) => list[Math.round((i * (list.length - 1)) / (MAX - 1))]!);
 }
 
+const tokenHex = (v: { value: Parameters<typeof colorToHex>[0] }) => colorToHex(v.value, true);
+
+/** Agent-friendly binding names → property paths. */
+const BIND_ALIASES: Record<string, string> = { fill: 'fills.0.color', color: 'fills.0.color', stroke: 'strokes.0.color', radius: 'cornerRadius', spacing: 'gap' };
+
+/** `"$token"` values in a node input (and its inline children) → literal values + bindings. */
+function withTokens(doc: ArchaDocument, input: NodeInput): NodeInput {
+  const out = bindTokens(doc, input as Record<string, unknown>, tokenHex) as NodeInput;
+  if (Array.isArray(input.children)) out.children = input.children.map((c) => withTokens(doc, c));
+  return out;
+}
+
 /** Readable ink for content placed in `parentId`: light on dark fills (or the dark page), dark on light. */
 function inkFor(doc: ArchaDocument, parentId: string): string {
   for (let n = doc.get(parentId); n; n = n.parentId ? doc.get(n.parentId) : undefined) {
-    const fill = 'fills' in n ? n.fills.filter((f) => f.visible && f.color.a > 0.3).at(-1) : undefined;
-    if (fill) return fill.color.l < 0.6 ? '#f4f4f5' : '#18181b';
+    // The topmost paint that is not see-through decides; a photo is read as dark (scrims usually darken it).
+    const fill = 'fills' in n ? n.fills.filter((f) => f.visible && (f.type === 'image' || (paintColor(f)?.a ?? 0) > 0.3)).at(-1) : undefined;
+    if (fill) return (paintColor(fill)?.l ?? 0) < 0.6 ? '#f4f4f5' : '#18181b';
   }
   return '#d4d4d8';
 }
@@ -595,8 +678,8 @@ function describeVariables(doc: ArchaDocument): string[] {
   const vars = [...doc.variables.values()];
   if (!vars.length) return [];
   return [
-    `Variables (${vars.length}) — the document's design tokens; use these values instead of inventing new ones:`,
-    ...vars.slice(0, 60).map((v) => `  - ${v.name} (${v.type}) = ${v.type === 'color' ? colorToHex(v.value, true) : JSON.stringify(v.value)}`),
+    `Variables (${vars.length}) — the document's design tokens; use them as "$name" values (fills: ["$color/accent"], cornerRadius: "$radius/md") so the design follows the token:`,
+    ...vars.slice(0, 60).map((v) => `  - ${v.name} (${v.type}) = ${v.type === 'color' ? colorToHex(v.value, true) : JSON.stringify(v.value)}${boundTo(doc, v.id).length ? ` · bound by ${boundTo(doc, v.id).length}` : ''}`),
   ];
 }
 
@@ -619,7 +702,11 @@ function describeComponents(doc: ArchaDocument): string[] {
   if (!list.length) return ['Components: none yet. When you build something that repeats (button, card, nav item, list row), makeComponent() it and reuse it with instance().'];
   return [
     `Components (${list.length}) — reuse with instance(id, parent); never rebuild them by hand:`,
-    ...list.slice(0, 40).map((c) => `  - ${c.name} "${c.id}" ${c.width}×${c.height} · ${c.instances} instance${c.instances === 1 ? '' : 's'}${c.description ? ` · ${c.description}` : ''}`),
+    ...list.slice(0, 40).map((c) => {
+      const props = Object.entries(c.props).map(([k, t]) => `${k}:${t}`);
+      const variant = c.set ? ` · variant of "${c.set}" ${Object.entries(c.variant).map(([k, v]) => `${k}=${v}`).join(' ')}` : '';
+      return `  - ${c.name} "${c.id}" ${c.width}×${c.height} · ${c.instances} instance${c.instances === 1 ? '' : 's'}${variant}${props.length ? ` · props ${props.join(', ')}` : ''}${c.description ? ` · ${c.description}` : ''}`;
+    }),
   ];
 }
 
