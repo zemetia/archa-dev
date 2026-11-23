@@ -3,7 +3,7 @@
  * pre-loaded into chat runs (blueprint MCP/04). All text is ours — written for ArchaDev's API.
  */
 
-export type GuideTopic = 'process' | 'layout' | 'taste' | 'type-color' | 'components' | 'icons' | 'svg' | 'social' | 'landing' | 'web-app' | 'mobile';
+export type GuideTopic = 'process' | 'layout' | 'effects' | 'taste' | 'type-color' | 'components' | 'icons' | 'svg' | 'social' | 'landing' | 'web-app' | 'mobile';
 
 export const GUIDES: Record<GuideTopic, { title: string; when: string; body: string }> = {
   process: {
@@ -24,10 +24,23 @@ export const GUIDES: Record<GuideTopic, { title: string; when: string; body: str
 - Screen widths: desktop 1440, laptop 1280, tablet 834, mobile 390. Height: sizing.vertical "hug" so the screen grows with content.
 - A section = full-width frame (sizing.horizontal "fill") with padding 64-120 vertical, then an inner "Container" frame with fixed width (1120-1200) centred via the parent's align:"center".
 - Rows of equal cards: parent layout "row", gap 24; each card sizing.horizontal "fill" so they share width.
+- More cards than fit in one row (features, pricing, gallery, logos, product list): a GRID — parent layout "row", wrap 3 (or columns: 3), gap 24, lineGap 24-32, cards sizing.horizontal "fill". The 4th card starts the second row by itself; never build rows by hand or compute x/y.
 - Text that wraps: textSizing "auto-height" + sizing.horizontal "fill" (or a fixed width). Short labels: "auto-width".
 - Buttons: frame layout "row", align "center", justify "center", padding {top:12,right:20,bottom:12,left:20}, sizing "hug".
 - Spacing scale only: 4, 8, 12, 16, 24, 32, 48, 64, 96. Inner gaps smaller than outer gaps.
 WRONG: x/y inside an auto-layout frame (ignored) · "fill" in a layout:"none" parent · fixed heights on text containers (clips) · 1px off-scale gaps.`,
+  },
+  effects: {
+    title: 'Depth: glass, gradients, rich text',
+    when: 'heroes, navs over images, cards with depth, headlines',
+    body: `- Glass (frosted, blurred, "kaca") nav / card / panel: the layer must sit OVER something (photo, gradient, content) and have a see-through fill.
+  { fills: ["#ffffff1f"], strokes: [{ color: "#ffffff33", width: 1 }], backdropBlur: 16, cornerRadius: 16 } — dark: fills ["#0b0b0e80"]. A nav over a hero: insert it inside the hero with absolute: true, x/y at the top.
+  backdropBlur 12-24; it does nothing on an opaque fill (lint effect/blur-hidden). blur: 8 blurs the layer itself (soft glows, out-of-focus shapes).
+- Photo with text on top: the photo is the frame's own fill (place_image { fillOf: frame }) and a scrim gradient above it: fills [image, { type: "linear-gradient", angle: 180, stops: ["#00000000", "#000000b3"] }]. Never stack translucent rects as a fake gradient.
+- Gradients: { type: "linear-gradient", angle, stops } or "radial-gradient" (glow spots: radial with an accent stop fading to transparent). Keep them subtle: two or three close hues.
+- Two-tone or mixed headline ("Design faster" with "faster" in accent or italic serif) = ONE text node with spans, never two text nodes side by side.
+- Colours that come from the palette: write "$color/accent" so the design follows the token.
+- Shadows: one soft drop-shadow on floating things only ({ type: "drop-shadow", y: 8, blur: 24, color: "#0000001f" }).`,
   },
   taste: {
     title: 'Taste: avoid generic output',
@@ -54,8 +67,9 @@ Every text node needs fills — text has no colour by default.`,
     title: 'Components',
     when: 'anything that repeats',
     body: `- Check the Components and Library lists in the state first; place existing ones with instance(id, parent) or fromLibrary(ref, parent).
-- Build a component once, inside the first screen that needs it, then makeComponent(frame, "one-line purpose"). Place more with instance(); override text with update() on the instance's text child.
-- To change every copy: edit the main, then syncInstances(main).
+- Build a component once, inside the first screen that needs it, then makeComponent(frame, "one-line purpose", { props: { label: { type: "text", node: labelId } } }). Place more with instance(id, parent, { props: { label: "…" } }) or setProps(instance, { label }).
+- Variants (size, tone, state): build each main, makeComponent(..., { set: "Button", variant: { size: "lg" } }); switch a copy with setProps(copy, { size: "sm" }).
+- To change every copy: edit the main, then syncInstances(main) — edits made on single copies stay.
 - Good candidates: Button (primary/secondary), Input, Nav item, Card, List row, Badge, Avatar, Tab, Table row.`,
   },
   icons: {
@@ -128,6 +142,7 @@ export function guideText(topic: string): string {
 }
 
 const KEYWORDS: Array<[GuideTopic, RegExp]> = [
+  ['effects', /\b(glass|glassy|frosted|blur|blurred|kaca|buram|backdrop|gradients?|gradien|scrim|overlay|two-tone|dua warna)\b/i],
   ['landing', /\b(landing|hero|marketing|website|homepage|home page|pricing|waitlist|portfolio|company profile|saas site)\b/i],
   ['web-app', /\b(dashboard|admin|analytics|table|crm|settings page|web ?app|saas|console|form|kanban|inbox|sidebar)\b/i],
   ['mobile', /\b(mobile|phone|ios|android|app screen|onboarding|splash|tab bar)\b/i],
@@ -143,5 +158,5 @@ export function guidesFor(request: string): GuideTopic[] {
 }
 
 /** Guides every design run needs, sent once in the (cached) system prompt so the agent never has to fetch them. */
-export const CORE_GUIDE_TOPICS: GuideTopic[] = ['process', 'layout', 'taste', 'type-color', 'components', 'icons'];
+export const CORE_GUIDE_TOPICS: GuideTopic[] = ['process', 'layout', 'effects', 'taste', 'type-color', 'components', 'icons'];
 export const CORE_GUIDES = CORE_GUIDE_TOPICS.map((t) => guideText(t)).join('\n\n');

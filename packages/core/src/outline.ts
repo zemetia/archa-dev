@@ -27,6 +27,7 @@ export function describeNode(doc: ArchaDocument, n: Node): string {
       const p = n.padding;
       const pad = p.top === p.bottom && p.left === p.right ? (p.top === p.left ? `${p.top}` : `${p.top} ${p.left}`) : `${p.top} ${p.right} ${p.bottom} ${p.left}`;
       parts.push(`${n.layout} gap ${n.gap} pad ${pad} align ${n.align} justify ${n.justify}`);
+      if (n.wrap > 0) parts.push(`grid ${n.wrap} per ${n.layout === 'row' ? 'row' : 'column'}${n.lineGap !== null ? ` lineGap ${n.lineGap}` : ''}`);
     }
     if (!n.clip) parts.push('no clip');
   }

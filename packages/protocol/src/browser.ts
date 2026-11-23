@@ -82,7 +82,7 @@ export const placeImageInputShape = {
 export const placeImageSchema = z.object({ docId: z.string().optional(), ...placeImageInputShape });
 export type PlaceImageParams = z.infer<typeof placeImageSchema>;
 
-export const PLACE_IMAGE_DOC = 'Put a real picture (photo, logo, screenshot) on the canvas as an image layer: from an http(s) URL, a data: URL, a local file, or an image on the open browser page (ref/selector; capture:true for a screenshot of the element). ArchaDev downloads it with the browser\'s session, saves the file, and replies like execute (id, screenshot, issues). Use the original, large file — not a search thumbnail.';
+export const PLACE_IMAGE_DOC = 'Put a real picture (photo, logo, screenshot) on the canvas as an image layer: from an http(s) URL, a data: URL, a local file, or an image on the open browser page (ref/selector; capture:true for a screenshot of the element). ArchaDev downloads it with the browser\'s session, saves the file, and replies like execute (id, screenshot, issues). Use the original, large file — not a search thumbnail. For a background photo (hero, card cover) pass fillOf: <frame> — the picture becomes the fill of that frame, under its gradients, so text and a scrim can sit on it.';
 
 /** A downloaded image (blueprint BROWSER, "Images"): where it was saved, and a canvas-ready copy. */
 export type BrowserImage = {

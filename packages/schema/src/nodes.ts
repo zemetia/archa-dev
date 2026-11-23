@@ -120,7 +120,9 @@ export const frameNodeSchema = z.object({
   gap: z.number().min(0).default(0),
   padding: paddingSchema.default({ top: 0, right: 0, bottom: 0, left: 0 }),
   align: z.enum(['start', 'center', 'end']).default('start').describe('Cross-axis alignment'),
-  justify: z.enum(['start', 'center', 'end', 'space-between', 'space-around']).default('start').describe('Main-axis distribution'),
+  justify: z.enum(['start', 'center', 'end', 'space-between', 'space-around']).default('start').describe('Main-axis distribution (in a grid: where an item sits in its cell)'),
+  wrap: z.number().int().min(0).max(100).default(0).describe('Grid: at most this many items per line, then a new line (row layout: columns per row; column layout: items per column). 0 = one line'),
+  lineGap: z.number().min(0).nullable().default(null).describe('Grid: space between lines (row gap of a row grid); null = same as gap'),
 });
 
 export const groupNodeSchema = z.object({ ...base, ...container, type: z.literal('group') });

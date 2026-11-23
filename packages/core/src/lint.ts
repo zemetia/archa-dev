@@ -50,6 +50,14 @@ function check(doc: ArchaDocument, n: Node, issues: Issue[]) {
     }
   }
 
+  // Frosted glass only shows through a see-through fill.
+  if (hasVisual(n) && n.effects.some((e) => e.visible && e.type === 'background-blur' && e.radius > 0)) {
+    const fills = n.fills.filter((f) => f.visible);
+    const solid = fills.some((f) => f.type === 'image' || (paintColor(f)?.a ?? 0) >= 0.95);
+    if (!fills.length || solid) push(issues, n, 'effect/blur-hidden', fills.length ? 'background-blur is hidden behind an opaque fill' : 'background-blur has no fill to show through', 'give it a translucent fill, e.g. fills: ["#ffffff26"] (dark glass "#0b0b0e66"), and keep something behind it');
+  }
+  if (n.type === 'frame' && n.wrap > 0 && n.layout === 'none') push(issues, n, 'layout/grid-no-layout', `wrap ${n.wrap} has no effect: layout is "none"`, 'set layout "row" (columns) or "column" (rows), or use columns: N');
+
   if (parent?.type === 'page' && n.type === 'frame' && isContainer(parent)) {
     for (const otherId of parent.children) {
       if (otherId === n.id) continue;

@@ -17,7 +17,8 @@ A narrow layout vocabulary is a quality mechanism: it removes whole classes of b
 | `padding` | `{ top, right, bottom, left }` numbers \| vars |
 | `align` (cross axis) | `start` \| `center` \| `end` |
 | `justify` (main axis) | `start` \| `center` \| `end` \| `space-between` \| `space-around` (half gaps at the ends; format 3) |
-| `wrap` | boolean (row only) |
+| `wrap` | number — grid: at most N items per line, then a new line (row: N columns; column: N per column). 0 = one line (D-12) |
+| `lineGap` | number \| null — space between grid lines; null = `gap` |
 | `clip` | boolean |
 
 | Property (on any child) | Values |
@@ -26,7 +27,9 @@ A narrow layout vocabulary is a quality mechanism: it removes whole classes of b
 | `minWidth` `maxWidth` `minHeight` `maxHeight` | number |
 | `absolute` | boolean — opt out of parent layout, keep x/y |
 
-Not supported, by design: percentages, margins, `stretch`/`baseline` alignment, grid. Grids are rows of frames.
+Not supported, by design: percentages, margins, `stretch`/`baseline` alignment, grid areas and spans.
+
+**Grid (built, `layoutGrid` in `core/src/layout.ts`):** tracks are equal shares of a fixed/fill frame (`repeat(N, minmax(0, 1fr))`) or as wide as their widest item when the frame hugs (`repeat(N, auto)`); a line is as deep as its deepest item; `fill` children take their cell, others sit in it by `justify` / `align`. Input spellings `columns`, `rows`, `gridTemplateColumns`, `layout: "grid"`, `rowGap`, `columnGap` normalise to `wrap` / `lineGap` (`factory.ts`). HTML export prints CSS grid.
 
 ---
 
@@ -79,5 +82,5 @@ Ops only; the panel, CLI and `execute` commit them.
 
 **Linked from:** [APP_UI/04](../APP_UI/04-design-panel.md) · [DOCUMENT_MODEL/01](./01-nodes-properties.md)
 
-**Code:** [`packages/core/src/arrange.ts`](../../../packages/core/src/arrange.ts) · [`packages/core/src/layout.ts`](../../../packages/core/src/layout.ts) · [`packages/core/test/arrange.test.ts`](../../../packages/core/test/arrange.test.ts) · [`packages/core/test/core.test.ts`](../../../packages/core/test/core.test.ts)
+**Code:** [`packages/core/src/arrange.ts`](../../../packages/core/src/arrange.ts) · [`packages/core/src/layout.ts`](../../../packages/core/src/layout.ts) · [`packages/core/test/arrange.test.ts`](../../../packages/core/test/arrange.test.ts) · [`packages/core/test/core.test.ts`](../../../packages/core/test/core.test.ts) · [`packages/core/test/grid.test.ts`](../../../packages/core/test/grid.test.ts)
 <!-- backlinks:end -->

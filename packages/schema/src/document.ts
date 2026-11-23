@@ -5,7 +5,7 @@ import type { Comment, Variable } from './variables';
 /**
  * 2: polygon, path, image, sticky and embed nodes; document variables and comments.
  * 3: inner-shadow, layer-blur and background-blur effects; justify "space-around".
- * 4: gradient and image paints, rich-text spans, token bindings (`node.bindings`).
+ * 4: gradient and image paints, rich-text spans, token bindings (`node.bindings`), grid frames (`wrap`, `lineGap`).
  */
 export const FORMAT_VERSION = 4;
 

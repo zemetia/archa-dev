@@ -10,6 +10,8 @@ All notable changes to this project are documented in this file, following [Keep
 - **Tokens bound to layers**: write `"$color/accent"` (or `bind()`) and the property follows the variable; changing the token restyles every bound layer in one undoable step. HTML export prints them as CSS variables.
 - **Components v2**: edits made on an instance survive a sync; components get text / boolean props and variant sets (`setProps(button, { label: "Buy", size: "lg" })`); Reset drops an instance's own changes.
 - **Built-in fonts**: Inter, Inter Tight, Geist, Geist Mono, DM Sans, Manrope, Plus Jakarta Sans, Space Grotesk, Outfit, Sora, Instrument Sans/Serif, Bricolage Grotesque, Fraunces, Playfair Display and JetBrains Mono ship with the app and draw the same on every machine.
+- **Grids**: frames take `wrap` (items per line) — 6 cards in a 3-column frame become two rows by themselves, like CSS `grid-template-columns: repeat(3, 1fr)`; `lineGap` sets the space between rows. Agents can write `columns: 3`, `gridTemplateColumns` or `rowGap`. Exports as CSS grid; the Auto layout panel has a Cols/Rows field.
+- **Glass that agents actually use**: frosted-glass (background blur) is now in the agents' core guide with a recipe, takes CSS-like shorthands (`backdropBlur: 16`, `backdropFilter: "blur(16px)"`), and a lint warns when the glass fill is opaque.
 - `.archa` format 4 (older files open unchanged).
 
 ## [1.5.0] - 2026-11-21

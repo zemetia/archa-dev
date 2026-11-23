@@ -8,6 +8,10 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-23] - Owner: "backdrop blur exists but the AI doesn't know it" — the feature was in the code and one terse line of the execute doc, so agents never reached for it - Added an `effects` core guide with a recipe, CSS-like input shorthands, a lint that names the fix, then checked with a real chat run that the agent builds a glass nav unprompted - A feature agents should use is done only when a live agent run uses it without being told the API name; one line in a long API list is not enough.
+
+[2026-11-23] - First live chat check in a fresh worktree: the agent said "archadev MCP connection closed" and built nothing - The agent's MCP server is the CLI bundle `apps/cli/dist/archa.cjs`, which a new worktree does not have; built it with `corepack pnpm@9.15.0 --filter @archa/cli build` - Build the CLI before any live agent test in a new worktree.
+
 [2026-11-21] - Owner asked for 4:5 Instagram content and got web-style slides (48px titles, 18px text, badge rows, empty card grids); they could not find the Instagram skill at all - design-social was written HTML-first (one line about the canvas), `/` matched only skill names, and no guide covered social posts, so in-app agents fell back to web/slide sizes and the lint flagged every bleed and sticker as an error - Added the `social` guide (auto-loaded), a canvas-first section + checked canvas example, description search in `/`, backdrop-aware contrast - A skill is only as good as the path to it inside the app: check it is findable from the composer, written for the canvas, and that lint does not punish what it teaches. Look at the agent's real output, not just the skill text.
 
 

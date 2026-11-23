@@ -82,6 +82,7 @@ function sizeText(node: TextNode, forcedWidth?: number) {
 }
 
 function layoutFrame(doc: ArchaDocument, frame: FrameNode) {
+  if (frame.wrap > 0) return layoutGrid(doc, frame);
   const row = frame.layout === 'row';
   const kids = doc.children(frame.id).filter((c) => c.visible && !c.absolute);
   const main = (n: Node) => (row ? n.width : n.height);
@@ -153,6 +154,76 @@ function layoutFrame(doc: ArchaDocument, frame: FrameNode) {
   function setCross(n: Mutable, v: number) { if (row) n.height = round(v); else n.width = round(v); }
   function setMainOf(n: Mutable, v: number) { setMain(n, v); }
   function setCrossOf(n: Mutable, v: number) { setCross(n, v); }
+}
+
+/**
+ * Grid (blueprint DOCUMENT_MODEL/03 → Grid): `wrap` items per line, then a new line — CSS
+ * `grid-template-columns: repeat(wrap, 1fr)` for a row layout, `grid-auto-flow: column` with
+ * `wrap` rows for a column layout. Tracks are equal shares of a fixed/fill frame, or as wide as
+ * their widest item in a hugging frame. A line is as tall as its tallest item; `fill` children take
+ * their cell, the others sit in it by justify (main axis) and align (cross axis).
+ */
+function layoutGrid(doc: ArchaDocument, frame: FrameNode) {
+  const row = frame.layout !== 'column';
+  const per = frame.wrap;
+  const kids = doc.children(frame.id).filter((c) => c.visible && !c.absolute);
+  const main = (n: Node) => (row ? n.width : n.height);
+  const cross = (n: Node) => (row ? n.height : n.width);
+  const mainSizing = (n: Node) => (row ? n.sizing.horizontal : n.sizing.vertical);
+  const crossSizing = (n: Node) => (row ? n.sizing.vertical : n.sizing.horizontal);
+  const setMain = (n: Mutable, v: number) => { if (row) n.width = round(v); else n.height = round(v); };
+  const setCross = (n: Mutable, v: number) => { if (row) n.height = round(v); else n.width = round(v); };
+  const relayout = (k: Node) => {
+    if (k.type === 'text') sizeText(k, k.width);
+    if (k.type === 'frame' && k.layout !== 'none') layoutFrame(doc, k);
+  };
+  const p = frame.padding;
+  const padMainStart = row ? p.left : p.top, padMain = row ? p.left + p.right : p.top + p.bottom;
+  const padCrossStart = row ? p.top : p.left, padCross = row ? p.top + p.bottom : p.left + p.right;
+  const lineGap = frame.lineGap ?? frame.gap;
+  const f = frame as Mutable & FrameNode;
+  const cols = Math.max(1, Math.min(per, kids.length));
+  const lines: Node[][] = [];
+  for (let i = 0; i < kids.length; i += per) lines.push(kids.slice(i, i + per));
+
+  // Main-axis tracks: equal shares of a known size, else each as wide as its widest item.
+  let track: number[];
+  if (mainSizing(frame) === 'hug') {
+    track = Array.from({ length: cols }, (_, j) => Math.max(0, ...kids.filter((k, i) => i % per === j && mainSizing(k) !== 'fill').map(main)));
+    setMain(f, track.reduce((a, b) => a + b, 0) + frame.gap * (cols - 1) + padMain);
+  } else {
+    const share = Math.max(0, (main(frame) - padMain - frame.gap * (per - 1)) / per);
+    track = Array.from({ length: per }, () => share);
+  }
+  kids.forEach((k, i) => {
+    if (mainSizing(k) !== 'fill') return;
+    setMain(k as Mutable, track[i % per]!);
+    // Text in a row grid wraps at the cell width; its height follows.
+    if (row) relayout(k);
+  });
+  for (const k of kids) if (k.type === 'frame' && k.layout !== 'none' && mainSizing(k) === 'fill') layoutFrame(doc, k);
+
+  // Lines are as deep as their deepest item; cross-fill items stretch to their line.
+  const depth = lines.map((line) => Math.max(0, ...line.filter((k) => crossSizing(k) !== 'fill').map(cross)));
+  lines.forEach((line, l) => {
+    for (const k of line) if (crossSizing(k) === 'fill') { setCross(k as Mutable, depth[l]!); if (!row) relayout(k); else if (k.type === 'frame' && k.layout !== 'none') layoutFrame(doc, k); }
+  });
+  if (crossSizing(frame) === 'hug') setCross(f, depth.reduce((a, b) => a + b, 0) + lineGap * Math.max(0, lines.length - 1) + padCross);
+
+  let at = padCrossStart;
+  lines.forEach((line, l) => {
+    let x = padMainStart;
+    line.forEach((k, j) => {
+      const m = k as Mutable;
+      const w = track[j] ?? 0;
+      const free = Math.max(0, w - main(k)), crossFree = Math.max(0, depth[l]! - cross(k));
+      const mainPos = x + (frame.justify === 'center' ? free / 2 : frame.justify === 'end' ? free : 0);
+      const crossPos = at + (frame.align === 'center' ? crossFree / 2 : frame.align === 'end' ? crossFree : 0);
+      if (row) { m.x = round(mainPos); m.y = round(crossPos); } else { m.y = round(mainPos); m.x = round(crossPos); }
+      x += w + frame.gap;
+    });
+    at += depth[l]! + lineGap;
+  });
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;

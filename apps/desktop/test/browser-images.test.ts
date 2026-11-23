@@ -160,6 +160,18 @@ describe('place_image', () => {
     expect(String(await ws.handlers['agent.state']({ docId }, agent))).toMatch(/variant of "Button" size=lg · props label:text/);
   });
 
+  it('adds glass to a layer without dropping its shadow, and builds grids from columns', async () => {
+    const { ws, agent, docId } = setup();
+    const run = (code: string) => ws.handlers['agent.execute']({ docId, code }, agent);
+    await run(`insert(null, { type: 'frame', name: 'Nav', width: 400, height: 56, fills: ['#ffffff26'], effects: [{ type: 'shadow', y: 4, blur: 12 }] })`);
+    await run(`update('Nav', { backdropFilter: 'blur(20px)' })`);
+    await run(`insert(null, { type: 'frame', name: 'Grid', y: 100, columns: 2, gap: 8, sizing: 'hug', children: [1, 2, 3].map((i) => ({ type: 'rect', name: 'c' + i, width: 40, height: 40 })) })`);
+    const doc = ws.session(docId).doc;
+    const nav = doc.findByName('Nav')[0]!;
+    expect(nav.type === 'frame' && nav.effects.map((e) => e.type)).toEqual(['drop-shadow', 'background-blur']);
+    expect(doc.findByName('c3')[0]).toMatchObject({ x: 0, y: 48 });
+  });
+
   it('needs a source', async () => {
     const { ws, agent, docId } = setup();
     await expect(Promise.resolve().then(() => ws.handlers['agent.placeImage']({ docId }, agent))).rejects.toThrow(/needs url/);

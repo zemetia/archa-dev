@@ -239,8 +239,13 @@ export class AgentExecutor {
           const kept = Object.fromEntries(Object.entries(cur.bindings ?? {}).filter(([path]) => !(path.split('.')[0]! in patch)));
           tokened.bindings = { ...kept, ...(tokened.bindings as Record<string, string>) };
         }
-        const norm = normaliseInput({ ...tokened, type: cur.type });
+        // Shorthands that add to a list (backdropBlur → effects) keep the node's other effects; grid
+        // spellings need the current direction (rowGap means another gap in a column grid).
+        if (BLUR_KEYS.some((k) => k in patch) && !('effects' in patch) && 'effects' in cur) tokened.effects = cur.effects;
+        const hinted = cur.type === 'frame' && !('layout' in patch);
+        const norm = normaliseInput({ ...tokened, type: cur.type, ...(hinted ? { layout: cur.layout } : {}) });
         delete norm.type;
+        if (hinted && norm.layout === cur.layout) delete norm.layout;
         if (!('name' in patch)) delete norm.name;
         commit([{ op: 'update', id, patch: norm }]);
         st.changed.set(id, doc.require(id).name);
@@ -552,6 +557,8 @@ function finishTrail(doc: ArchaDocument, steps: TrailStep[]): TrailStep[] {
   const list = keep.length ? keep : out;
   return list.length <= MAX ? list : Array.from({ length: MAX }, (_, i) => list[Math.round((i * (list.length - 1)) / (MAX - 1))]!);
 }
+
+const BLUR_KEYS = ['backdropBlur', 'backgroundBlur', 'backdropFilter', 'glass', 'layerBlur', 'blur', 'filter'];
 
 const tokenHex = (v: { value: Parameters<typeof colorToHex>[0] }) => colorToHex(v.value, true);
 

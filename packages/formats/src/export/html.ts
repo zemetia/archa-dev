@@ -105,6 +105,7 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
   const el: El = { tag: 'div', cls: ctx.className(n.name), attrs: '', style: [], children: [] };
   const s = el.style;
   const flexParent = parent?.type === 'frame' && parent.layout !== 'none' && !n.absolute ? parent : null;
+  const gridParent = flexParent && flexParent.wrap > 0 ? flexParent : null;
 
   if (!parent) s.push(['position', 'relative']);
   else if (!flexParent) s.push(['position', 'absolute'], ['left', px(n.x)], ['top', px(n.y)]);
@@ -117,6 +118,12 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
   const autoH = (n.type === 'frame' && n.layout !== 'none' && n.sizing.vertical === 'hug') || (n.type === 'text' && n.textSizing !== 'fixed');
   for (const [axis, prop, auto] of [['horizontal', 'width', autoW], ['vertical', 'height', autoH]] as const) {
     const isMain = flexParent ? (flexParent.layout === 'row') === (axis === 'horizontal') : false;
+    // Grid cell: fill stretches across its track (horizontal) or line (vertical); other sizes stay fixed.
+    if (gridParent) {
+      if (n.sizing[axis] === 'fill') s.push([axis === 'horizontal' ? 'justify-self' : 'align-self', 'stretch']);
+      else if (!auto) s.push([prop, px(n[prop])]);
+      continue;
+    }
     if (flexParent && n.sizing[axis] === 'fill') {
       if (isMain) s.push(['flex', '1 1 0'], [`min-${prop}`, '0']);
       else s.push(['align-self', 'stretch']);
@@ -156,7 +163,20 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
 
   switch (n.type) {
     case 'frame':
-      if (n.layout !== 'none') {
+      if (n.layout !== 'none' && n.wrap > 0) {
+        // Grid: `wrap` tracks along the layout direction; equal shares unless the frame hugs.
+        const row = n.layout === 'row';
+        const hug = (row ? n.sizing.horizontal : n.sizing.vertical) === 'hug';
+        const tracks = `repeat(${n.wrap}, ${hug ? 'auto' : 'minmax(0, 1fr)'})`;
+        s.push(['display', 'grid'], [row ? 'grid-template-columns' : 'grid-template-rows', tracks]);
+        if (!row) s.push(['grid-auto-flow', 'column']);
+        const lineGap = n.lineGap ?? n.gap;
+        if (n.gap || lineGap) s.push([row ? 'column-gap' : 'row-gap', ctx.token(n, 'gap', px(n.gap))], [row ? 'row-gap' : 'column-gap', px(lineGap)]);
+        const p = n.padding;
+        if (p.top || p.right || p.bottom || p.left) s.push(['padding', [p.top, p.right, p.bottom, p.left].map(px).join(' ')]);
+        const place = (v: string) => (v === 'center' ? 'center' : v === 'end' ? 'end' : 'start');
+        s.push([row ? 'justify-items' : 'align-items', place(n.justify)], [row ? 'align-items' : 'justify-items', place(n.align)]);
+      } else if (n.layout !== 'none') {
         s.push(['display', 'flex'], ['flex-direction', n.layout]);
         if (n.gap) s.push(['gap', ctx.token(n, 'gap', px(n.gap))]);
         const p = n.padding;

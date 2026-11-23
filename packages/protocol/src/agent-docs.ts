@@ -46,9 +46,20 @@ Node props: name (always set one), x, y, width, height, visible, opacity, rotati
     | { type: "radial-gradient", center: { x, y }, radius: { x, y } (fractions of the box), stops } | { type: "image", src (data:/https URL), fit "crop"|"fit"|"fill"|"tile", opacity }.
     Photo with a scrim: fills [image, { type: "linear-gradient", angle: 180, stops: ["#00000000", "#000000b3"] }]. For a web photo use place_image { fillOf: frame } instead of src.
   strokes: ["#hex" | { color, width, align: "inside"|"center"|"outside" }],
-  effects: [{ type: "drop-shadow"|"inner-shadow", color, x, y, blur } | { type: "layer-blur"|"background-blur", radius }]   background-blur = frosted glass, needs a translucent fill
+  effects: [{ type: "drop-shadow"|"inner-shadow", color, x, y, blur } | { type: "layer-blur"|"background-blur", radius }]
+    GLASS (frosted / blurred nav, card or panel over a photo or gradient) = background-blur: it blurs whatever is BEHIND the layer, so give the layer a
+    see-through fill and put it over content: { fills: ["#ffffff1f"], strokes: [{ color: "#ffffff33", width: 1 }], backdropBlur: 16 } (dark glass fill "#0b0b0e80").
+    Shorthands: backdropBlur: 16 (= CSS backdrop-filter: blur(16px), also accepted) adds a background-blur; blur: 8 (= CSS filter: blur(8px)) blurs the layer itself.
+    Lint "effect/blur-hidden" means the glass fill is opaque or missing.
   frame: layout "none"|"row"|"column", gap, padding (number, [y, x], [t, r, b, l] or {top,right,bottom,left}), align (cross axis) "start"|"center"|"end",
     justify (main axis) "start"|"center"|"end"|"space-between"|"space-around", clip, cornerRadius. CSS names work too (alignItems, justifyContent, flexDirection, borderRadius).
+    GRID = wrap: N → at most N items per line, the next item starts a new line (like CSS grid-template-columns: repeat(N, 1fr)).
+      layout "row" + wrap 3 → 3 columns, rows added as needed (6 items = 2 rows, 7 items = 3 rows); layout "column" + wrap 3 → 3 per column, then a new column.
+      gap = space between items in a line, lineGap = space between lines (default = gap). Columns share the frame width equally (fixed/fill frame)
+      or are as wide as their widest item (hug frame); children with sizing.horizontal "fill" take the whole cell. justify/align place an item inside its cell.
+      Shorthands: columns: 3 (or gridTemplateColumns: "repeat(3, 1fr)", layout: "grid") = layout "row" + wrap 3; rows: 2 = layout "column" + wrap 2; rowGap / columnGap work.
+      Example card grid: insert(page, { type: "frame", name: "Features", layout: "row", columns: 3, gap: 24, rowGap: 32, sizing: { horizontal: "fill", vertical: "hug" },
+        children: items.map((t) => ({ type: "frame", name: t, layout: "column", padding: 24, sizing: { horizontal: "fill", vertical: "hug" }, children: [...] })) })
   rect: cornerRadius · polygon: sides (3+) · path: d (SVG path data), viewBox {x,y,width,height} stretched to width/height, fillRule, lineCap, lineJoin
   image: src (data: URL), fit "crop"|"fit"|"fill", cornerRadius · sticky: text, fontSize (a note on the canvas, not part of a screen) · embed: url (live web page on the canvas, for reference)
   connector: a line for flowcharts, workflows and page maps: start, end (a node id, or { nodeId, side: "auto"|"top"|"right"|"bottom"|"left" }, or a free point { x, y }),

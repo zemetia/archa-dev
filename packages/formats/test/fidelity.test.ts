@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { FORMAT_VERSION, hexToColor, type TextNode } from '@archa/schema';
-import { ArchaDocument, DocumentSession } from '@archa/core';
+import { ArchaDocument, DocumentSession, insertOpsFor } from '@archa/core';
 import { decodeArcha, encodeArcha, exportHtml, exportSvg } from '../src';
 
 /** The v4 fixture: a hero with a photo fill under a scrim, and a two-tone headline whose accent is a token. */
@@ -45,5 +45,16 @@ describe('format 4: paints, rich text, bindings', () => {
     const doc = new ArchaDocument(s.doc.toData());
     doc.nodes.set('hero000001', { ...doc.require('hero000001'), fills: [{ type: 'linear-gradient', angle: 90, stops: [{ position: 0, color: hexToColor('#000000') }, { position: 1, color: hexToColor('#ffffff') }], visible: true }] } as never);
     expect(exportSvg(doc, 'hero000001')).toContain('<linearGradient id="p-hero000001" x1="0" y1="0.5" x2="1" y2="0.5">');
+  });
+
+  it('exports a grid frame as CSS grid with cells that fill their track', () => {
+    const s = new DocumentSession(ArchaDocument.create('grid'));
+    const { ops, rootId } = insertOpsFor({ type: 'frame', name: 'Features', columns: 3, gap: 24, rowGap: 32, width: 900, sizing: { horizontal: 'fixed', vertical: 'hug' },
+      children: [1, 2, 3, 4].map((i) => ({ type: 'frame', name: `Card ${i}`, height: 120, sizing: { horizontal: 'fill', vertical: 'fixed' } })) } as never, s.doc.pages[0]!.rootId);
+    s.apply({ author: { kind: 'user', id: 'u' }, label: 'x', baseRevision: 0, ops });
+    expect(s.doc.children(rootId)[3]!.y).toBe(120 + 32);
+    const css = String(exportHtml(s.doc, rootId, { style: 'css' })[1]!.data);
+    expect(css).toMatch(/\.features \{[^}]*display: grid;[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);[^}]*column-gap: 24px;[^}]*row-gap: 32px;/s);
+    expect(css).toMatch(/\.card-1 \{[^}]*justify-self: stretch;[^}]*height: 120px;/s);
   });
 });
