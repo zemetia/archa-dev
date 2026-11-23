@@ -8,6 +8,8 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-23] - `reference` / `compare` passed in the dev app but hung in the packaged 1.6.0 build (300 s timeouts): the test window was hidden, so `requestAnimationFrame` never fired and pdf.js's display-intent `render()` waited forever - Render reference pages with `intent: 'print'` (no rAF pacing) - Anything the renderer does for an agent must work with the window minimised or hidden; smoke-test the packaged app with its window in the background before releasing.
+
 [2026-11-23] - The new `reference` tool passed its vitest test but failed in the app with "No GlobalWorkerOptions.workerSrc": in Electron's utility process pdf.js does not detect Node, so it wants a worker script - Point `workerSrc` at the legacy worker (`createRequire(...).resolve`); pdf.js then runs it in-process - Code that behaves differently by runtime (pdf.js, workers, fetch) must be run once in the real app process, not only in vitest.
 
 [2026-11-23] - A 1440×8698 landing screenshot as 7 PNG slices (~11 MB) closed the MCP connection: stdio clients drop messages over 10 MB (SDK default) - Inline slices as JPEG and a 6 MB per-reply budget (`INLINE_BUDGET`), with omitted slices counted and the full PNG on disk - "No size cap" applies to the file; anything inline must respect the transport's message limit. Test big replies through a real MCP client.

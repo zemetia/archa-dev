@@ -54,7 +54,9 @@ async function rasteriseNow(url: string, page: number, scale: number, width?: nu
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(vp.width);
     canvas.height = Math.round(vp.height);
-    await pg.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: vp }).promise;
+    // Print intent: pdf.js renders straight through instead of pacing itself with requestAnimationFrame,
+    // which never fires while the window is minimised or hidden — exactly when agents work unattended.
+    await pg.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: vp, intent: 'print' }).promise;
     return canvas;
   }
   const img = new Image();
