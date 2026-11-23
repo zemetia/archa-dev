@@ -30,6 +30,11 @@ export class DocumentSession {
   private listeners = new Set<SessionListener>();
   /** (nodeId) → revision of the last change, for rebasing stale transactions. */
   private lastChanged = new Map<string, number>();
+  /**
+   * Rewrites a transaction's ops before they apply — the core host moves data: images into the
+   * document's asset folder here, so listeners, undo and the file only ever see `asset:` sources.
+   */
+  transformOps: ((ops: Op[]) => Op[]) | null = null;
 
   constructor(data: DocumentData | ArchaDocument, filePath: string | null = null) {
     this.doc = data instanceof ArchaDocument ? data : new ArchaDocument(data);
@@ -48,6 +53,7 @@ export class DocumentSession {
   apply(txn: Omit<Transaction, 'id'> & { id?: string }, opts: { recordUndo?: boolean } = {}): Applied {
     if (txn.baseRevision > this.doc.revision) throw new DocumentError('STALE_REVISION', `baseRevision ${txn.baseRevision} is ahead of ${this.doc.revision}`);
     if (txn.baseRevision < this.doc.revision) this.assertRebaseable(txn);
+    if (this.transformOps) txn = { ...txn, ops: this.transformOps(txn.ops) };
     const { inverse, touched } = applyOps(this.doc, txn.ops);
     const txnId = txn.id ?? newId();
     this.doc.revision += 1;

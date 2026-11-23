@@ -8,6 +8,7 @@
 | [02 — `execute` API](./MCP/02-execute-api.md) | QuickJS sandbox, globals, mutation/read/output functions, limits, patch retry |
 | [03 — Response contract and lint](./MCP/03-response-contract-lint.md) | Reply skeleton, error format, lint rules, severities |
 | [04 — Local skill](./MCP/04-local-skill.md) | `skills/archadev/`, generated API reference, install per agent |
+| [05 — Reference and compare](./MCP/05-reference-compare.md) | Read a PDF/image mockup into numbers; visual diff of a build against it |
 
 ---
 

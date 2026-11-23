@@ -1,43 +1,12 @@
 import type { FrameNode, Node, TextNode } from '@archa/schema';
 import type { ArchaDocument } from './document';
+import { measureText } from './text';
 
 export type TextMeasure = (node: TextNode, maxWidth?: number) => { width: number; height: number };
 
-/** Relative advance per character class for a typical UI sans (Inter-like), in em. */
-function charEm(ch: string): number {
-  if (ch === ' ') return 0.27;
-  if ("il.,:;|!'`ìíîïj".includes(ch)) return 0.27;
-  if ('ftr()[]{}/\\-"'.includes(ch)) return 0.36;
-  if ('mwMW@%'.includes(ch)) return 0.86;
-  if (ch >= '0' && ch <= '9') return 0.58;
-  if (ch >= 'A' && ch <= 'Z') return 0.66;
-  return 0.54;
-}
-
-/**
- * Approximate text metrics so the core can lay out without a DOM (CLI, core host).
- * Word-wraps like the renderer; the renderer draws the real glyphs.
- */
-export const approxMeasure: TextMeasure = (node, maxWidth) => {
-  const weight = 1 + (node.fontWeight - 400) / 3000;
-  const width = (s: string) => [...s].reduce((w, ch) => w + charEm(ch) * node.fontSize * weight + node.letterSpacing, 0);
-  const lineH = node.fontSize * node.lineHeight;
-  const paras = node.text.split('\n');
-  if (maxWidth === undefined) {
-    return { width: Math.ceil(Math.max(1, ...paras.map(width))), height: Math.ceil(paras.length * lineH) };
-  }
-  let lines = 0;
-  for (const para of paras) {
-    let line = '';
-    lines++;
-    for (const word of para.split(/(\s+)/)) {
-      if (line && width(line + word) > maxWidth) { lines++; line = word.trimStart(); } else line += word;
-    }
-  }
-  return { width: maxWidth, height: Math.ceil(lines * lineH) };
-};
-
-let measure: TextMeasure = approxMeasure;
+/** Real advance widths of the bundled fonts (text.ts) — the same numbers the renderer draws with. */
+let measure: TextMeasure = measureText;
+/** Swap the measure (tests). The renderer mirror must use the same one as the core, or layouts diverge. */
 export const setTextMeasure = (m: TextMeasure) => { measure = m; };
 
 type Mutable = { -readonly [K in keyof Node]: Node[K] };

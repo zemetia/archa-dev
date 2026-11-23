@@ -43,9 +43,17 @@ Flat map + parent pointers: O(1) lookup, cheap moves, cache keys stable when a n
 
 Images are fills (`{ type: 'image', asset, fit }`), not a node type.
 
-**Built today (`formatVersion` 2):** `page`, `frame`, `group`, `rect`, `ellipse`, `text`, plus `polygon` (`sides`, stretched to the box), `path` (`d` + `viewBox` stretched to width × height, `fillRule`, `lineCap`, `lineJoin`; strokes always centred), `image` (`src` data URL until the asset store lands, `fit` crop/fit/fill), `sticky` (`text`, `fontSize`) and `embed` (`url`; the live page of a code frame without the code link). Document-level, not nodes: `variables` and `comments` (`packages/schema/src/variables.ts`).
+**Built today (`formatVersion` 3 — v3 only changed where image `src` points, see [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md)):** `page`, `frame`, `group`, `rect`, `ellipse`, `text`, plus `polygon` (`sides`, stretched to the box), `path` (`d` + `viewBox` stretched to width × height, `fillRule`, `lineCap`, `lineJoin`; strokes always centred), `image` (`src` = `asset:` reference, http(s) URL, or a data URL / local path that is written into the asset folder on arrival; `fit` crop/fit/fill), `sticky` (`text`, `fontSize`) and `embed` (`url`; the live page of a code frame without the code link). Document-level, not nodes: `variables` and `comments` (`packages/schema/src/variables.ts`).
 
 ---
+
+**Built (v3, optional properties):**
+
+| Feature | Shape | Rule |
+|---|---|---|
+| Gradient paints | `fills: [{ type: 'linear', angle, stops: [{offset, color}] } \| { type: 'radial', cx, cy, radius, stops }]` | CSS angles (180 = top → bottom); radius = fraction of the longer side. Input also takes CSS `linear-gradient(…)` / `radial-gradient(…)` strings |
+| Rich text | text `spans: [{ start, end, fills?, fontWeight?, fontFamily?, letterSpacing?, underline?, strikethrough? }]` | UTF-16 ranges over `text`; input `runs: ["a ", { text: "b", fill }]`. Editing `text` keeps spans on the same characters (`adjustSpans`) |
+| Token bindings | `bind: { fill: '<variable id>', cornerRadius: …, … }` (keys in `BINDABLE`) | → [DESIGN_SYSTEM/01 → Bindings](../DESIGN_SYSTEM/01-variables-themes.md) |
 
 ## Base Properties (every node)
 

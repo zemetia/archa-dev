@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { newId } from '@archa/schema';
 import { guidesFor, guideText, type ChatImage, type ChatMessage, type ChatRunEvent, type ModelOption } from '@archa/protocol';
@@ -9,6 +9,8 @@ import { describeState } from './execute';
 import { ADAPTERS, type Adapter, type AgentEvent, type Attachment, type McpCommand, type StreamParser } from './agent-adapters';
 import { resolveCli, type AccountManager } from './accounts';
 import { randomPersona } from './personas';
+import { ChatStore } from './chat-store';
+import { assetDirFor } from './assets';
 
 /*
  * Launch mode (blueprint AGENT_BRIDGE): the app starts the agent's own CLI headless,
@@ -39,26 +41,14 @@ function killTree(child: ChildProcess | null) {
 }
 
 /*
- * Chat history lives in ARCHA_HOME/chats/<docId>.jsonl (one message per line) and the agent CLI
- * session ids in chats/sessions.json, so a thread can be resumed after a restart. Deleting the
- * folder only loses history, never design data.
+ * Conversations live in the document's asset folder, one JSON file per thread (chat-store.ts), so
+ * they travel with the `.archa` and never enter it. The agent CLI session ids stay per machine in
+ * ARCHA_HOME/chats/sessions.json, so a thread can be resumed after a restart. Deleting either only
+ * loses history, never design data.
  */
 const chatsDir = () => join(archaHome(), 'chats');
 const safeName = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80) || 'doc';
 const threadDir = (threadId: string) => join(archaHome(), 'runtime', 'threads', safeName(threadId));
-const IMAGE_EXT: Record<ChatImage['mime'], string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
-
-/** Pasted chat images go to the thread folder (removed with the thread), so file-reading agents can open them. */
-function saveImages(threadId: string, images: ChatImage[]): Attachment[] {
-  if (!images.length) return [];
-  const dir = join(threadDir(threadId), 'attachments');
-  mkdirSync(dir, { recursive: true });
-  return images.map((img) => {
-    const path = join(dir, `${newId()}.${IMAGE_EXT[img.mime]}`);
-    writeFileSync(path, Buffer.from(img.data, 'base64'));
-    return { path, mime: img.mime, data: img.data };
-  });
-}
 
 export class ChatRunner {
   private runs = new Map<string, Run>();
@@ -66,24 +56,23 @@ export class ChatRunner {
   private queue = new Map<string, Queued[]>(); // threadId -> messages waiting for the running turn
   private interrupted = new Map<string, string>(); // threadId -> prompt stopped before any reply
   private sessions: Map<string, string> | null = null; // threadId:agent:login -> CLI session id
-  private messages = new Map<string, ChatMessage[]>();
+  /** A run can outlive its document's tab; its history then lands in the runtime folder of that id. */
+  readonly store = new ChatStore((docId) => {
+    try { return this.ws.assetDir(docId); } catch { return assetDirFor(null, docId); }
+  });
 
   constructor(private ws: Workspace, private mcpCommand: () => McpCommand) {}
 
   list(docId: string): ChatMessage[] {
-    let list = this.messages.get(docId);
-    if (!list) {
-      list = [];
-      const file = join(chatsDir(), `${safeName(docId)}.jsonl`);
-      if (existsSync(file)) {
-        for (const line of readFileSync(file, 'utf8').split('\n')) {
-          if (!line.trim()) continue;
-          try { list.push(JSON.parse(line) as ChatMessage); } catch { /* skip a torn line */ }
-        }
-      }
-      this.messages.set(docId, list);
-    }
-    return list;
+    return this.store.list(docId);
+  }
+
+  /** Pasted chat images go to the thread's attachments in the asset folder, so file-reading agents can open them. */
+  private saveImages(docId: string, threadId: string, images: ChatImage[]): Attachment[] {
+    return images.flatMap((img) => {
+      const saved = this.store.saveImage(docId, threadId, img.mime, img.data);
+      return saved ? [{ path: saved.file, mime: img.mime, data: img.data }] : [];
+    });
   }
 
   /** Session name of a run's thread, for the identity of the `archa mcp` it starts. */
@@ -114,10 +103,7 @@ export class ChatRunner {
     if (w) this.killWarm(w);
     this.queue.delete(threadId);
     rmSync(threadDir(threadId), { recursive: true, force: true });
-    const kept = this.list(docId).filter((m) => (m.threadId ?? m.runId) !== threadId);
-    this.messages.set(docId, kept);
-    mkdirSync(chatsDir(), { recursive: true });
-    writeFileSync(join(chatsDir(), `${safeName(docId)}.jsonl`), kept.map((m) => JSON.stringify(m)).join('\n') + (kept.length ? '\n' : ''));
+    this.store.deleteThread(docId, threadId);
   }
 
   private sessionMap(): Map<string, string> {
@@ -142,12 +128,9 @@ export class ChatRunner {
 
   private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent' | 'persona'>, role: ChatMessage['role'], text: string, images?: ChatImage[]) {
     const m: ChatMessage = { id: newId(), docId: run.docId, runId: run.id, threadId: run.threadId, role, agent: run.agent, persona: run.persona, text, ts: Date.now() };
-    if (images?.length) m.images = images.map((i) => i.thumb);
-    this.list(run.docId).push(m);
-    try {
-      mkdirSync(chatsDir(), { recursive: true });
-      appendFileSync(join(chatsDir(), `${safeName(run.docId)}.jsonl`), JSON.stringify(m) + '\n');
-    } catch { /* history is best-effort; the live chat still works */ }
+    // Thumbnails become files in the thread's attachments; the message keeps `asset:` references only.
+    if (images?.length) m.images = images.map((i) => this.store.saveImage(run.docId, run.threadId, '', i.thumb)?.ref ?? i.thumb);
+    this.store.append(run.docId, m);
     this.ws.broadcast('chat.message', m);
   }
 
@@ -189,7 +172,7 @@ export class ChatRunner {
     const request = interrupted ? `Earlier request (stopped before you answered it):\n${interrupted}\n\nNow:\n${prompt}` : prompt;
     const focus = (q.focus ?? []).map((id) => session.doc.get(id)).filter((n) => !!n).slice(0, 12);
     const focusLine = focus.length ? `\nFocus — this request is about: ${focus.map((n) => `${n.name} "${n.id}" (${n.type})`).join(', ')}` : '';
-    const images = saveImages(threadId, q.images ?? []);
+    const images = this.saveImages(docId, threadId, q.images ?? []);
     const imageLine = images.length && !adapter.inlineImages
       ? `\nThe person attached ${images.length === 1 ? 'an image' : `${images.length} images`} — open ${images.length === 1 ? 'it' : 'them'} to see what they mean:\n${images.map((i) => `- ${i.path}`).join('\n')}`
       : '';

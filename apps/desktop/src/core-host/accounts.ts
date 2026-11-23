@@ -128,17 +128,19 @@ export function resolveCli(name: string): { bin: string; pre: string[] } | null 
   if (exe) return { bin: exe, pre: [] };
   if (process.platform !== 'win32') return null;
   const pkg = NPM_PACKAGES[name];
+  if (!pkg) return null;
   const node = findBin('node');
-  if (!pkg || !node) return null;
   for (const dir of (process.env.PATH ?? '').split(';')) {
-    const script = join(dir, 'node_modules', ...pkg.split('/'), 'bin', `${name}.js`);
-    if (existsSync(join(dir, `${name}.cmd`)) && existsSync(script)) return { bin: node, pre: [script] };
+    if (!existsSync(join(dir, `${name}.cmd`))) continue;
+    const binDir = join(dir, 'node_modules', ...pkg.split('/'), 'bin');
+    if (existsSync(join(binDir, `${name}.exe`))) return { bin: join(binDir, `${name}.exe`), pre: [] };
+    if (node && existsSync(join(binDir, `${name}.js`))) return { bin: node, pre: [join(binDir, `${name}.js`)] };
   }
   return null;
 }
 
 /** npm packages whose `.cmd` shim we can bypass. */
-const NPM_PACKAGES: Record<string, string> = { codex: '@openai/codex' };
+const NPM_PACKAGES: Record<string, string> = { codex: '@openai/codex', claude: '@anthropic-ai/claude-code' };
 
 function runQuiet(bin: string, args: string[], timeoutMs: number): Promise<string> {
   return new Promise((done) => {

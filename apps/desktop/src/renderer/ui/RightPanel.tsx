@@ -3,7 +3,7 @@ import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
   ArrowDown, ArrowRight, Eye, EyeOff, LayoutGrid, Minus, PanelRightClose, Plus, TextAlignCenter, TextAlignEnd, TextAlignStart,
 } from 'lucide-react';
-import { hexToColor, type Node, type Paint, type Shadow, type Stroke } from '@archa/schema';
+import { paintToCss, paintColor, hexToColor, type Node, type Paint, type Shadow, type Stroke } from '@archa/schema';
 import type { Op } from '@archa/schema';
 import { commit, EXPORT_KINDS, exportNode, togglePanel, useStore, type ExportKind } from '../lib/store';
 import { originOf, selectionBounds } from '../lib/geometry';
@@ -318,7 +318,41 @@ function ListSection<T extends { visible: boolean }>({ title, items, onChange, m
 }
 
 function PaintList({ title, items, onChange, make }: { title: string; items: Paint[]; onChange: (v: Paint[]) => void; make: () => Paint }) {
-  return <ListSection title={title} items={items} onChange={onChange} make={make} render={(p, u) => <ColorField color={p.color} onCommit={(color) => u({ color })} />} />;
+  return <ListSection title={title} items={items} onChange={onChange} make={make} render={(p, u) => <PaintEditor paint={p} onChange={(next) => u(next as Partial<Paint>)} />} />;
+}
+
+/** Solid colour, or a linear / radial gradient with editable stops (blueprint APP_UI → Design panel). */
+function PaintEditor({ paint, onChange }: { paint: Paint; onChange: (p: Paint) => void }) {
+  const toType = (type: Paint['type']) => {
+    if (type === paint.type) return;
+    const base = paintColor(paint);
+    if (type === 'solid') return onChange({ type: 'solid', color: base, visible: paint.visible });
+    const stops = paint.type === 'solid' ? [{ offset: 0, color: base }, { offset: 1, color: { ...base, a: 0 } }] : paint.stops;
+    onChange(type === 'linear' ? { type, angle: 180, stops, visible: paint.visible } : { type, cx: 0.5, cy: 0.5, radius: 0.5, stops, visible: paint.visible });
+  };
+  return (
+    <div className="space-y-1.5">
+      <Segmented value={paint.type} onChange={toType} options={[
+        { value: 'solid', label: 'Solid', title: 'Solid colour' },
+        { value: 'linear', label: 'Linear', title: 'Linear gradient' },
+        { value: 'radial', label: 'Radial', title: 'Radial gradient' },
+      ]} />
+      {paint.type === 'solid' ? <ColorField color={paint.color} onCommit={(color) => onChange({ ...paint, color })} /> : (
+        <>
+          <div className="h-3 rounded" style={{ background: paintToCss(paint.type === 'radial' ? { ...paint, type: 'linear', angle: 90 } as Paint : { ...paint, angle: 90 }) }} />
+          {paint.type === 'linear' && <NumberField label="°" value={paint.angle} step={15} onCommit={(angle) => onChange({ ...paint, angle })} />}
+          {paint.stops.map((st, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <div className="w-14 shrink-0"><NumberField label="%" value={Math.round(st.offset * 100)} min={0} max={100} onCommit={(v) => onChange({ ...paint, stops: paint.stops.map((x, j) => (j === i ? { ...x, offset: v / 100 } : x)) })} /></div>
+              <ColorField color={st.color} onCommit={(color) => onChange({ ...paint, stops: paint.stops.map((x, j) => (j === i ? { ...x, color } : x)) })} />
+              {paint.stops.length > 2 && <IconButton title="Remove stop" className="h-7 w-7" onClick={() => onChange({ ...paint, stops: paint.stops.filter((_, j) => j !== i) })}><Minus size={13} /></IconButton>}
+            </div>
+          ))}
+          <IconButton title="Add stop" className="h-6 w-6" onClick={() => onChange({ ...paint, stops: [...paint.stops, { offset: 1, color: paint.stops.at(-1)!.color }] })}><Plus size={13} /></IconButton>
+        </>
+      )}
+    </div>
+  );
 }
 
 function StrokeList({ items, onChange }: { items: Stroke[]; onChange: (v: Stroke[]) => void }) {

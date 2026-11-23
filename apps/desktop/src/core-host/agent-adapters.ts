@@ -72,7 +72,7 @@ export type Adapter = {
   models: (bin: string | null, env: Record<string, string>) => Promise<{ models: ModelOption[]; source: string }>;
 };
 
-export const MCP_TOOLS = ['get_state', 'execute', 'screenshot', 'export_svg', 'say', 'browser', 'read_guide'];
+export const MCP_TOOLS = ['get_state', 'execute', 'screenshot', 'export_svg', 'say', 'browser', 'read_guide', 'reference', 'compare', 'list_documents', 'open_document', 'new_document', 'save_document'];
 /** Windows caps a command line near 32 KiB. */
 const MAX_ARG_PROMPT = 28_000;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/[\]@+-]{0,127}$/;
@@ -80,7 +80,8 @@ const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/[\]@+-]{0,127}$/;
 /* ---------------------------------- bins ---------------------------------- */
 
 export function findBin(name: string): string | null {
-  const exts = process.platform === 'win32' ? ['.exe', ''] : [''];
+  // On Windows an extensionless file is npm's sh shim, which spawn() cannot run (ENOENT).
+  const exts = process.platform === 'win32' ? ['.exe'] : [''];
   const dirs = (process.env.PATH ?? '').split(delimiter);
   // fnm's per-shell folders vanish when that shell closes; anything saved for later must not point there.
   const stable = dirs.filter((d) => !/fnm_multishells/i.test(d));
@@ -330,7 +331,7 @@ const toml = (v: unknown) => JSON.stringify(v); // JSON strings/arrays are valid
  * agy does not put MCP tool descriptions in the model's context: it reads them from schema files,
  * which costs minutes of shell/file probing per run. Hand it the tools and the execute API up front.
  */
-const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, screenshot { node }, export_svg { node }, say { text }, read_guide { topic }. The canvas state is at the end of this message, so start designing right away; nothing outside the canvas is needed (no shell, files or browsing).
+const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, screenshot { node, slices? }, export_svg { node }, say { text }, read_guide { topic }, reference { path, page? } (read a PDF/image mockup into numbers), compare { node, reference, page? } (visual diff against it), list_documents {}, open_document { path }, new_document { name? }, save_document { path? }. Every document tool also takes doc (id, .archa path or name). The canvas state is at the end of this message, so start designing right away; nothing outside the canvas is needed (no shell, files or browsing).
 
 execute tool documentation:
 ${EXECUTE_API_DOC}`;

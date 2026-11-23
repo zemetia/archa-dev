@@ -8,6 +8,18 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-23] - The new `reference` tool passed its vitest test but failed in the app with "No GlobalWorkerOptions.workerSrc": in Electron's utility process pdf.js does not detect Node, so it wants a worker script - Point `workerSrc` at the legacy worker (`createRequire(...).resolve`); pdf.js then runs it in-process - Code that behaves differently by runtime (pdf.js, workers, fetch) must be run once in the real app process, not only in vitest.
+
+[2026-11-23] - A 1440×8698 landing screenshot as 7 PNG slices (~11 MB) closed the MCP connection: stdio clients drop messages over 10 MB (SDK default) - Inline slices as JPEG and a 6 MB per-reply budget (`INLINE_BUDGET`), with omitted slices counted and the full PNG on disk - "No size cap" applies to the file; anything inline must respect the transport's message limit. Test big replies through a real MCP client.
+
+[2026-11-23] - Measured a 69 s PDF raster during a dev session that was rebuilding modules and blamed pdf.js; in a clean run the same page took ~5 s - Cached rasters anyway and raised the timeout, then re-measured in a fresh app - Re-measure a slow path in a clean process before designing around it.
+
+[2026-11-23] - `adjustSpans` put text inserted exactly at a span's start inside the span - A pure insertion at an edge now goes outside the span (before its start, after its end) - Range-mapping code needs explicit tests for insertions at both edges.
+
+[2026-11-22] - Fixed lucide icons that concatenate several <path> elements by uppercasing the leading `m`; arrow-right/down and search still drew wrong, because after an absolute `M x y` the following implicit pairs become absolute linetos - `m x y …pairs` → `M x y l …pairs` (scripts/gen-icons.mjs `absoluteStart`); 823 of 2091 icons changed - When rewriting SVG path data, remember implicit commands inherit the case of the moveto; verify by rendering a few icons, not by reading the string.
+
+[2026-11-22] - Outside strokes punched out the shape's own fill (stroke ×2 then `destination-out` over the inside), so map pins with a white outside ring rendered black - Clip to everything outside the shape (even-odd against a huge rect) and stroke inside that clip - Never erase with composite modes inside a node's own draw; clip instead, or earlier paint of the same node disappears.
+
 [2026-11-19] - Live-checked agent cursors over CDP; the cursor layer stayed empty and screenshots hung, which looked like a cursor bug - The dev window was minimized (`document.visibilityState === 'hidden'`), so requestAnimationFrame never ran - Before reading anything drawn by rAF (cursors, animations) over CDP, check `document.visibilityState`; a hidden window draws nothing.
 
 [2026-11-19] - A dev app started with its own ARCHA_HOME still listened on `\\.\pipe\archadev-core-<USERNAME>`, the installed app's pipe; dev and installed cores could collide - `socketPath()` adds a hash of a custom ARCHA_HOME to the pipe name - Anything "isolated by ARCHA_HOME" must derive every path, pipe and lock from it; check names that come from the user or machine.

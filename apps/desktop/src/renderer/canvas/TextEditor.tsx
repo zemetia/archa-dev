@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { colorToCss, type StickyNode, type TextNode } from '@archa/schema';
+import { colorToCss, paintColor, type StickyNode, type TextNode } from '@archa/schema';
 import { STICKY_LINE, STICKY_PADDING } from '@archa/render';
 import { commit, useStore, type Camera } from '../lib/store';
 import { toScreen } from '../lib/geometry';
@@ -51,7 +51,7 @@ export function TextEditor({ nodeId, camera }: { nodeId: string; camera: Camera 
       lineHeight: node.lineHeight,
       letterSpacing: node.letterSpacing * z,
       textAlign: node.textAlign,
-      color: node.fills.find((f) => f.visible) ? colorToCss(node.fills.find((f) => f.visible)!.color) : '#111',
+      color: node.fills.find((f) => f.visible) ? colorToCss(paintColor(node.fills.find((f) => f.visible)!)) : '#111',
       whiteSpace: node.textSizing === 'auto-width' ? 'pre' : 'pre-wrap',
     };
   return (

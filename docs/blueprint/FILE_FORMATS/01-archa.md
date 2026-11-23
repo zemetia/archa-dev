@@ -22,7 +22,28 @@
 - `manifest.json` is the first entry so it can be read without inflating the rest.
 - Pages load lazily: visible page first, others on demand.
 
-`formatVersion` 2 (current): `document.json` = `{ meta, variables, comments }`; v1 files migrate on open (`packages/formats/src/migrations/archa/`, fixture `test/fixtures/archa-v1/`). Images live inline as data URLs in v2 — `assets/` arrives with the asset store.
+`formatVersion` 3 (current): `document.json` = `{ meta, variables, comments }`; image `src` is an `asset:` reference (below). v1 and v2 files migrate on open (`packages/formats/src/migrations/archa/`, fixtures `test/fixtures/archa-v1/`, `archa-v2/`). The `assets/` zip entry above is not built — images live in the asset folder instead.
+
+---
+
+## Asset Folder — `<name>-asset/` (built, v3)
+
+| Path | Content |
+|---|---|
+| `landing.archa` | The document — no base64 anywhere |
+| `landing-asset/images/<sha256-24>.<ext>` | Image files, content-addressed; nodes say `src: "asset:images/<file>"` |
+| `landing-asset/chats/<threadId>.json` | One conversation each → [AGENT_BRIDGE/03 → Chat History](../AGENT_BRIDGE/03-runs-steering.md) |
+| `landing-asset/chats/attachments/<threadId>/` | Images pasted into that conversation |
+
+| Rule | Detail |
+|---|---|
+| Arrival | Every transaction passes `DocumentSession.transformOps` (`core-host/assets.ts`): a data: URL, absolute image path or `file://` URL in an image `src` is copied into `images/` first. Listeners, undo and the file only ever see `asset:` |
+| Other sources | `http(s)` URLs stay as they are (loaded through the host proxy) |
+| Opening v2 | Base64 images are written out on open; the document is marked dirty so the next save drops them |
+| Unsaved | Folder lives in `ARCHA_HOME/runtime/assets/<docId>/`; the first save moves it next to the file. Save As copies it to `<new name>-asset/` |
+| Exports, libraries | `inlineData` turns `asset:` back into data: URLs for HTML/SVG/PDF export and published library components (they must stand alone) |
+| Loading | Renderer resolves `asset:` with `DocSummary.assetDir` → `archa-asset://file/<path>`; web images → `archa-asset://remote/<url>`. Main serves only image files inside a `*-asset` folder or `ARCHA_HOME/runtime`, with CORS so canvases stay exportable |
+| Cleanup | Files are never deleted automatically — an unreferenced image costs disk, a deleted one loses data |
 
 ---
 

@@ -5,6 +5,9 @@ import { z } from 'zod';
 import { browserCommandSchema, type MainBridgeResponse } from '@archa/protocol';
 import { BrowserManager } from './browser';
 import { printHtmlToPdf } from './pdf';
+import { handleAssetProtocol, registerAssetScheme } from './assets-protocol';
+
+registerAssetScheme();
 
 /* Main process: windows, argv, dialogs, core host lifecycle. Holds no document state (blueprint ARCHITECTURE/01). */
 
@@ -177,6 +180,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    handleAssetProtocol();
     startCore();
     ipcMain.handle('dialog:open', async (e) => {
       const win = BrowserWindow.fromWebContents(e.sender)!;

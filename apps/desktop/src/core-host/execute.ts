@@ -1,12 +1,16 @@
 import { getQuickJS, shouldInterruptAfterDeadline, type QuickJSContext, type QuickJSWASMModule } from 'quickjs-emscripten';
 import {
-  applyOps, DocumentError, findEmptySpace, insertOpsFor, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, subtreeInput, syncInstanceOps,
+  applyOps, BUNDLED_FONTS, boundVariable, DocumentError, findEmptySpace, insertOpsFor, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, subtreeInput, syncInstanceOps,
   type ArchaDocument, type DocumentSession,
 } from '@archa/core';
 import { iconKey, iconPath, searchIcons } from '@archa/core/icons';
-import { colorToHex, hexToColor, isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
+import { BINDABLE, colorToHex, hexToColor, isContainer, newId, paintColor, type Node, type NodeInput, type Op } from '@archa/schema';
 import type { ExecuteResult, TrailAction, TrailStep } from '@archa/protocol';
 import type { Connection, Workspace } from './workspace';
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
+import { assetFile, externalizeSrc, imageSize } from './assets';
+import { INLINE_BUDGET } from './shots';
 
 /*
  * `execute`: an agent's JS snippet runs in QuickJS against a copy of the document.
@@ -37,6 +41,9 @@ var variables = () => __call('variables', []);
 var setVariable = (name, value) => __call('setVariable', [name, value]);
 var resolveComment = (id) => __call('resolveComment', [id]);
 var icon = (name, parent, opts) => __call('icon', [name, parent, opts || {}]);
+var image = (src, parent, opts) => __call('image', [src, parent, opts || {}]);
+var bind = (ref, map) => __call('bind', [ref, map || {}]);
+var fonts = () => __call('fonts', []);
 var icons = (query) => __call('icons', [query]);
 var print = (...v) => __call('print', [v.map((x) => typeof x === 'string' ? x : JSON.stringify(x))]);
 var find = (visitor, opts) => {
@@ -52,7 +59,7 @@ type Pending = { code: string; createdAt: number };
 export class AgentExecutor {
   private ctx: QuickJSContext | null = null;
   private failed = new Map<string, Pending>();
-  private state = { working: null as ArchaDocument | null, ops: [] as Op[], created: [] as Array<{ name: string; id: string }>, changed: new Map<string, string>(), output: [] as string[], shots: [] as Array<{ id: string; scale: number }>, pageRoot: '', selection: [] as string[], steps: [] as TrailStep[] };
+  private state = { working: null as ArchaDocument | null, ops: [] as Op[], created: [] as Array<{ name: string; id: string }>, changed: new Map<string, string>(), output: [] as string[], shots: [] as Array<{ id: string; scale: number }>, pageRoot: '', selection: [] as string[], steps: [] as TrailStep[], assetDir: '' };
 
   constructor(private ws: Workspace, private conn: Connection) {}
 
@@ -95,7 +102,7 @@ export class AgentExecutor {
 
     const ctx = await this.context();
     const page = session.doc.pages[0]!;
-    this.state = { working: session.doc.clone(), ops: [], created: [], changed: new Map(), output: [], shots: [], pageRoot: page.rootId, selection: this.ws.selection.get(session.id) ?? [], steps: [] };
+    this.state = { working: session.doc.clone(), ops: [], created: [], changed: new Map(), output: [], shots: [], pageRoot: page.rootId, selection: this.ws.selection.get(session.id) ?? [], steps: [], assetDir: this.ws.assetDir(session) };
     ctx.runtime.setInterruptHandler(shouldInterruptAfterDeadline(Date.now() + 5000));
     // Agents re-declare the same names every call; as `var` they persist and never collide.
     const result = ctx.evalCode(code.replace(/(^|[;{}\n]\s*|\(\s*)(?:const|let)\s+(?=[A-Za-z_$[{])/g, '$1var '), 'snippet.js');
@@ -143,6 +150,13 @@ export class AgentExecutor {
     for (const s of this.state.shots) {
       if (!session.doc.get(s.id)) continue;
       screenshots.push(await this.ws.screenshot(this.conn, session.id, s.id, s.scale));
+    }
+    // Several shots in one reply share the inline budget (MCP stdio drops messages over 10 MB); later ones keep their file path.
+    let used = 0;
+    for (const sh of screenshots) {
+      const size = (sh.png?.length ?? 0) + (sh.slices ?? []).reduce((n, x) => n + x.data.length, 0);
+      if (used + size > INLINE_BUDGET) { delete sh.png; delete sh.slices; sh.error = sh.path ? undefined : 'left out (reply size limit)'; }
+      else used += size;
     }
     const lintScope = [...touched].filter((id) => session.doc.get(id));
     return {
@@ -304,7 +318,7 @@ export class AgentExecutor {
         return list.length;
       }
       case 'variables':
-        return [...doc.variables.values()].map((v) => ({ name: v.name, type: v.type, value: v.type === 'color' ? colorToHex(v.value, true) : v.value }));
+        return [...doc.variables.values()].map((v) => ({ id: v.id, name: v.name, type: v.type, value: v.type === 'color' ? colorToHex(v.value, true) : v.value }));
       case 'setVariable': {
         const [name, value] = args as [string, unknown];
         if (!name) throw new Error('setVariable(name, value): name is required');
@@ -346,6 +360,52 @@ export class AgentExecutor {
       }
       case 'icons':
         return searchIcons(String(args[0] ?? ''), 30);
+      case 'image': {
+        // The host reads the file: it is copied into the asset folder and placed at its natural size.
+        const [srcArg, parent, opts = {}] = args as [string, string | null | undefined, Record<string, unknown>];
+        const raw = String(srcArg ?? '').trim();
+        if (!raw) throw new Error('image(src, parent, opts): src is a file path, file:// or http(s) URL');
+        const remote = /^https?:\/\//i.test(raw);
+        const src = remote ? raw : externalizeSrc(st.assetDir, raw);
+        if (!remote && !src.startsWith('asset:')) throw new Error(`image(): no image file at "${raw}" (png, jpg, webp, gif, svg or avif; absolute path or file:// URL)`);
+        const file = remote ? null : assetFile(st.assetDir, src);
+        const natural = file ? imageSize(readFileSync(file)) : null;
+        let w = Number(opts.width) || 0, h = Number(opts.height) || 0;
+        if (natural) {
+          if (w && !h) h = Math.round((w * natural.height) / natural.width);
+          else if (h && !w) w = Math.round((h * natural.width) / natural.height);
+          else if (!w && !h) { w = natural.width; h = natural.height; }
+        }
+        if (!w || !h) throw new Error(`image(): give width and height for "${raw}" (its size could not be read)`);
+        const { width: _w, height: _h, index, ...rest } = opts;
+        const parentId = parent ? ref(parent) : st.pageRoot;
+        const name = (rest.name as string | undefined) ?? basename(raw.split('?')[0]!).replace(/\.[a-z0-9]+$/i, '');
+        const { ops, rootId, created } = insertOpsFor({ type: 'image', fit: 'crop', ...rest, name, src, width: w, height: h } as NodeInput, parentId, (index as number | undefined) ?? undefined);
+        commit(ops);
+        st.created.push(...created);
+        step('create', rootId);
+        if (natural) st.output.push(`image "${name}": ${natural.width}×${natural.height} file → ${src}`);
+        return rootId;
+      }
+      case 'bind': {
+        const [r, map] = args as [string, Record<string, string | null>];
+        const id = ref(r);
+        const cur = doc.require(id);
+        const next: Record<string, string> = { ...(cur.bind ?? {}) };
+        for (const [key, varRef] of Object.entries(map ?? {})) {
+          if (varRef === null || varRef === '') { delete next[key]; continue; }
+          if (!BINDABLE[key]) throw new Error(`bind(): "${key}" cannot be bound — use one of ${Object.keys(BINDABLE).join(', ')}`);
+          const v = boundVariable(doc, String(varRef));
+          if (!v) throw new Error(`bind(): no variable "${String(varRef)}" — variables() lists them, setVariable() creates one`);
+          next[key] = v.id;
+        }
+        commit([{ op: 'update', id, patch: { bind: Object.keys(next).length ? next : undefined } }]);
+        st.changed.set(id, doc.require(id).name);
+        step('edit', id);
+        return next;
+      }
+      case 'fonts':
+        return BUNDLED_FONTS;
       case 'print':
         st.output.push((args[0] as string[]).join(' '));
         return null;
@@ -371,8 +431,8 @@ function finishTrail(doc: ArchaDocument, steps: TrailStep[]): TrailStep[] {
 /** Readable ink for content placed in `parentId`: light on dark fills (or the dark page), dark on light. */
 function inkFor(doc: ArchaDocument, parentId: string): string {
   for (let n = doc.get(parentId); n; n = n.parentId ? doc.get(n.parentId) : undefined) {
-    const fill = 'fills' in n ? n.fills.filter((f) => f.visible && f.color.a > 0.3).at(-1) : undefined;
-    if (fill) return fill.color.l < 0.6 ? '#f4f4f5' : '#18181b';
+    const fill = 'fills' in n ? n.fills.map((f) => (f.visible ? paintColor(f) : null)).filter((c) => c && c.a > 0.3).at(-1) : undefined;
+    if (fill) return fill.l < 0.6 ? '#f4f4f5' : '#18181b';
   }
   return '#d4d4d8';
 }

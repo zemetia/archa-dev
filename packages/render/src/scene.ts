@@ -33,6 +33,22 @@ export function drawPage(
   ctx.restore();
 }
 
+/**
+ * Renders a node once and cuts it into horizontal slices of `sliceHeight` output px (tall agent screenshots).
+ * Slices are JPEG: they only go inline, where MCP replies must stay small (the full PNG is saved separately).
+ */
+export async function renderNodeSlices(doc: ArchaDocument, nodeId: string, scale: number, sliceHeight: number): Promise<string[]> {
+  const full = await renderNodeCanvas(doc, nodeId, scale, 'jpeg');
+  const out: string[] = [];
+  for (let y = 0; y < full.height; y += sliceHeight) {
+    const h = Math.min(sliceHeight, full.height - y);
+    const c = new OffscreenCanvas(full.width, h);
+    c.getContext('2d')!.drawImage(full, 0, y, full.width, h, 0, 0, full.width, h);
+    out.push(await toBase64(await c.convertToBlob({ type: 'image/jpeg', quality: 0.85 })));
+  }
+  return out;
+}
+
 /** Renders one node to base64 PNG (agent screenshots, export). */
 export function renderNodePng(doc: ArchaDocument, nodeId: string, scale: number): Promise<string> {
   return renderNodeImage(doc, nodeId, scale, 'png');
@@ -40,8 +56,21 @@ export function renderNodePng(doc: ArchaDocument, nodeId: string, scale: number)
 
 /** Renders one node to base64 PNG or JPEG. JPEG has no alpha, so it is drawn on white. */
 export async function renderNodeImage(doc: ArchaDocument, nodeId: string, scale: number, format: 'png' | 'jpeg', quality = 0.92): Promise<string> {
+  const canvas = await renderNodeCanvas(doc, nodeId, scale, format);
+  return toBase64(await canvas.convertToBlob(format === 'png' ? { type: 'image/png' } : { type: 'image/jpeg', quality }));
+}
+
+export async function toBase64(blob: Blob): Promise<string> {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+/** A node drawn on its own canvas at `scale` (JPEG targets get a white backdrop). */
+export async function renderNodeCanvas(doc: ArchaDocument, nodeId: string, scale: number, format: 'png' | 'jpeg' = 'png'): Promise<OffscreenCanvas> {
   const node = doc.require(nodeId);
-  await preloadImages([...doc.walk(nodeId)].flatMap((n) => (n.type === 'image' ? [n.src] : [])));
+  await preloadImages([...doc.walk(nodeId)].flatMap((n) => (n.type === 'image' ? [n.src] : [])), doc);
   const w = Math.max(1, Math.round(node.width * scale));
   const h = Math.max(1, Math.round(node.height * scale));
   const canvas = new OffscreenCanvas(w, h);
@@ -50,9 +79,5 @@ export async function renderNodeImage(doc: ArchaDocument, nodeId: string, scale:
   ctx.scale(scale, scale);
   ctx.translate(-node.x, -node.y);
   drawNode(ctx, doc, node);
-  const blob = await canvas.convertToBlob(format === 'png' ? { type: 'image/png' } : { type: 'image/jpeg', quality });
-  const buf = new Uint8Array(await blob.arrayBuffer());
-  let bin = '';
-  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-  return btoa(bin);
+  return canvas;
 }

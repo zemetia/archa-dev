@@ -10,6 +10,7 @@ import { TextEditor } from './TextEditor';
 import { EmbedLayer } from './EmbedLayer';
 import { CommentsLayer } from './CommentsLayer';
 import { onImageLoaded } from '@archa/render';
+import { onFontsLoaded } from '../lib/fonts';
 import { penBounds, penPath, type PenPoint } from './pen';
 import { scaleOps } from './scale';
 
@@ -105,6 +106,7 @@ export function Canvas() {
   useEffect(redraw, [doc, rev, camera, selection, hover, editingText, size, pixelGrid]);
 
   useEffect(() => onImageLoaded(() => { cache.invalidate(); redraw(); }));
+  useEffect(() => onFontsLoaded(() => { cache.invalidate(); redraw(); }));
 
   // Leaving the pen tool finishes the path in progress.
   useEffect(() => {

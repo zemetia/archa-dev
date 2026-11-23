@@ -41,6 +41,8 @@
 | `cache/` | Fonts, plugin bundles, standalone-file assets, `index.sqlite` |
 | `journal/<fileId>/` | Journals for standalone `.archa` files |
 | `runtime/core.json` | Running app: socket path + auth token (file mode 0600) |
+| `runtime/assets/<docId>/` | Asset folder of an unsaved document; moves next to the file on first save |
+| `runtime/screenshots/` | Agent and browser screenshots, temporary (24 h / 300 files) |
 | `logs/` | Rotating logs per process |
 
 ---

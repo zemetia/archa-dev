@@ -19,7 +19,8 @@ export type ClientKind = 'renderer' | 'cli' | 'mcp';
 /** runId: set by an `archa mcp` that a launched chat run started (ARCHA_RUN_ID), so its activity is not shown twice. */
 export type ClientInfo = { kind: ClientKind; name: string; agentId?: string; runId?: string };
 
-export type DocSummary = { id: string; name: string; filePath: string | null; dirty: boolean; revision: number };
+/** assetDir: where the document's images and chats live — `<name>-asset/` next to its `.archa`, or a runtime folder while unsaved. */
+export type DocSummary = { id: string; name: string; filePath: string | null; assetDir: string; dirty: boolean; revision: number };
 export type AppliedEvent = { docId: string; revision: number; txnId: string; author: Author; label: string; ops: Op[]; touched: string[] };
 export type ActivityEntry = { id: string; ts: number; docId: string; author: Author; tool: string; text: string; nodeIds: string[]; runId?: string };
 export type AgentClient = { id: string; name: string; kind: ClientKind; connectedAt: number };
@@ -33,8 +34,27 @@ export type TrailAction = 'focus' | 'read' | 'create' | 'edit' | 'copy' | 'move'
 export type TrailStep = { action: TrailAction; nodeId: string; name: string; bounds: { x: number; y: number; width: number; height: number } };
 export type AgentTrail = { docId: string; author: Author; runId?: string; threadId?: string; steps: TrailStep[] };
 
+/**
+ * An agent screenshot. The full-size PNG is always written to a temporary file (`path`, no size cap);
+ * `png` is what goes inline — the same image, or a downscaled preview (`preview: true`) when the full
+ * one is larger than vision models accept.
+ */
+export type Shot = { nodeId: string; name: string; png?: string; path?: string; width?: number; height?: number; preview?: boolean; unchanged?: boolean; error?: string;
+  /** A tall shot cut into readable pieces (JPEG), top to bottom; y0/y1 in the node's own px. Sent inline instead of `png`. */
+  slices?: InlineSlice[];
+  /** Slices left out to keep the reply under the inline budget; they are in the full file at `path`. */
+  omitted?: number };
+
+/** One inline image piece: base64 data, its type, and the y range it covers. */
+export type InlineSlice = { data: string; mime: 'image/png' | 'image/jpeg'; y0: number; y1: number };
+
+/** Visual diff of a node against a reference (blueprint MCP/05 → Compare). y/x in the node's own px. */
+export type CompareRegion = { y0: number; y1: number; x0: number; x1: number; mismatch: number; nodes?: string[] };
+export type CompareStats = { width: number; height: number; refHeight: number; mismatch: number; meanDiff: number; regions: CompareRegion[] };
+export type CompareResult = { stats: CompareStats; path?: string; slices?: InlineSlice[]; omitted?: number; png?: string };
+
 export type ExecuteResult =
-  | { ok: true; revision: number; created: Array<{ name: string; id: string }>; changed: Array<{ name: string; id: string }>; output: string[]; screenshots: Array<{ nodeId: string; name: string; png?: string; unchanged?: boolean; error?: string }>; issues: Issue[] }
+  | { ok: true; revision: number; created: Array<{ name: string; id: string }>; changed: Array<{ name: string; id: string }>; output: string[]; screenshots: Shot[]; issues: Issue[] }
   | { ok: false; revision: number; statement?: string; reason: string; editId: string };
 
 export interface CoreMethods {
@@ -49,14 +69,16 @@ export interface CoreMethods {
   'doc.undo': { params: { docId: string }; result: { revision: number } | null };
   'doc.redo': { params: { docId: string }; result: { revision: number } | null };
   'selection.set': { params: { docId: string; ids: string[] }; result: void };
-  'render.respond': { params: { requestId: string; png?: string; error?: string }; result: void };
+  'render.respond': { params: { requestId: string; png?: string; slices?: string[]; colors?: Array<string | null>; stats?: CompareStats; error?: string }; result: void };
   'agents.list': { params: void; result: AgentClient[] };
   'activity.list': { params: { docId?: string; limit?: number }; result: ActivityEntry[] };
   // Agent-facing (MCP relay)
   'agent.state': { params: { docId?: string }; result: string };
   'agent.execute': { params: { docId?: string; code?: string; editId?: string; edits?: Array<{ find: string; replace: string }> }; result: ExecuteResult };
-  'agent.screenshot': { params: { docId?: string; node: string; scale?: number }; result: { png?: string; unchanged?: boolean; name: string; nodeId: string } };
+  'agent.screenshot': { params: { docId?: string; node: string; scale?: number; slices?: boolean }; result: Shot };
   'agent.exportSvg': { params: { docId?: string; node: string }; result: { svg: string } };
+  'agent.reference': { params: { docId?: string; path: string; page?: number; images?: boolean }; result: { text: string; json?: string; png?: string } };
+  'agent.compare': { params: { docId?: string; node: string; reference: string; page?: number; scale?: number }; result: CompareResult };
   'agent.say': { params: { docId?: string; text: string; nodeId?: string }; result: void };
   /** Drive the in-app browser (blueprint BROWSER). */
   'agent.browser': { params: BrowserCommand; result: BrowserReply };
@@ -159,7 +181,7 @@ export type ChatMessage = {
   /** Random session name the run works under on the canvas (e.g. "Swift Heron"); one per thread. */
   persona?: string;
   text: string;
-  /** Thumbnails (data URLs) of the images a user message carried. */
+  /** Thumbnails of the images a user message carried: `asset:chats/attachments/…` files in the document's asset folder. */
   images?: string[];
   ts: number;
 };
@@ -198,7 +220,11 @@ export interface CoreEvents {
   'activity': ActivityEntry;
   'agents.changed': AgentClient[];
   'selection.changed': { docId: string; ids: string[]; by: Author };
-  'render.request': { requestId: string; docId: string; nodeId: string; scale: number };
+  'render.request': { requestId: string; docId: string; nodeId: string; scale: number; slice?: number };
+  /** Rasterise a reference page and sample the ink colour inside each box (page px). */
+  'render.reference': { requestId: string; url: string; page: number; scale: number; boxes: Array<{ x: number; y: number; w: number; h: number }> };
+  /** Diff a node against a reference image or PDF page: stats + a heat-map PNG (sliced when tall). */
+  'render.compare': { requestId: string; docId: string; nodeId: string; url: string; page: number; scale: number; slice: number };
   'chat.message': ChatMessage;
   /** Text the agent is still writing (whole text so far); '' clears it. */
   'chat.delta': { docId: string; runId: string; threadId: string; agent: string; text: string };

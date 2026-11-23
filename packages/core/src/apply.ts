@@ -1,6 +1,7 @@
 import { commentSchema, isContainer, nodeSchema, variableSchema, type Node, type Op, type InsertOp } from '@archa/schema';
 import { ArchaDocument, DocumentError } from './document';
 import { runLayout } from './layout';
+import { bindingPatch, effectivePatch } from './bindings';
 
 const IMMUTABLE_KEYS = new Set(['id', 'type', 'parentId', 'children']);
 
@@ -22,6 +23,19 @@ export function applyOps(doc: ArchaDocument, ops: Op[]): ApplyResult {
         throw e;
       }
     });
+    // Bound properties follow their variables: after a variable changed, every bound node; else the nodes just written.
+    const varsChanged = ops.some((op) => op.op === 'setVariable' || op.op === 'deleteVariable');
+    const candidates = varsChanged ? [...doc.nodes.values()] : ops.flatMap((op) => {
+      const id = op.op === 'insert' ? op.node.id : op.op === 'update' ? op.id : null;
+      const n = id ? doc.get(id) : undefined;
+      return n ? [n] : [];
+    });
+    for (const n of candidates) {
+      if (!n.bind) continue;
+      const patch = bindingPatch(doc, n);
+      // `bind` and `meta` in the patch: keep the binding, and do not count it as an instance override.
+      if (patch) inverse.unshift(...applyOne(doc, { op: 'update', id: n.id, patch: { ...patch, bind: n.bind, meta: n.meta } }, touched));
+    }
     runLayout(doc);
     return { inverse, touched };
   } catch (e) {
@@ -47,7 +61,7 @@ function applyOne(doc: ArchaDocument, op: Op, touched: Set<string>): Op[] {
   switch (op.op) {
     case 'insert': {
       const raw = { ...op.node, parentId: op.parentId, children: isContainerType(op.node.type) ? [] : undefined };
-      const node = parseNode(raw);
+      const node = withInsertOverrides(doc, parseNode(raw));
       if (doc.nodes.has(node.id)) throw new DocumentError('VALIDATION', `id "${node.id}" already exists`);
       if (node.type === 'page') throw new DocumentError('VALIDATION', 'pages cannot be inserted as nodes');
       const parent = doc.container(op.parentId);
@@ -61,9 +75,10 @@ function applyOne(doc: ArchaDocument, op: Op, touched: Set<string>): Op[] {
       const prev = doc.require(op.id);
       const bad = Object.keys(op.patch).find((k) => IMMUTABLE_KEYS.has(k));
       if (bad) throw new DocumentError('VALIDATION', `"${prev.name}".${bad} cannot be changed with update${bad === 'parentId' || bad === 'children' ? ' — use move' : ''}`);
-      const next = parseNode({ ...prev, ...op.patch });
+      const patch = effectivePatch(prev, op.patch);
+      const next = parseNode({ ...prev, ...patch });
       const before: Record<string, unknown> = {};
-      for (const k of Object.keys(op.patch)) before[k] = structuredClone((prev as Record<string, unknown>)[k]);
+      for (const k of Object.keys(patch)) before[k] = structuredClone((prev as Record<string, unknown>)[k]);
       doc.nodes.set(op.id, next);
       touched.add(op.id);
       return [{ op: 'update', id: op.id, patch: before }];
@@ -129,6 +144,23 @@ function applyOne(doc: ArchaDocument, op: Op, touched: Set<string>): Op[] {
       return restore;
     }
   }
+}
+
+/** Never instance overrides: identity, tree, and what layout computes. */
+const NOT_OVERRIDE = new Set(['id', 'parentId', 'children', 'meta', 'x', 'y', 'width', 'height', 'name']);
+
+/**
+ * A copy of a component node (`meta.src`) inserted with values its main does not have — an agent placing an
+ * instance with its own text, image or colour — records those keys as overrides, so a later sync keeps them.
+ */
+function withInsertOverrides(doc: ArchaDocument, node: Node): Node {
+  const src = node.meta.src;
+  if (typeof src !== 'string' || Array.isArray(node.meta.overrides)) return node;
+  const main = doc.get(src);
+  if (!main || main.type !== node.type) return node;
+  const a = node as unknown as Record<string, unknown>, b = main as unknown as Record<string, unknown>;
+  const keys = Object.keys(a).filter((k) => !NOT_OVERRIDE.has(k) && JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+  return keys.length ? { ...node, meta: { ...node.meta, overrides: keys } } : node;
 }
 
 const isContainerType = (t: unknown) => t === 'frame' || t === 'group' || t === 'page';

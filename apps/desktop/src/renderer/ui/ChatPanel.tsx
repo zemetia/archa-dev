@@ -3,6 +3,7 @@ import { ArrowUp, Copy, Crosshair, FileText, Hexagon, History, Loader2, Settings
 import { chatThreads, threadOf, type ChatImage, type ModelOption } from '@archa/protocol';
 import { runOfThread, select, toast, useStore } from '../lib/store';
 import { imageFiles, MAX_CHAT_IMAGES, toChatImage } from '../lib/chatImages';
+import { assetUrl } from '../lib/assets';
 import { personaBg } from './persona';
 import { cn } from './controls';
 import { Dropdown, type DropdownOption } from './Dropdown';
@@ -120,7 +121,7 @@ export function ChatThread() {
               <div className="ml-6 rounded-xl rounded-br-sm bg-accent-soft px-3 py-2 text-[12.5px] leading-relaxed text-fg">
                 {m.images?.length ? (
                   <div className="mb-1.5 flex flex-wrap gap-1.5">
-                    {m.images.map((src, i) => <img key={i} src={src} alt="" className="h-16 max-w-[120px] rounded-md border border-line object-cover" />)}
+                    {m.images.map((src, i) => <img key={i} src={assetUrl(src, m.docId)} alt="" className="h-16 max-w-[120px] rounded-md border border-line object-cover" />)}
                   </div>
                 ) : null}
                 {m.text}

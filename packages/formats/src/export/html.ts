@@ -1,4 +1,4 @@
-import { colorToHex, isContainer, type Color, type Node, type TextNode } from '@archa/schema';
+import { colorToHex, isContainer, paintToCss, type Color, type Node, type Paint, type TextNode } from '@archa/schema';
 import type { ArchaDocument } from '@archa/core';
 import { exportSvg } from '../svg';
 import { tailwindClasses } from './tailwind';
@@ -20,7 +20,7 @@ export type HtmlExportOptions = {
 };
 
 type Decl = [prop: string, value: string];
-type El = { tag: string; cls: string; attrs: string; style: Decl[]; children: El[]; text?: string; raw?: string };
+type El = { tag: string; cls: string; attrs: string; style: Decl[]; children: El[]; text?: string; raw?: string; html?: string };
 
 const SYSTEM_FONTS = new Set(['segoe ui', 'georgia', 'times new roman', 'arial', 'consolas', 'courier new', 'trebuchet ms', 'verdana', 'system-ui', 'helvetica']);
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -113,8 +113,9 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
 
   if ('fills' in n && n.type !== 'text' && n.type !== 'polygon' && n.type !== 'path') {
     const fills = n.fills.filter((f) => f.visible).reverse();
-    if (fills.length === 1) s.push(['background-color', hex(fills[0]!.color)]);
-    else if (fills.length > 1) s.push(['background', fills.map((f) => `linear-gradient(${hex(f.color)}, ${hex(f.color)})`).join(', ')]);
+    const layer = (f: Paint) => (f.type === 'solid' ? `linear-gradient(${hex(f.color)}, ${hex(f.color)})` : paintToCss(f));
+    if (fills.length === 1 && fills[0]!.type === 'solid') s.push(['background-color', hex(fills[0]!.color)]);
+    else if (fills.length) s.push(['background', fills.map(layer).join(', ')]);
   }
   const radius = 'cornerRadius' in n ? n.cornerRadius : n.type === 'ellipse' ? -1 : 0;
   if (radius === -1) s.push(['border-radius', '50%']);
@@ -148,7 +149,8 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
     case 'text':
       textStyle(ctx, n, s);
       el.tag = 'p';
-      el.text = n.text;
+      if (n.spans?.length) el.html = richHtml(ctx, n);
+      else el.text = n.text;
       break;
     case 'sticky':
       ctx.font('Inter', 500);
@@ -178,6 +180,30 @@ function build(ctx: Ctx, n: Node, parent: Node | null): El | null {
   return el;
 }
 
+/** Rich text: one <span> per stretch that a span styles differently from the paragraph. */
+function richHtml(ctx: Ctx, n: TextNode): string {
+  const cuts = new Set([0, n.text.length]);
+  for (const sp of n.spans ?? []) for (const c of [sp.start, sp.end]) if (c > 0 && c < n.text.length) cuts.add(c);
+  const points = [...cuts].sort((a, b) => a - b);
+  let out = '';
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]!, b = points[i + 1]!;
+    const text = esc(n.text.slice(a, b));
+    const sp = (n.spans ?? []).filter((x) => a >= x.start && a < x.end).reduce((acc, x) => ({ ...acc, ...x }), {} as Partial<NonNullable<TextNode['spans']>[number]>);
+    const css: string[] = [];
+    const fill = sp.fills?.filter((f) => f.visible).at(-1);
+    if (fill?.type === 'solid') css.push(`color: ${hex(fill.color)}`);
+    else if (fill) css.push(`background: ${paintToCss(fill)}`, '-webkit-background-clip: text', 'background-clip: text', 'color: transparent');
+    if (sp.fontWeight !== undefined && sp.fontWeight !== n.fontWeight) css.push(`font-weight: ${sp.fontWeight}`);
+    if (sp.fontFamily !== undefined && sp.fontFamily !== n.fontFamily) { ctx.font(sp.fontFamily, sp.fontWeight ?? n.fontWeight); css.push(`font-family: '${sp.fontFamily}', sans-serif`); }
+    if (sp.letterSpacing !== undefined && sp.letterSpacing !== n.letterSpacing) css.push(`letter-spacing: ${px(sp.letterSpacing)}`);
+    const deco = [sp.underline ? 'underline' : '', sp.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ');
+    if (deco) css.push(`text-decoration: ${deco}`);
+    out += css.length ? `<span style="${css.join('; ')}">${text}</span>` : text;
+  }
+  return out;
+}
+
 function textStyle(ctx: Ctx, n: TextNode, s: Decl[]) {
   ctx.font(n.fontFamily, n.fontWeight);
   const fill = n.fills.filter((f) => f.visible).at(-1);
@@ -186,7 +212,8 @@ function textStyle(ctx: Ctx, n: TextNode, s: Decl[]) {
   s.push(['line-height', String(n.lineHeight)]);
   if (n.letterSpacing) s.push(['letter-spacing', px(n.letterSpacing)]);
   if (n.textAlign !== 'left') s.push(['text-align', n.textAlign]);
-  if (fill) s.push(['color', hex(fill.color)]);
+  if (fill?.type === 'solid') s.push(['color', hex(fill.color)]);
+  else if (fill) s.push(['background', paintToCss(fill)], ['-webkit-background-clip', 'text'], ['background-clip', 'text'], ['color', 'transparent']);
   s.push(['white-space', n.textSizing === 'auto-width' ? 'pre' : 'pre-wrap']);
 }
 
@@ -196,6 +223,7 @@ function print(el: El, depth: number, cls: (el: El) => string): string {
   const open = `${el.tag}${c ? ` class="${c}"` : ''}${el.attrs}`;
   if (el.raw !== undefined) return `${pad}<${open}${el.raw}`;
   if (el.tag === 'img') return `${pad}<${open}>`;
+  if (el.html !== undefined) return `${pad}<${open}>${el.html}</${el.tag}>`;
   if (el.text !== undefined) return `${pad}<${open}>${esc(el.text)}</${el.tag}>`;
   if (!el.children.length) return `${pad}<${open}></${el.tag}>`;
   return `${pad}<${open}>\n${el.children.map((k) => print(k, depth + 1, cls)).join('\n')}\n${pad}</${el.tag}>`;

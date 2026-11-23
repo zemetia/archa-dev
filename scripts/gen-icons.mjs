@@ -6,10 +6,24 @@ import { join } from 'node:path';
 const dir = join('node_modules', 'lucide-react', 'dist', 'esm', 'icons');
 const r = (v) => Math.round(Number(v) * 100) / 100;
 
+const NUM = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?`;
+const LEAD_MOVE = new RegExp(String.raw`^\s*m\s*(${NUM})[\s,]*(${NUM})[\s,]*`);
+
+/**
+ * A path's first `m` is absolute, but once paths are concatenated it would turn relative.
+ * `m x y …pairs` → `M x y l …pairs`: the implicit pairs after a relative moveto stay relative linetos.
+ */
+function absoluteStart(d) {
+  const m = LEAD_MOVE.exec(d);
+  if (!m) return d;
+  const rest = d.slice(m[0].length);
+  return `M${m[1]} ${m[2]}${/^[-+.\d]/.test(rest) ? 'l' : ''}${rest}`;
+}
+
 /** lucide elements → one path string. Strokes only; lucide icons are drawn with stroke 2, round caps. */
 function toD([tag, a]) {
   switch (tag) {
-    case 'path': return a.d;
+    case 'path': return absoluteStart(a.d);
     case 'line': return `M${r(a.x1)} ${r(a.y1)}L${r(a.x2)} ${r(a.y2)}`;
     case 'polyline':
     case 'polygon': {

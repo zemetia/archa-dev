@@ -3,9 +3,23 @@
  * pre-loaded into chat runs (blueprint MCP/04). All text is ours — written for ArchaDev's API.
  */
 
-export type GuideTopic = 'process' | 'layout' | 'taste' | 'type-color' | 'components' | 'icons' | 'landing' | 'web-app' | 'mobile';
+export type GuideTopic = 'process' | 'layout' | 'taste' | 'type-color' | 'components' | 'icons' | 'landing' | 'web-app' | 'mobile' | 'rebuild';
 
 export const GUIDES: Record<GuideTopic, { title: string; when: string; body: string }> = {
+  rebuild: {
+    title: 'Rebuild from a reference (PDF, mockup, screenshot)',
+    when: 'the person gives a PDF / image to recreate',
+    body: `Measure first, then build — never eyeball a screenshot.
+1. reference({ path, page }) — read the summary: page size, fill palette, type scale, text lines (x, y, size, colour), boxes (rects / rounded rects with radius), images. The full data with SVG paths is in the JSON file it names; read it for exact values.
+2. Tokens: setVariable for every palette colour you will reuse (color/ink, color/muted, color/accent, color/canvas…), the radii and the type sizes. Bind nodes to them: bind(node, { fill: "color/accent", cornerRadius: "radius/card" }).
+3. Fonts: fonts() lists the bundled families (drawn and measured exactly). Use the reference's family when bundled, else the closest one.
+4. Components from repeated boxes (same size, radius, fill): buttons, tags, cards, list rows. makeComponent once, instance() everywhere; overrides on instances survive syncInstances().
+5. Build each section with auto-layout, using the measured numbers: x/y become padding and gap, widths and heights are exact, text sizes and colours come from the lines. Two colours in one sentence = one text node with runs: ["Ink part ", { text: "muted part", fill: "#8c9196" }].
+6. Photos: the reference already copied them into the asset folder — image("<file from the summary>", parent, { width, height }) or src "asset:images/…". Never send base64.
+7. Scrims and glass: real gradients — fills: ["linear-gradient(180deg, rgba(22,24,27,0) 0%, rgba(22,24,27,0.75) 100%)"]; a semi-transparent fill for glass.
+8. Vectors (logos, routes, icons that are not lucide): take the path's SVG d from the JSON and insert a path node with that d and a viewBox of its box.
+9. compare({ node, reference, page }) after each section or two: fix the worst region first (the reply names the nodes under it), re-run until the remaining differences are photos or anti-aliasing. Heights that differ shift everything below — fix the first gap before judging the rest.`,
+  },
   process: {
     title: 'Working loop',
     when: 'every task',
@@ -100,6 +114,7 @@ export function guideText(topic: string): string {
 }
 
 const KEYWORDS: Array<[GuideTopic, RegExp]> = [
+  ['rebuild', /\b(pdf|reference|mockup|recreate|rebuild|replicate|reproduce|pixel[- ]perfect|from (this|the) (design|screenshot|image)|sesuai (pdf|desain|gambar)|tiru|buat ulang)\b/i],
   ['landing', /\b(landing|hero|marketing|website|homepage|home page|pricing|waitlist|portfolio|company profile|saas site)\b/i],
   ['web-app', /\b(dashboard|admin|analytics|table|crm|settings page|web ?app|saas|console|form|kanban|inbox|sidebar)\b/i],
   ['mobile', /\b(mobile|phone|ios|android|app screen|onboarding|splash|tab bar)\b/i],

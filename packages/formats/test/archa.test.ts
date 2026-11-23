@@ -55,6 +55,15 @@ describe('.archa', () => {
     expect(data.nodes.frame00001?.name).toBe('Card');
   });
 
+  it('migrates the v2 fixture to the current format, keeping its data: image for the host to move out', () => {
+    const dir = join(__dirname, 'fixtures/archa-v2');
+    const file = (p: string) => new Uint8Array(readFileSync(join(dir, p)));
+    const data = decodeArcha(zipSync({ 'manifest.json': file('manifest.json'), 'document.json': file('document.json'), 'pages/page00002.json': file('pages/page00002.json') }));
+    expect(data.meta.formatVersion).toBe(FORMAT_VERSION);
+    const img = data.nodes.image00002;
+    expect(img?.type === 'image' && img.src.startsWith('data:image/png;base64,')).toBe(true);
+  });
+
   it('rejects garbage with a clear error', () => {
     expect(() => decodeArcha(new Uint8Array([1, 2, 3]))).toThrow(FormatError);
   });

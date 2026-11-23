@@ -35,7 +35,11 @@ Same API from the app (via RPC `export.*`), CLI (`archa export`) and MCP (`expor
 
 | Rule | Detail |
 |---|---|
-| Default | PNG, scale chosen so the longest side ≤ 1568 px |
+| Size | No cap: rendered at the requested scale; only a canvas ceiling (32 000 px a side, 200 MP) shrinks it (`core-host/shots.ts`) |
+| File | Every shot is written to `ARCHA_HOME/runtime/screenshots/` and its path returned — temporary: swept after 24 h or beyond 300 files, never stored in a document |
+| Slices | A shot taller than 2 000 px and 1.8 × its width goes inline as full-width JPEG slices of 1 400 px (max 12), each labelled with its y range in node px — text stays readable. `slices: false/true` overrides |
+| Inline | Otherwise the full image goes inline; past 7 680 px on a side (vision-model limit) or past the 6 MB reply budget a preview goes inline and the reply points at the full file |
+| Browser | The `browser` tool follows the same rule: full PNG to the same folder, CSS-px image inline, shrunk only past 7 680 px |
 | Smallest node | Agents are told to screenshot the smallest meaningful node, not the page |
 | Dedup | If `subtreeHash` equals the last one sent to that client → reply `unchanged since your last screenshot` with no image (L7) |
 | Placeholders | Nodes with pending generated images draw a labelled placeholder; reply notes they are pending |

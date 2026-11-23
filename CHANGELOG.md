@@ -4,6 +4,36 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### Files
+- **Images live next to the file, not inside it.** Saving `landing.archa` keeps its images in `landing-asset/images/` and the document only points at them (`asset:images/…`). Pasted, imported and agent-made images are written there as they arrive, so `.archa` files no longer carry base64 and stay small.
+- Opening an older file moves its embedded images out into the folder; save once to slim the file down. File format is now version 3 (older ArchaDev versions cannot open it).
+- Agents can place a photo by its file path or URL instead of sending the image itself.
+- Exports (HTML, SVG, PDF) and published library components still include their images.
+
+### Chat
+- **Every conversation is its own `.json` file** in `<name>-asset/chats/`, with its pasted images in `chats/attachments/`. Conversations travel with the design folder and load from there when you open it; they are never stored inside the `.archa`. History from earlier versions moves over on first open.
+
+### Design
+- **Gradients.** Fills can be linear or radial gradients, edited in the Design panel (Solid / Linear / Radial, angle, colour stops) and exported to SVG, HTML and PDF.
+- **Rich text.** One text node can mix colours, weights, fonts, underline and strikethrough. Styles stay on the right words when the text is edited.
+- **Token bindings.** A fill, radius, gap, padding, font size and more can be bound to a variable; change the variable and every bound layer follows. Editing the property by hand unbinds it. Undo covers both.
+- **Instance overrides survive sync.** Text, images or colours changed on a component instance are kept when the main is synced, and synced layers keep their ids.
+- **Twelve fonts built in**: Inter, Inter Tight, Roboto, Open Sans, Poppins, Montserrat, Plus Jakarta Sans, DM Sans, Manrope, Space Grotesk, Playfair Display, JetBrains Mono — drawn and measured exactly on every machine.
+
+### Agents
+- MCP tools (`get_state`, `execute`, `screenshot`, `export_svg`, `say`) take a `doc` argument — a document id, `.archa` path or name — so an agent can work on any open document, not only the active one. New tools: `list_documents`, `open_document`, `new_document`, `save_document`.
+- Screenshots are no longer shrunk: agents get the full-size image plus a temporary file path. A tall page comes back as readable full-width slices, each labelled with its y range. Replies stay under the size MCP clients accept, so a long page no longer drops the connection. The in-app browser screenshots work the same way.
+- **Rebuild from a reference.** `reference` reads a PDF page (or image) into numbers — every text line with position, size and colour, boxes with their corner radius, the palette, the type scale — and puts its photos straight into the document's asset folder. `compare` diffs a build against the reference and names the layers in the worst regions, with a heat map. A built-in `rebuild` guide walks agents through it.
+- `execute` gains `image(path)` (the app reads the file and uses its real size), `bind()` for tokens and `fonts()`; fills accept CSS gradient strings and text accepts `runs` for rich text.
+
+### Canvas
+- **Text fits its box.** Layout now measures text with the real widths of the bundled fonts instead of an estimate, and the canvas draws with the same metrics, so hug-sized frames, centred text and wrapped paragraphs line up. SVG export keeps wrapped lines.
+- Outside strokes no longer erase the fill of the shape they belong to.
+- Fixed 823 lucide icons (arrows, search, x and more) that drew broken.
+
+### Settings
+- Claude Code installed through npm signs in again (it failed with `spawn … ENOENT` on Windows).
+
 ## [0.4.0] - 2026-11-19
 
 ### Settings

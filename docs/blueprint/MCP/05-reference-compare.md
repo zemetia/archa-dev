@@ -1,0 +1,47 @@
+# MCP — 05: Reference and Compare
+
+← [MCP.md](../MCP.md) | [Blueprint INDEX](../INDEX.md) | [04 — Local skill ←](./04-local-skill.md)
+
+**Built (0.4.1).** Code: `apps/desktop/src/core-host/reference.ts` (PDF reading), `reference-tools.ts` (tools), `renderer/lib/reference.ts` (raster, colour sampling, diff). Guide: `read_guide("rebuild")`.
+
+---
+
+## Why
+
+Rebuilding a mockup from a screenshot is guessing. Reading the source PDF gives exact numbers — positions, sizes, colours, radii, the images themselves — and a pixel diff after building says what is still wrong and where. That loop is what made the Sehati rebuild land within a few pixels.
+
+---
+
+## `reference { path, page?, images?, doc? }`
+
+| Step | Where | Detail |
+|---|---|---|
+| Read | Core host, pdf.js legacy (no canvas) | Text items → lines (same baseline and size, close together; a wide space item ends a line). Operator list walked with the transform, fill/stroke colour and alpha (`setGState ca/CA`) stack |
+| Shapes | Core host | Fill/stroke paths in page px: `rect`, `rounded-rect` (+ radius from the first corner's curves), `ellipse`, else `path` with SVG `d`. A rect filled inside a rounded clip is that rounded box. The page background is skipped |
+| Images | Core host | Decoded pixels → PNG → the document's asset folder (`images/`, content-addressed): ready for `image()` / `src: "asset:…"` |
+| Colours | Renderer (pdf.js + canvas) | The page is rasterised; each text box's ink = the colour farthest from its edge colour, averaged over the clearly-inked pixels (Type3 fonts keep colour in their glyphs) |
+| Output | `<name>-asset/reference/<file>-p<N>.{json,png}` | JSON = every line, shape (with `d`), image; the reply = summary: size, fill palette by area, text colours, type scale, images, boxes ≥ 2000 px², first 160 lines |
+
+Images (`.png .jpg .webp`): copied to `reference/`, size reported.
+
+---
+
+## `compare { node, reference, page?, scale?, doc? }`
+
+| Rule | Detail |
+|---|---|
+| Fit | The reference is rasterised at the node's rendered width (PDF page scaled, image resized) |
+| Score | A pixel differs when its largest channel difference > 48 (design composited on white). Reply: % differing, mean difference, heights |
+| Regions | 24 px bands with > 2 % differing pixels merge into regions; the 12 worst (by area × %) with x/y range and the 3 nodes they cover most |
+| Heat map | Reference faded to 35 %, differences in red by strength; full PNG in `runtime/screenshots/`, inline as JPEG slices |
+| Cache | Rasters cached in the window (last three, by file/page/width): the first raster of a heavy page can take seconds to a minute, later compares are about one second |
+
+References are staged into `ARCHA_HOME/runtime/reference/<hash>.<ext>` so `archa-asset://` may serve them (PDF allowed there only).
+
+---
+
+## Limits
+
+- Text without a Unicode map (some Type3 glyphs such as dashes) comes back missing; check against the page raster.
+- Fonts are reported by PDF name (`g_d0_f1` for Type3); pick the family from `fonts()`.
+- Gradients and soft masks are not extracted as paints; read them off the raster.

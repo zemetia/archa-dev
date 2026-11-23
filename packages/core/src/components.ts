@@ -74,16 +74,50 @@ export function unmakeComponentOps(doc: ArchaDocument, id: string): Op[] {
   return ops;
 }
 
+/** Marks every node of a copied subtree with the main node it came from (`meta.src`), for syncing later. */
+function withSources(doc: ArchaDocument, id: string, input: NodeInput): NodeInput {
+  const n = doc.require(id);
+  const meta: Record<string, unknown> = { ...(input.meta as Record<string, unknown> | undefined), src: id };
+  delete meta.overrides;
+  const kids = isContainer(n) && input.children ? input.children.map((c, i) => withSources(doc, n.children[i]!, c)) : undefined;
+  return { ...input, meta, ...(kids ? { children: kids } : {}) } as NodeInput;
+}
+
 /** Insert a linked copy of a component. Position is relative to the parent. */
 export function instanceOps(doc: ArchaDocument, componentId: string, parentId: string, at: { x?: number; y?: number; index?: number; name?: string } = {}) {
   const main = doc.require(componentId);
   if (!componentMeta(main)) throw new DocumentError('VALIDATION', `"${main.name}" is not a component`);
-  const input = stripMain(subtreeInput(doc, componentId));
+  const input = withSources(doc, componentId, stripMain(subtreeInput(doc, componentId)));
   const meta = { ...(input.meta as Record<string, unknown>), instanceOf: componentId };
   return insertOpsFor({ ...input, meta, name: at.name ?? main.name, x: at.x ?? main.x, y: at.y ?? main.y } as NodeInput, parentId, at.index);
 }
 
-/** Make an instance match its main again: same props and children; keeps its own name, position and parent sizing. */
+/** Keys an instance root always keeps as its own. */
+const ROOT_OWN = ['name', 'x', 'y', 'absolute', 'visible', 'locked'];
+/** Before overrides were recorded, copies only ever changed their content; treat those keys as overrides. */
+const LEGACY_OVERRIDES = ['text', 'src', 'visible'];
+
+/** A main node's syncable properties, minus the keys the copy keeps. `bind` is always carried so a synced fill never detaches it. */
+function syncProps(main: Node, keep: string[]): Record<string, unknown> {
+  const all = structuredClone(main) as unknown as Record<string, unknown>;
+  const out: Record<string, unknown> = { bind: all.bind };
+  for (const [k, v] of Object.entries(all)) if (!['id', 'type', 'parentId', 'children', 'meta'].includes(k)) out[k] = v;
+  for (const k of keep) delete out[k];
+  return out;
+}
+
+function overridesOf(copy: Node, main: Node, legacy: boolean): string[] {
+  if (Array.isArray(copy.meta.overrides)) return copy.meta.overrides as string[];
+  if (!legacy) return [];
+  const a = copy as unknown as Record<string, unknown>, b = main as unknown as Record<string, unknown>;
+  return LEGACY_OVERRIDES.filter((k) => k in a && JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+}
+
+/**
+ * Make an instance match its main again while keeping what was changed on the copy (blueprint
+ * DESIGN_SYSTEM/02 → Overrides). Nodes are matched by `meta.src` (copies made before that by name), updated in
+ * place so their ids survive; nodes the main gained are added, nodes it lost are removed, order follows the main.
+ */
 export function syncInstanceOps(doc: ArchaDocument, instanceId: string): Op[] {
   const inst = doc.require(instanceId);
   const mainId = instanceOf(inst);
@@ -91,13 +125,49 @@ export function syncInstanceOps(doc: ArchaDocument, instanceId: string): Op[] {
   const main = doc.get(mainId);
   if (!main) throw new DocumentError('NOT_FOUND', `The main component of "${inst.name}" was deleted — detach the instance`);
   const ops: Op[] = [];
-  if (isContainer(inst)) for (const c of inst.children) ops.push({ op: 'delete', id: c });
-  const { id: _i, type: _t, parentId: _p, name: _n, x: _x, y: _y, meta: _m, children: _c, absolute: _a, visible: _v, locked: _l, ...props } = structuredClone(main) as Node & { children?: string[] };
-  ops.push({ op: 'update', id: instanceId, patch: props });
-  if (isContainer(main)) {
-    for (const c of main.children) ops.push(...insertOpsFor(stripMain(subtreeInput(doc, c)), instanceId).ops);
-  }
-  return ops;
+  const moves: Op[] = [];
+  const deletes: Op[] = [];
+  const bySrc = new Map<string, Node>();
+  for (const d of doc.walk(instanceId)) if (d.id !== instanceId && typeof d.meta.src === 'string') bySrc.set(d.meta.src, d);
+  const used = new Set<string>();
+
+  const rootKeep = [...ROOT_OWN, ...overridesOf(inst, main, false)];
+  ops.push({ op: 'update', id: instanceId, patch: { ...syncProps(main, rootKeep), meta: { ...inst.meta, src: mainId } } });
+
+  const reconcile = (mainParent: Node, copyParent: Node) => {
+    if (!isContainer(mainParent) || !isContainer(copyParent)) return;
+    const want: string[] = [];
+    mainParent.children.forEach((mcId, i) => {
+      const mc = doc.require(mcId);
+      let match = bySrc.get(mcId);
+      let legacy = false;
+      if (!match || used.has(match.id) || match.type !== mc.type) {
+        // Older copies carry no `meta.src`: the same name and type under the matching parent, nearest position first.
+        const cands = copyParent.children.map((id) => doc.require(id)).filter((c) => !used.has(c.id) && c.type === mc.type && c.name === mc.name && typeof c.meta.src !== 'string');
+        match = cands.sort((a, b) => Math.abs(copyParent.children.indexOf(a.id) - i) - Math.abs(copyParent.children.indexOf(b.id) - i))[0];
+        legacy = !!match;
+      }
+      if (match) {
+        used.add(match.id);
+        const meta: Record<string, unknown> = { ...match.meta, src: mcId };
+        const keep = overridesOf(match, mc, legacy);
+        if (legacy && keep.length) meta.overrides = keep;
+        ops.push({ op: 'update', id: match.id, patch: { ...syncProps(mc, keep), meta } });
+        if (match.parentId !== copyParent.id) moves.push({ op: 'move', id: match.id, parentId: copyParent.id, index: i });
+        reconcile(mc, match);
+        want.push(match.id);
+      } else {
+        const { ops: ins, rootId } = insertOpsFor(withSources(doc, mcId, stripMain(subtreeInput(doc, mcId))), copyParent.id);
+        ops.push(...ins);
+        want.push(rootId);
+      }
+    });
+    for (const c of copyParent.children) if (!want.includes(c) && !used.has(c)) deletes.push({ op: 'delete', id: c });
+    want.forEach((id, i) => moves.push({ op: 'move', id, parentId: copyParent.id, index: i }));
+  };
+  reconcile(main, inst);
+  // Moves before deletes: a node the copy keeps may still sit inside one that goes.
+  return [...ops, ...moves, ...deletes];
 }
 
 export function detachOps(doc: ArchaDocument, instanceId: string): Op[] {

@@ -4,6 +4,7 @@ import { nativeImage, session, WebContentsView, type BrowserWindow, type Rectang
 import type { BrowserCommand, BrowserReply, BrowserState } from '@archa/protocol';
 import { PAGE_LIB } from './browser-page';
 import { addressToUrl, normalizeUrl } from './browser-url';
+import { INLINE_BUDGET, INLINE_MAX_SIDE, saveShot } from '../core-host/shots';
 
 /*
  * In-app browser the agent drives (blueprint BROWSER). Pages live in WebContentsViews on the
@@ -12,8 +13,8 @@ import { addressToUrl, normalizeUrl } from './browser-url';
  */
 
 const PARTITION = 'persist:archa-browser';
-const MAX_IMAGE_SIDE = 1568;
-const MAX_FULL_PAGE_HEIGHT = 8000;
+// Screenshots are not capped (the full PNG goes to a temporary file); only the inline copy shrinks past what vision models accept.
+const MAX_FULL_PAGE_HEIGHT = 32_000; // what Chromium can capture in one surface
 
 type ConsoleEntry = { seq: number; ts: number; level: string; text: string };
 type Tab = { id: string; view: WebContentsView; log: ConsoleEntry[]; readSeq: number; reportedSeq: number };
@@ -321,14 +322,22 @@ export class BrowserManager {
       this.cdp<{ data: string }>(tab, 'Page.captureScreenshot', { format: 'png', fromSurface: true, ...(clip ? { captureBeyondViewport: true, clip: { ...clip, scale: 1 } } : {}) }),
       15_000, 'Screenshot timed out — the page did not paint. Make sure the ArchaDev window is not minimised.',
     );
+    const path = saveShot(r.data, 'browser', tab.id);
     let img = nativeImage.createFromBuffer(Buffer.from(r.data, 'base64'));
     const cssW = clip ? clip.width : i.vw;
     const cssH = clip ? clip.height : i.vh;
-    // Normalise to CSS pixels so image coordinates = page coordinates; shrink only if too big for a model.
-    const factor = opts.fullPage ? Math.min(1, 1280 / cssW) : Math.min(1, MAX_IMAGE_SIDE / Math.max(cssW, cssH));
+    // Normalise to CSS pixels so image coordinates = page coordinates; shrink only past the vision-model limit.
+    let factor = Math.min(1, INLINE_MAX_SIDE / Math.max(cssW, cssH));
     const w = Math.max(1, Math.round(cssW * factor));
     if (img.getSize().width !== w) img = img.resize({ width: w, quality: 'best' });
-    return { png: img.toPNG().toString('base64'), factor, cssW: Math.round(cssW), cssH: Math.round(cssH), info: i, cut: !opts.clip && opts.fullPage && i.ph > MAX_FULL_PAGE_HEIGHT };
+    let png = img.toPNG().toString('base64');
+    // Keep the reply under the MCP message limit; the full-size file is on disk either way.
+    for (let i = 0; i < 4 && png.length > INLINE_BUDGET; i++) {
+      factor *= Math.sqrt(INLINE_BUDGET / png.length) * 0.9;
+      img = img.resize({ width: Math.max(1, Math.round(cssW * factor)), quality: 'best' });
+      png = img.toPNG().toString('base64');
+    }
+    return { png, path, factor, cssW: Math.round(cssW), cssH: Math.round(cssH), info: i, cut: !opts.clip && opts.fullPage && i.ph > MAX_FULL_PAGE_HEIGHT };
   }
 
   /** Footer every reply carries: where the page is now, and errors since the last reply. */
@@ -434,6 +443,7 @@ export class BrowserManager {
           if (shot.factor === 1) out.push(clip || cmd.fullPage ? 'Image is 1:1 with page px.' : 'Image is 1:1: an image pixel (x, y) is a click target {x, y}.');
           else out.push(`Image scaled ×${shot.factor.toFixed(3)}: divide image pixels by ${shot.factor.toFixed(3)} to get page px.`);
           if (cmd.fullPage) out.push(`Full-page y is document y; viewport y = document y − scrollY (now ${i.sy}).`);
+          out.push(`Full-size PNG (device px, temporary): ${shot.path}`);
           if (legend.length) out.push(`Labelled refs (${legend.length}):`, ...legend.slice(0, 120).map((l) => `  ${l}`));
         } finally {
           if (cmd.labels) await this.page(tab, 'A.hideLabels()').catch(() => {});

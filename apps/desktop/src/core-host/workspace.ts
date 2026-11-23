@@ -1,11 +1,11 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { userInfo } from 'node:os';
-import { basename, dirname, extname, isAbsolute, join } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, normalize, resolve as resolvePath } from 'node:path';
 import { ArchaDocument, DocumentError, DocumentSession, findEmptySpace, libraryInsertOps, subtreeHash } from '@archa/core';
 import { decodeArcha, encodeArcha, exportHtml, exportHtmlStandalone, exportSvg } from '@archa/formats';
 import { newId, opSchema, type Author, type Op } from '@archa/schema';
-import { browserCommandSchema, type ActivityEntry, type TrailStep, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
+import { browserCommandSchema, type Shot, type ActivityEntry, type TrailStep, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
 import { z } from 'zod';
 import { AgentExecutor, describeState } from './execute';
 import { ADAPTERS, ChatRunner, findBin, type McpCommand } from './agents';
@@ -15,6 +15,9 @@ import { SkillManager } from './skills';
 import { McpServerManager } from './mcp-servers';
 import { callBrowser } from './main-bridge';
 import { randomPersona } from './personas';
+import { assetDirFor, externalizeData, externalizeOps, inlineData, isRuntimeAssetDir, moveAssets } from './assets';
+import { compareReference, compareSchema, readReference, referenceSchema } from './reference-tools';
+import { canvasFit, fitBudget, INLINE_BUDGET, INLINE_MAX_SIDE, MAX_SLICES, saveShot, SLICE_HEIGHT, SLICE_MIN_HEIGHT, SLICE_RATIO, sweepShots } from './shots';
 
 const chatSendSchema = z.object({
   docId: z.string().min(1), agent: z.string().min(1), prompt: z.string().min(1).max(100_000),
@@ -56,6 +59,8 @@ export function mcpCommand(): McpCommand {
   return { command: process.execPath, args: [cliPath(), 'mcp'], env: { ELECTRON_RUN_AS_NODE: '1' } };
 }
 
+type RenderReply = Omit<CoreMethods['render.respond']['params'], 'requestId'>;
+
 /** threadId: the chat thread of a launched run's `archa mcp`; its trail is tagged with it. */
 export type Connection = { id: string; channel: Channel; client: ClientInfo; author: Author; connectedAt: number; threadId?: string };
 
@@ -67,7 +72,7 @@ export class Workspace {
   readonly connections = new Map<string, Connection>();
   readonly selection = new Map<string, string[]>();
   readonly activity: ActivityEntry[] = [];
-  private renderWaiters = new Map<string, (r: { png?: string; error?: string }) => void>();
+  private renderWaiters = new Map<string, (r: RenderReply) => void>();
   private executors = new Map<string, AgentExecutor>();
   private sentHashes = new Map<string, string>();
   private lastDocId: string | null = null;
@@ -79,6 +84,7 @@ export class Workspace {
 
   constructor() {
     this.newDoc('Untitled');
+    sweepShots();
   }
 
   /* ------------------------------ connections ------------------------------ */
@@ -132,10 +138,18 @@ export class Workspace {
   /* -------------------------------- documents ------------------------------- */
 
   summaries(): DocSummary[] {
-    return [...this.sessions.values()].map((s) => ({ id: s.id, name: s.doc.meta.name, filePath: s.filePath, dirty: s.dirty, revision: s.revision }));
+    return [...this.sessions.values()].map((s) => ({ id: s.id, name: s.doc.meta.name, filePath: s.filePath, assetDir: this.assetDir(s), dirty: s.dirty, revision: s.revision }));
+  }
+
+  /** The document's `<name>-asset/` folder (images, chats); a runtime folder while it has no file. */
+  assetDir(s: DocumentSession | string): string {
+    const session = typeof s === 'string' ? this.session(s) : s;
+    return assetDirFor(session.filePath, session.id);
   }
 
   private register(session: DocumentSession) {
+    // No base64 in documents: images arriving as data: URLs are written to the asset folder first.
+    session.transformOps = (ops) => externalizeOps(this.assetDir(session), ops);
     this.sessions.set(session.id, session);
     this.lastDocId = session.id;
     session.onApplied((a) => this.broadcast('doc.applied', a));
@@ -147,11 +161,28 @@ export class Workspace {
     return this.register(new DocumentSession(ArchaDocument.create(name)));
   }
 
-  session(docId?: string): DocumentSession {
-    const id = docId ?? this.lastDocId ?? [...this.sessions.keys()][0];
-    const s = id ? this.sessions.get(id) : undefined;
-    if (!s) throw new DocumentError('NOT_FOUND', docId ? `Document ${docId} is not open` : 'No document is open in ArchaDev');
-    return s;
+  /**
+   * A document by id, `.archa` path or unique name; without one, the document the person used last.
+   * Agents pass `doc` on any MCP tool to work on a document that is not the active one.
+   */
+  session(ref?: string): DocumentSession {
+    if (!ref) {
+      const id = this.lastDocId ?? [...this.sessions.keys()][0];
+      const s = id ? this.sessions.get(id) : undefined;
+      if (!s) throw new DocumentError('NOT_FOUND', 'No document is open in ArchaDev');
+      return s;
+    }
+    const byId = this.sessions.get(ref);
+    if (byId) return byId;
+    const all = [...this.sessions.values()];
+    const key = (p: string) => normalize(resolvePath(p)).toLowerCase();
+    const byPath = /[\\/]|\.archa$/i.test(ref) ? all.find((s) => s.filePath && key(s.filePath) === key(ref)) : undefined;
+    if (byPath) return byPath;
+    const byName = all.filter((s) => s.doc.meta.name === ref);
+    if (byName.length === 1) return byName[0]!;
+    const open = all.map((s) => `${s.doc.meta.name} (${s.id})`).join(', ');
+    if (byName.length > 1) throw new DocumentError('VALIDATION', `${byName.length} open documents are named "${ref}" — pass the id. Open: ${open}`);
+    throw new DocumentError('NOT_FOUND', `Document "${ref}" is not open. Open: ${open || 'none'}`);
   }
 
   log(docId: string, author: Author, tool: string, text: string, nodeIds: string[] = [], runId?: string) {
@@ -168,29 +199,63 @@ export class Workspace {
   }
 
   /** Asks a connected window to rasterise a node (the renderer owns the canvas engine). */
-  requestRender(docId: string, nodeId: string, scale: number): Promise<{ png?: string; error?: string }> {
+  requestRender(docId: string, nodeId: string, scale: number, slice?: number): Promise<RenderReply> {
+    return this.askRenderer('render.request', (requestId) => ({ requestId, docId, nodeId, scale, ...(slice ? { slice } : {}) }));
+  }
+
+  /** Sends a request event to a window (the renderer owns canvas, pdf.js and pixels) and waits for `render.respond`. */
+  askRenderer<E extends 'render.request' | 'render.reference' | 'render.compare'>(event: E, data: (requestId: string) => CoreEvents[E], timeoutMs = 120_000): Promise<RenderReply> {
     const renderer = [...this.connections.values()].find((c) => c.client.kind === 'renderer');
-    if (!renderer) return Promise.resolve({ error: 'No ArchaDev window is open to render screenshots' });
+    if (!renderer) return Promise.resolve({ error: 'No ArchaDev window is open to render' });
     const requestId = newId();
     return new Promise((resolve) => {
-      const timer = setTimeout(() => { this.renderWaiters.delete(requestId); resolve({ error: 'render timed out' }); }, 10_000);
+      const timer = setTimeout(() => { this.renderWaiters.delete(requestId); resolve({ error: 'render timed out' }); }, timeoutMs);
       this.renderWaiters.set(requestId, (r) => { clearTimeout(timer); resolve(r); });
-      renderer.channel.send({ t: 'evt', event: 'render.request', data: { requestId, docId, nodeId, scale } });
+      renderer.channel.send({ t: 'evt', event, data: data(requestId) });
     });
   }
 
-  /** Returns `unchanged` when this client already received the same subtree hash. */
-  async screenshot(conn: Connection, docId: string, nodeId: string, scale = 1) {
+  /**
+   * Full-size screenshot, written to a temporary file (no size cap). Returns `unchanged` when this
+   * client already received the same subtree hash. The inline image is the full one, or a preview
+   * scaled to INLINE_MAX_SIDE when the full one is larger than vision models accept.
+   */
+  async screenshot(conn: Connection, docId: string, nodeId: string, scale = 1, opts: { slices?: boolean } = {}): Promise<Shot> {
     const s = this.session(docId);
     const node = s.doc.require(nodeId);
-    const key = `${conn.id}:${nodeId}:${scale}`;
+    const key = `${conn.id}:${s.id}:${nodeId}:${scale}`;
     const hash = subtreeHash(s.doc, nodeId);
     if (this.sentHashes.get(key) === hash) return { nodeId, name: node.name, unchanged: true };
-    const longest = Math.max(node.width, node.height) * scale;
-    const fit = longest > 1568 ? (1568 / longest) * scale : scale;
+    const fit = canvasFit(node.width, node.height, scale);
     const r = await this.requestRender(s.id, nodeId, fit);
-    if (r.png) this.sentHashes.set(key, hash);
-    return { nodeId, name: node.name, png: r.png, error: r.error };
+    if (!r.png) return { nodeId, name: node.name, error: r.error };
+    const width = Math.max(1, Math.round(node.width * fit));
+    const height = Math.max(1, Math.round(node.height * fit));
+    const path = saveShot(r.png, s.id, nodeId);
+    // A tall page reads best as full-width pieces: no preview shrinks its text away.
+    const tall = height > SLICE_MIN_HEIGHT && height / width > SLICE_RATIO;
+    if (opts.slices ?? tall) {
+      const sliceH = Math.max(SLICE_HEIGHT, Math.ceil(height / MAX_SLICES));
+      const cut = await this.requestRender(s.id, nodeId, fit, sliceH);
+      if (cut.slices?.length) {
+        this.sentHashes.set(key, hash);
+        const all = cut.slices.map((data, i) => ({ data, mime: 'image/jpeg' as const, y0: Math.round((i * sliceH) / fit), y1: Math.round(Math.min(height, (i + 1) * sliceH) / fit) }));
+        const { kept, omitted } = fitBudget(all);
+        return { nodeId, name: node.name, path, width, height, slices: kept, ...(omitted ? { omitted } : {}) };
+      }
+    }
+    let png: string | undefined = r.png;
+    let preview = false;
+    if (Math.max(width, height) > INLINE_MAX_SIDE || r.png.length > INLINE_BUDGET) {
+      // Past the vision limit or the reply budget: a preview inline, sized to fit both.
+      const bySide = INLINE_MAX_SIDE / Math.max(width, height);
+      const byBytes = Math.sqrt(INLINE_BUDGET / r.png.length) * 0.9;
+      const small = await this.requestRender(s.id, nodeId, fit * Math.min(1, bySide, byBytes));
+      png = small.png;
+      preview = !!small.png;
+    }
+    this.sentHashes.set(key, hash);
+    return { nodeId, name: node.name, png, path, width, height, preview };
   }
 
   private executor(conn: Connection) {
@@ -209,14 +274,21 @@ export class Workspace {
       if (existing) return { docId: existing.id };
       const data = decodeArcha(new Uint8Array(await readFile(path)));
       if (this.sessions.has(data.meta.id)) data.meta.id = newId();
+      // Older files carry images as base64: write them out to `<name>-asset/`; the next save drops the base64.
+      const moved = externalizeData(assetDirFor(path, data.meta.id), data);
       const s = new DocumentSession(data, path);
-      s.dirty = false;
+      s.dirty = moved > 0;
       return { docId: this.register(s) };
     },
     'doc.save': async ({ docId, path }) => {
       const s = this.session(docId);
-      const target = path ?? s.filePath;
+      if (path && !isAbsolute(path)) throw new DocumentError('VALIDATION', `Save path must be absolute (got "${path}")`);
+      const target = path ? (/\.archa$/i.test(path) ? path : `${path}.archa`) : s.filePath;
       if (!target) throw new DocumentError('VALIDATION', 'No file path yet — choose where to save');
+      // The asset folder travels with the file: a first save or Save As copies it to `<new name>-asset/`.
+      const fromDir = this.assetDir(s);
+      const toDir = assetDirFor(target, s.id);
+      if (fromDir !== toDir) moveAssets(fromDir, toDir, isRuntimeAssetDir(fromDir));
       const tmp = `${target}.tmp`;
       await writeFile(tmp, encodeArcha(s.doc.toData()));
       await rename(tmp, target);
@@ -228,6 +300,7 @@ export class Workspace {
     },
     'doc.close': ({ docId }) => {
       this.sessions.delete(docId);
+      this.chat.store.forget(docId);
       if (!this.sessions.size) this.newDoc('Untitled');
       this.lastDocId = [...this.sessions.keys()].at(-1) ?? null;
       this.broadcast('workspace.changed', this.summaries());
@@ -262,23 +335,25 @@ export class Workspace {
       this.lastDocId = docId;
       this.broadcast('selection.changed', { docId, ids, by: conn.author });
     },
-    'render.respond': ({ requestId, png, error }) => {
-      this.renderWaiters.get(requestId)?.({ png, error });
+    'render.respond': ({ requestId, ...reply }) => {
+      this.renderWaiters.get(requestId)?.(reply);
       this.renderWaiters.delete(requestId);
     },
     'agents.list': () => this.agents(),
     'activity.list': ({ docId, limit }) => this.activity.filter((a) => !docId || a.docId === docId).slice(-(limit ?? 200)),
     'agent.state': ({ docId }) => describeState(this, this.session(docId)),
     'agent.execute': (params, conn) => this.executor(conn).run(this.session(params.docId), params),
-    'agent.screenshot': async ({ docId, node, scale }, conn) => {
+    'agent.screenshot': async ({ docId, node, scale, slices }, conn) => {
       const s = this.session(docId);
       const id = resolveRef(s, node);
-      const r = await this.screenshot(conn, s.id, id, scale ?? 1);
+      const r = await this.screenshot(conn, s.id, id, scale ?? 1, { slices });
       if (r.error) throw new DocumentError('CONFLICT', r.error);
       this.log(s.id, conn.author, 'screenshot', `Screenshot "${r.name}"`, [id], conn.client.runId);
       this.trail(conn, s.id, [trailStep(s, 'look', id)]);
       return r;
     },
+    'agent.reference': (params, conn) => readReference(this, parse(referenceSchema, params), conn),
+    'agent.compare': (params, conn) => compareReference(this, parse(compareSchema, params), conn),
     'agent.exportSvg': ({ docId, node }, conn) => {
       const s = this.session(docId);
       const id = resolveRef(s, node);
@@ -313,18 +388,20 @@ export class Workspace {
     'export.save': async (params) => {
       const { docId, nodeId, format, path, image } = parse(exportSaveSchema, params);
       const s = this.session(docId);
+      // Exported files stand alone: asset images are inlined, then the HTML exporter writes its own copies.
+      const doc = new ArchaDocument(inlineData(this.assetDir(s), s.doc.toData()), s.revision);
       if (format === 'png' || format === 'jpg') {
         if (!image) throw new DocumentError('VALIDATION', `${format.toUpperCase()} export needs the rendered image`);
         await writeFile(path, Buffer.from(image, 'base64'));
         return { files: [path] };
       }
       if (format === 'svg') {
-        await writeFile(path, exportSvg(s.doc, nodeId));
+        await writeFile(path, exportSvg(doc, nodeId));
         return { files: [path] };
       }
       // HTML: the page goes where the person chose; its CSS and image assets go next to it.
       const dir = dirname(path);
-      const files = exportHtml(s.doc, nodeId, { style: format === 'tailwind' ? 'tailwind' : 'css', name: basename(path, extname(path)) });
+      const files = exportHtml(doc, nodeId, { style: format === 'tailwind' ? 'tailwind' : 'css', name: basename(path, extname(path)) });
       const written: string[] = [];
       for (const f of files) {
         const target = join(dir, f.path);
@@ -338,7 +415,8 @@ export class Workspace {
       const { docId, nodeId } = parse(exportPageSchema, params);
       const s = this.session(docId);
       const n = s.doc.require(nodeId);
-      return { html: exportHtmlStandalone(s.doc, nodeId), width: n.width, height: n.height };
+      const doc = new ArchaDocument(inlineData(this.assetDir(s), s.doc.toData()), s.revision);
+      return { html: exportHtmlStandalone(doc, nodeId), width: n.width, height: n.height };
     },
     'chat.send': (params) => {
       const p = parse(chatSendSchema, params);
@@ -354,7 +432,9 @@ export class Workspace {
     'library.list': () => this.library.list(),
     'library.publish': (params) => {
       const p = parse(libraryPublishSchema, params);
-      return this.library.publish(this.session(p.docId).doc, p.nodeId, p.library, p.png);
+      // Libraries are shared across documents, so their images are stored inline (they move into each user's folder on insert).
+      const s = this.session(p.docId);
+      return this.library.publish(new ArchaDocument(inlineData(this.assetDir(s), s.doc.toData()), s.revision), p.nodeId, p.library, p.png);
     },
     'library.remove': (params) => {
       const p = parse(libraryItemSchema, params);

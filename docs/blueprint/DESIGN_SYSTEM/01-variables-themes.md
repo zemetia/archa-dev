@@ -48,6 +48,18 @@ type VariableCollection = {
 
 ---
 
+## Bindings (built, 0.4.1)
+
+The `$var` references below are the target; what ships is a per-node `bind` map (`packages/core/src/bindings.ts`):
+
+| Rule | Detail |
+|---|---|
+| Apply | After every transaction the core (and the renderer mirror, identically) sets bound properties from their variables: all bound nodes after a variable changed, else the nodes just written. The writes are part of the transaction, so undo restores them |
+| Detach | Setting a bound property by hand (a patch without `bind`) drops that binding — Figma-like |
+| Agents | `bind(ref, { fill: "color/accent" })` (names resolved to ids), `bind: {…}` on insert; `variables()` returns ids |
+
+---
+
 ## Contrast
 
 Every colour variable used as text is measured against the surfaces it sits on (from the profile's declared pairs and from actual usage). Result exposed in the Variables panel and as lint `a11y/contrast`. The check follows the variable's declared job: an accent declared "fill only" is not reported as text.

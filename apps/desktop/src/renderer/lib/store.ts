@@ -2,8 +2,9 @@ import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
 import { RpcClient, threadOf, type AccountsOverview, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
-import { renderNodeImage, renderNodePng } from '@archa/render';
+import { renderNodeImage, renderNodePng, renderNodeSlices } from '@archa/render';
 import { onChatRun } from './comments';
+import { preloadFonts } from './fonts';
 import { pushTrail, type AgentCursor } from '../canvas/cursors';
 
 export type LeftTab = 'chat' | 'history' | 'layers' | 'components' | 'slides' | 'library';
@@ -193,16 +194,48 @@ export async function init() {
   client.on('skills.changed', () => { clearTimeout(skillsTimer); skillsTimer = setTimeout(() => void loadSkills(), 120); });
   let mcpTimer: ReturnType<typeof setTimeout> | undefined;
   client.on('mcp.changed', () => { clearTimeout(mcpTimer); mcpTimer = setTimeout(() => void loadMcpServers(), 120); });
-  client.on('render.request', async ({ requestId, docId, nodeId, scale }) => {
+  client.on('render.request', async ({ requestId, docId, nodeId, scale, slice }) => {
     try {
       let doc = get().doc;
       if (!doc || get().activeDocId !== docId) {
         const snap = await client.call('doc.snapshot', { docId });
         doc = new ArchaDocument(snap.data, snap.revision);
       }
+      await preloadFonts();
       await document.fonts.ready;
-      const png = await renderNodePng(doc, nodeId, scale);
-      await client.call('render.respond', { requestId, png });
+      if (slice) {
+        const slices = await renderNodeSlices(doc, nodeId, scale, slice);
+        await client.call('render.respond', { requestId, slices });
+      } else {
+        const png = await renderNodePng(doc, nodeId, scale);
+        await client.call('render.respond', { requestId, png });
+      }
+    } catch (e) {
+      await client.call('render.respond', { requestId, error: (e as Error).message });
+    }
+  });
+
+  // Reference tools (pdf.js) load on first use — they are heavy and most sessions never need them.
+  client.on('render.reference', async ({ requestId, url, page, scale, boxes }) => {
+    try {
+      const { referenceRaster } = await import('./reference');
+      const r = await referenceRaster(url, page, scale, boxes);
+      await client.call('render.respond', { requestId, png: r.png, colors: r.colors });
+    } catch (e) {
+      await client.call('render.respond', { requestId, error: (e as Error).message });
+    }
+  });
+  client.on('render.compare', async ({ requestId, docId, nodeId, url, page, scale, slice }) => {
+    try {
+      let doc = get().doc;
+      if (!doc || get().activeDocId !== docId) {
+        const snap = await client.call('doc.snapshot', { docId });
+        doc = new ArchaDocument(snap.data, snap.revision);
+      }
+      await preloadFonts();
+      const { compareToReference } = await import('./reference');
+      const r = await compareToReference(doc, nodeId, url, page, scale, slice);
+      await client.call('render.respond', { requestId, png: r.png, slices: r.slices, stats: r.stats });
     } catch (e) {
       await client.call('render.respond', { requestId, error: (e as Error).message });
     }

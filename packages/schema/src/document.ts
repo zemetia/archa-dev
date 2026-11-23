@@ -2,8 +2,14 @@ import { z } from 'zod';
 import type { Node } from './nodes';
 import type { Comment, Variable } from './variables';
 
-/** 2: polygon, path, image, sticky and embed nodes; document variables and comments. */
-export const FORMAT_VERSION = 2;
+/**
+ * 2: polygon, path, image, sticky and embed nodes; document variables and comments.
+ * 3: image `src` may be an `asset:` reference into the `<name>-asset/` folder beside the file (no base64).
+ */
+export const FORMAT_VERSION = 3;
+
+/** Prefix of an image source stored in the document's asset folder, e.g. `asset:images/3fa9….png`. */
+export const ASSET_SCHEME = 'asset:';
 
 export const pageRefSchema = z.object({ id: z.string(), name: z.string(), rootId: z.string() });
 export type PageRef = z.infer<typeof pageRefSchema>;

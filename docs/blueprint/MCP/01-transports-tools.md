@@ -32,9 +32,12 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 
 | Tool | Input (summary) | Purpose |
 |---|---|---|
-| `get_state` | `{ docId? }` | Active doc/page, selection, top-level frames (max 30 + "N more"), components id→name, variables summary, pending comments/decisions, issues count |
-| `execute` | `{ code } \| { editId, edits: [{find, replace}] }` | Run a snippet as one transaction → [02](./02-execute-api.md) |
-| `screenshot` | `{ nodeId, scale? }` | Image or `unchanged` → [RENDERING/03](../RENDERING/03-export.md) |
+| `get_state` | `{ doc? }` | Active doc/page, selection, top-level frames (max 30 + "N more"), components id→name, variables summary, pending comments/decisions, issues count |
+| `execute` | `{ code, doc? } \| { editId, edits: [{find, replace}], doc? }` | Run a snippet as one transaction → [02](./02-execute-api.md) |
+| `screenshot` | `{ node, scale?, slices?, doc? }` | Full-size PNG (no cap) + its temporary file path; tall nodes inline as labelled JPEG slices; or `unchanged` → [RENDERING/03](../RENDERING/03-export.md) |
+| `reference` | `{ path, page?, images?, doc? }` | **Built:** read a PDF page / image mockup into numbers → [05](./05-reference-compare.md) |
+| `compare` | `{ node, reference, page?, scale?, doc? }` | **Built:** visual diff + worst regions with the nodes under them → [05](./05-reference-compare.md) |
+| `list_documents` / `open_document` / `new_document` / `save_document` | `{}` / `{ path }` / `{ name? }` / `{ doc?, path? }` | **Built:** open documents with id, file and asset folder; open, create, save (Save As copies the asset folder) |
 | `export` | `{ nodeId?, format, options? }` | png/jpeg/webp/svg/pdf/html/react/tokens; returns path or content |
 | `get_style` | `{ name?, params? }` | Style profiles, two-step load → [DESIGN_SYSTEM/03](../DESIGN_SYSTEM/03-style-profiles.md) |
 | `read_guide` | `{ topic }` | **Built:** compiled-in guides (`@archa/protocol` `design-guides.ts`: process, layout, taste, type-color, components, icons, landing, web-app, mobile). Chat runs also get the matching guides on their first turn. Target: `skills/archadev/references/**` |
@@ -53,7 +56,8 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 
 | # | Rule |
 |---|---|
-| 1 | A tool acts only on the project/file the server was started for |
+| 1 | A tool acts on the document named by its `doc` argument (id, `.archa` path or unique name — `Workspace.session(ref)`); without it, on `--doc` / `ARCHA_DOC_ID`, else the active document. An unknown `doc` fails with the list of open documents. **Built:** `get_state`, `execute`, `screenshot`, `export_svg`, `say`, `reference`, `compare`, `save_document` |
+| 6 | A reply stays under 6 MB of inline data (`INLINE_BUDGET`): MCP stdio clients drop messages over 10 MB and close the connection. Slices that do not fit are counted, never silently dropped |
 | 2 | Inputs validated by zod; validation errors follow the reply contract (they steer, not just fail) |
 | 3 | Pre-injection: launched runs receive `get_state` output in the first prompt, marked fresh |
 | 4 | Blocking tools (`review_wait`, `ask`, `variants`) send MCP progress notifications every 30 s so clients do not time out |

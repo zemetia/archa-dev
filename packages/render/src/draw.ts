@@ -1,5 +1,5 @@
-import { colorToCss, isContainer, type EmbedNode, type ImageNode, type Node, type PathNode, type StickyNode, type TextNode, type VisualNode } from '@archa/schema';
-import { polygonPoints, viewBoxMatrix, type ArchaDocument } from '@archa/core';
+import { colorToCss, isContainer, linearGradientLine, paintColor, type Paint, type EmbedNode, type ImageNode, type Node, type PathNode, type StickyNode, type TextNode, type VisualNode } from '@archa/schema';
+import { lineLayoutOf, linesOf, polygonPoints, textSegments, viewBoxMatrix, type ArchaDocument } from '@archa/core';
 import { imageFor } from './images';
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -55,7 +55,7 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node): void {
       break;
     }
     case 'image':
-      drawImageNode(ctx, node);
+      drawImageNode(ctx, node, doc);
       break;
     case 'sticky':
       drawSticky(ctx, node);
@@ -99,11 +99,20 @@ function shape(ctx: Ctx, node: VisualNode, path: () => Path2D | void, phase: 'al
       ctx.lineWidth = s.width * 2;
       stroke(p2);
     } else {
-      ctx.lineWidth = s.width * 2;
-      stroke(p);
+      // Outside: clip to everything but the shape (even-odd against a huge rect) so the fill underneath survives.
+      const big = 1e6;
+      if (p) {
+        const outer = new Path2D();
+        outer.rect(-big, -big, big * 2, big * 2);
+        outer.addPath(p);
+        ctx.clip(outer, 'evenodd');
+      } else {
+        ctx.rect(-big, -big, big * 2, big * 2);
+        ctx.clip('evenodd');
+      }
       const p2 = path();
-      ctx.globalCompositeOperation = 'destination-out';
-      fill(p2);
+      ctx.lineWidth = s.width * 2;
+      stroke(p2);
     }
     ctx.restore();
   }
@@ -118,17 +127,31 @@ function paintFills(ctx: Ctx, node: VisualNode, path: () => Path2D | void, fill:
     ctx.shadowOffsetX = fx.x;
     ctx.shadowOffsetY = fx.y;
     const p = path();
-    const solid = node.fills.find((f) => f.visible);
-    ctx.fillStyle = solid ? colorToCss(solid.color) : 'rgba(0,0,0,1)';
+    const first = node.fills.find((f) => f.visible);
+    ctx.fillStyle = first ? colorToCss(paintColor(first)) : 'rgba(0,0,0,1)';
     fill(p);
     ctx.restore();
   }
   for (const f of node.fills) {
     if (!f.visible) continue;
     const p = path();
-    ctx.fillStyle = colorToCss(f.color);
+    ctx.fillStyle = paintStyle(ctx, f, node.width, node.height);
     fill(p);
   }
+}
+
+/** A paint as a canvas fill style, in the node's own box (gradients span 0,0 → w,h). */
+export function paintStyle(ctx: Ctx, f: Paint, w: number, h: number): string | CanvasGradient {
+  if (f.type === 'solid') return colorToCss(f.color);
+  let g: CanvasGradient;
+  if (f.type === 'linear') {
+    const l = linearGradientLine(f.angle, w, h);
+    g = ctx.createLinearGradient(l.x0, l.y0, l.x1, l.y1);
+  } else {
+    g = ctx.createRadialGradient(f.cx * w, f.cy * h, 0, f.cx * w, f.cy * h, Math.max(1e-3, f.radius * Math.max(w, h)));
+  }
+  for (const st of [...f.stops].sort((a, b) => a.offset - b.offset)) g.addColorStop(Math.min(1, Math.max(0, st.offset)), colorToCss(st.color));
+  return g;
 }
 
 const pathCache = new Map<string, Path2D>();
@@ -151,14 +174,14 @@ export function pathOf(n: PathNode): Path2D | null {
   return p;
 }
 
-function drawImageNode(ctx: Ctx, n: ImageNode) {
+function drawImageNode(ctx: Ctx, n: ImageNode, doc: ArchaDocument) {
   const r = Math.min(n.cornerRadius, n.width / 2, n.height / 2);
   const box = () => roundRect(ctx, 0, 0, n.width, n.height, r);
   shape(ctx, n, box, 'fill');
   ctx.save();
   box();
   ctx.clip();
-  const img = imageFor(n.src);
+  const img = imageFor(n.src, doc);
   if (img && img.naturalWidth && img.naturalHeight) {
     const iw = img.naturalWidth, ih = img.naturalHeight;
     if (n.fit === 'fill') ctx.drawImage(img, 0, 0, n.width, n.height);
@@ -241,36 +264,33 @@ export function roundRect(ctx: Ctx, x: number, y: number, w: number, h: number, 
 
 export const fontString = (n: TextNode) => `${n.fontWeight} ${n.fontSize}px "${n.fontFamily}", Inter, system-ui, sans-serif`;
 
-/** Wraps text into lines for fixed / auto-height boxes; auto-width keeps hard breaks only. */
-export function layoutLines(ctx: Ctx, n: TextNode): string[] {
-  ctx.font = fontString(n);
-  const hard = n.text.split('\n');
-  if (n.textSizing === 'auto-width') return hard;
-  const out: string[] = [];
-  for (const para of hard) {
-    const words = para.split(/(\s+)/);
-    let line = '';
-    for (const w of words) {
-      const next = line + w;
-      if (line && ctx.measureText(next).width > n.width) {
-        out.push(line.trimEnd());
-        line = w.trimStart();
-      } else line = next;
-    }
-    out.push(line);
-  }
-  return out;
-}
+/** The lines a text node draws — the core's line breaks, so drawn text fits the box the layout measured. */
+export const layoutLines = (n: TextNode): string[] => linesOf(n);
 
+/**
+ * Text is drawn run by run at x positions from the core's metrics (kerning off), so every glyph lands where
+ * the layout measured it — also across rich-text spans that change weight, family or colour mid-line.
+ */
 function drawText(ctx: Ctx, n: TextNode) {
-  const fill = n.fills.find((f) => f.visible);
-  if (!fill) return;
-  ctx.font = fontString(n);
-  ctx.fillStyle = colorToCss(fill.color);
+  if (!n.fills.some((f) => f.visible) && !n.spans?.some((sp) => sp.fills?.some((f) => f.visible))) return;
   ctx.textBaseline = 'middle';
-  if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D).letterSpacing = `${n.letterSpacing}px`;
+  ctx.textAlign = 'left';
+  if ('fontKerning' in ctx) (ctx as CanvasRenderingContext2D).fontKerning = 'none';
   const lh = n.fontSize * n.lineHeight;
-  const x = n.textAlign === 'center' ? n.width / 2 : n.textAlign === 'right' ? n.width : 0;
-  ctx.textAlign = n.textAlign;
-  layoutLines(ctx, n).forEach((line, i) => ctx.fillText(line, x, lh * i + lh / 2));
+  lineLayoutOf(n).forEach((line, i) => {
+    const x0 = n.textAlign === 'center' ? (n.width - line.width) / 2 : n.textAlign === 'right' ? n.width - line.width : 0;
+    const y = lh * i + lh / 2;
+    for (const seg of textSegments(n, line)) {
+      const st = seg.style;
+      const fill = (st.fills ?? n.fills).filter((f) => f.visible).at(-1);
+      if (!fill) continue;
+      ctx.font = `${st.fontWeight} ${n.fontSize}px "${st.fontFamily}", Inter, system-ui, sans-serif`;
+      if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D).letterSpacing = `${st.letterSpacing}px`;
+      ctx.fillStyle = paintStyle(ctx, fill, n.width, n.height);
+      ctx.fillText(n.text.slice(seg.start, seg.end), x0 + seg.x, y);
+      const t = Math.max(1, n.fontSize / 16);
+      if (st.underline) ctx.fillRect(x0 + seg.x, y + n.fontSize * 0.42, seg.width, t);
+      if (st.strikethrough) ctx.fillRect(x0 + seg.x, y - t / 2, seg.width, t);
+    }
+  });
 }

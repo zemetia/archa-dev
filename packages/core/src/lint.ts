@@ -1,4 +1,4 @@
-import { contrastRatio, hasVisual, isContainer, type Issue, type Node } from '@archa/schema';
+import { contrastRatio, paintColor, hasVisual, isContainer, type Issue, type Node } from '@archa/schema';
 import type { ArchaDocument } from './document';
 
 /**
@@ -41,7 +41,7 @@ function check(doc: ArchaDocument, n: Node, issues: Issue[]) {
   }
 
   if (n.type === 'text' && n.fills[0] && parent && hasVisual(parent) && parent.fills[0]) {
-    const ratio = contrastRatio(n.fills[0].color, parent.fills[0].color);
+    const ratio = contrastRatio(paintColor(n.fills[0]), paintColor(parent.fills[0]));
     const large = n.fontSize >= 24 || (n.fontSize >= 18.5 && n.fontWeight >= 700);
     if (ratio < (large ? 3 : 4.5)) push(issues, n, 'a11y/contrast', `contrast ${ratio.toFixed(2)}:1 on "${parent.name}" is below WCAG AA`, 'darken/lighten the text or the background');
   }
