@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-23
+
 ### Design fidelity
 - **Gradients and picture fills**: fills are now a stack of solid, linear gradient (CSS angles), radial gradient and image paints (crop / fit / stretch / tile), on any shape or text. Photo scrims are a real gradient instead of stacked translucent rectangles. `place_image { fillOf }` puts a downloaded photo into a frame's fills. The Fill panel switches between Solid / Linear / Radial / Image with editable stops.
 - **Rich text**: `spans` style ranges of one text node (colour, font, weight, italic, size, tracking, underline) — a two-tone headline is one layer. Spans follow edits to the text.
