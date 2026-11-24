@@ -18,6 +18,7 @@ import { TextEffectsPanel } from './ui/TextEffectsPanel';
 import { cn } from './ui/controls';
 import { SettingsDialog } from './ui/SettingsDialog';
 import { OrchestraView } from './ui/OrchestraView';
+import { SlidesView, closeSlidesView } from './ui/SlidesView';
 import { BrowserPanel, toggleBrowser, useBrowserSync } from './ui/BrowserPanel';
 
 const blockFileDrop = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); };
@@ -57,6 +58,7 @@ export function App() {
           {/* Canva-like text tools while one text layer is selected. */}
           <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2"><TextToolbar /></div>
           <TextEffectsPanel />
+          <SlidesView />
           {!rightOpen && (
             <button title="Show design panel (Ctrl+Shift+\)" onClick={() => togglePanel('right', true)}
               className="absolute right-3 top-3 flex h-9 items-center gap-1.5 rounded-xl border border-line bg-panel pl-2.5 pr-3 text-[12px] text-fg-muted shadow-xl shadow-black/30 hover:text-fg">
@@ -132,7 +134,8 @@ function onKey(e: KeyboardEvent) {
   if (k === 'escape') {
     e.preventDefault();
     const st = useStore.getState();
-    if (st.interactEmbed) useStore.setState({ interactEmbed: null });
+    if (st.slidesView) closeSlidesView();
+    else if (st.interactEmbed) useStore.setState({ interactEmbed: null });
     else if (st.openComment) useStore.setState({ openComment: null, commentDraft: null });
     else if (st.railPanel) useStore.setState({ railPanel: null });
     else if (st.tool !== 'select') setTool('select');

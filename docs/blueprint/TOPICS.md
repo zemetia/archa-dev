@@ -64,6 +64,7 @@ A–Z keyword → the doc that owns the rules → the code that implements it to
 | Shortcuts / tools / tool rail | [APP_UI/01](./APP_UI/01-shell-tools-panels.md) | `renderer/ui/ToolRail.tsx` (`TOOL_KEYS`), `renderer/App.tsx`, `renderer/lib/commands.ts` |
 | Skills (for agent runs, `/name` mentions) | [AGENT_BRIDGE/05](./AGENT_BRIDGE/05-skills-mcp.md), [MCP/04](./MCP/04-local-skill.md) | `core-host/skills.ts` (`mention`), `core-host/agents.ts` (`mentions`), `renderer/ui/settings/SkillsPage.tsx`, `renderer/ui/ChatPanel.tsx` |
 | Slides panel / thumbnails | [APP_UI/01](./APP_UI/01-shell-tools-panels.md) | `renderer/ui/SlidesPanel.tsx`, `renderer/lib/thumbs.ts` |
+| Slide view, slide size presets, new slide | [APP_UI/05](./APP_UI/05-slides-view.md) | `renderer/ui/SlidesView.tsx`, `renderer/lib/slides.ts` |
 | State (Zustand store) | [APP_UI/03](./APP_UI/03-state.md) | `renderer/lib/store.ts` |
 | Steering (queue, Send now, stop, warm) | [AGENT_BRIDGE/03](./AGENT_BRIDGE/03-runs-steering.md) | `core-host/agents.ts` |
 | Tests | [BEST_PRACTICE/02](./BEST_PRACTICE/02-testing.md), [CODE_MAP/06](./CODE_MAP/06-tests.md) | `apps/desktop/test/`, `packages/*/test/` |
