@@ -1,6 +1,7 @@
 import type { ArchaDocument } from '@archa/core';
 import { isContainer } from '@archa/schema';
-import { connectorEnds, handlesFor, nodeCorners, nodeHandlePoint, pageRoot, pageRotation, rotateHandlePoint, selectionBounds, toScreen } from '../lib/geometry';
+import { groupKnob } from '../lib/groupTransform';
+import { connectorEnds, handlePoint, HANDLES, handlesFor, nodeCorners, nodeHandlePoint, pageRoot, pageRotation, rotateHandlePoint, selectionBounds, toScreen } from '../lib/geometry';
 import type { Camera } from '../lib/store';
 
 export type OverlayExtras = {
@@ -13,6 +14,8 @@ export type OverlayExtras = {
   /** Pen tool in progress: committed path, its points, and the rubber-band line to the pointer. */
   /** Connector being drawn or reattached: preview route (page coords) and the node it would stick to. */
   connect?: { points: Array<{ x: number; y: number }> | null; target: { x: number; y: number; width: number; height: number } | null };
+  /** Multi-selection being scaled or turned: the shared box as it maps now, the turn pivot, the size / angle readout. */
+  group?: { corners: Array<{ x: number; y: number }>; pivot?: { x: number; y: number }; label: string };
   pen?: { d: string; points: Array<{ x: number; y: number; in?: { x: number; y: number }; out?: { x: number; y: number } }>; cursor: { x: number; y: number } | null };
 };
 
@@ -119,14 +122,52 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
+  } else if (sel.length > 1 && x.group && !v.editingText) {
+    // Mid-gesture: every layer's outline plus the shared box as it maps right now.
+    for (const id of sel) outline(id, 1);
+    const pts = x.group.corners.map((p) => toScreen(cam, p.x, p.y));
+    polyline(ctx, [...pts, pts[0]!]);
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    if (x.group.pivot) {
+      const c = toScreen(cam, x.group.pivot.x, x.group.pivot.y);
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 4, 0, Math.PI * 2);
+      ctx.moveTo(c.x - 8, c.y); ctx.lineTo(c.x + 8, c.y);
+      ctx.moveTo(c.x, c.y - 8); ctx.lineTo(c.x, c.y + 8);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+    tag(ctx, x.group.label, cx, Math.max(...pts.map((p) => p.y)) + 8, ACCENT, false, true);
   } else if (sel.length && !v.editingText) {
     ctx.strokeStyle = ACCENT;
     ctx.lineWidth = 1;
     if (sel.length > 1) {
       for (const id of sel) outline(id, 1);
-      const b = box(selectionBounds(doc, sel)!);
+      const r = selectionBounds(doc, sel)!;
+      const b = box(r);
       ctx.lineWidth = 1.5;
       ctx.strokeRect(b.x, b.y, b.w, b.h);
+      // Shared box handles: scale (corners / sides) and the rotate knob, for the whole selection.
+      const top = toScreen(cam, r.x + r.width / 2, r.y);
+      const knob = groupKnob(r, cam.zoom);
+      const k = toScreen(cam, knob.x, knob.y);
+      polyline(ctx, [top, k]);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(k.x, k.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      for (const h of HANDLES) {
+        const s = toScreen(cam, handlePoint(r, h).x, handlePoint(r, h).y);
+        ctx.fillRect(s.x - 4, s.y - 4, 8, 8);
+        ctx.strokeRect(s.x - 4, s.y - 4, 8, 8);
+      }
     }
     const r = selectionBounds(doc, sel)!;
     const b = box(r);

@@ -25,7 +25,7 @@ export function scaleOps(doc: ArchaDocument, id: string, target: { x: number; y:
   return ops;
 }
 
-function scaledStyle(n: Node, k: number): Record<string, unknown> {
+export function scaledStyle(n: Node, k: number): Record<string, unknown> {
   const p: Record<string, unknown> = {};
   if ('strokes' in n && n.strokes.length) p.strokes = n.strokes.map((s) => ({ ...s, width: r(s.width * k) }));
   if ('effects' in n && n.effects.length) p.effects = n.effects.map((e) => (e.type === 'layer-blur' || e.type === 'background-blur' ? { ...e, radius: r(e.radius * k) } : { ...e, x: r(e.x * k), y: r(e.y * k), blur: r(e.blur * k) }));
