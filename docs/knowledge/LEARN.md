@@ -7,6 +7,7 @@
 ---
 
 <!-- Entries below, newest first -->
+[2026-11-24] - Worktree `logo-menu` was created from an old mvp-app commit (no ContextMenu/ArchaLogo), not `main`; then `electron-vite dev` failed with "Electron uninstall" after running the root `node node_modules/electron/install.js` - Fast-forwarded the empty branch to `main`; `apps/desktop/node_modules/electron` is a separate, non-hoisted copy and needed its own `node apps/desktop/node_modules/electron/install.js` - In a new worktree check `git log -1` against `main` before reading code, and fetch Electron for every electron copy (`apps/desktop` too).
 
 [2026-11-23] - `reference` / `compare` passed in the dev app but hung in the packaged 1.6.0 build (300 s timeouts): the test window was hidden, so `requestAnimationFrame` never fired and pdf.js's display-intent `render()` waited forever - Render reference pages with `intent: 'print'` (no rAF pacing) - Anything the renderer does for an agent must work with the window minimised or hidden; smoke-test the packaged app with its window in the background before releasing.
 

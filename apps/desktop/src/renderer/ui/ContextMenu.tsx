@@ -12,16 +12,17 @@ import { canRemoveBackground, removeBackground } from '../lib/removeBackground';
  * picking what is under the pointer; the items act on that selection through the shared commands.
  */
 
-type Entry =
-  | { kind: 'item'; label: string; keys?: string; run: () => unknown; danger?: boolean; disabled?: boolean }
+/** A menu row; shared with the title-bar app menu (`AppMenu.tsx`). `hint` is the tooltip, e.g. why an item is off. */
+export type Entry =
+  | { kind: 'item'; label: string; keys?: string; run: () => unknown; danger?: boolean; disabled?: boolean; hint?: string }
   | { kind: 'toggle'; label: string; on: boolean; run: () => unknown }
   | { kind: 'sub'; label: string; items: Entry[] }
   | { kind: 'sep' };
 
-const SEP: Entry = { kind: 'sep' };
-const SUB_WIDTH = 220;
+export const SEP: Entry = { kind: 'sep' };
+export const SUB_WIDTH = 220;
 /** Gap kept between a menu and the window edge. */
-const EDGE = 8;
+export const EDGE = 8;
 
 export function ContextMenu() {
   const menu = useStore((s) => s.contextMenu);
@@ -116,7 +117,7 @@ function Menu({ x, y, world }: { x: number; y: number; world: { x: number; y: nu
   );
 }
 
-function Rows({ entries, openSub, setOpenSub, subLeft, close }: {
+export function Rows({ entries, openSub, setOpenSub, subLeft, close }: {
   entries: Entry[]; openSub: number | null; setOpenSub: (i: number | null) => void; subLeft: boolean; close: () => void;
 }) {
   return entries.map((e, i) => {
@@ -141,8 +142,9 @@ function Rows({ entries, openSub, setOpenSub, subLeft, close }: {
       );
     }
     return (
-      <button key={i} type="button" role="menuitem" disabled={e.disabled} onMouseEnter={() => setOpenSub(null)}
-        onClick={() => { close(); void e.run(); }}
+      // aria-disabled, not disabled: a disabled button gets no hover, so its tooltip and submenu closing would not work.
+      <button key={i} type="button" role="menuitem" aria-disabled={e.disabled || undefined} title={e.hint} onMouseEnter={() => setOpenSub(null)}
+        onClick={() => { if (e.disabled) return; close(); void e.run(); }}
         className={cn(row, e.danger ? 'text-danger hover:bg-danger/10' : 'text-fg hover:bg-panel-3', e.disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent')}>
         <span className="flex-1">{e.label}</span>
         {e.keys && <span className="text-[11px] text-fg-subtle">{e.keys}</span>}
