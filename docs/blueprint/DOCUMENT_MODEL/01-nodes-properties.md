@@ -32,7 +32,7 @@ Flat map + parent pointers: O(1) lookup, cheap moves, cache keys stable when a n
 | `frame` | ✓ | Auto-layout, clip, fills, strokes, effects, corner radius. Top-level = screen/artboard |
 
 Effects (format 3): `drop-shadow` / `inner-shadow` `{ x, y, blur, color }`, `layer-blur` / `background-blur` `{ radius }`. `meta.context` = the person's note for agents on a layer (no format change; `meta` is free-form).
-| `group` | ✓ | No own box; bounds = union of children |
+| `group` | ✓ | No own box; bounds = union of children → [Groups](#groups) |
 | `rect` `ellipse` `line` `polygon` `star` | ✗ | Primitives |
 | `path` | ✗ | Vector network / SVG path data |
 | `boolean` | ✓ | Live union/subtract/intersect/exclude of children |
@@ -62,6 +62,18 @@ Lines for flowcharts, workflows and page maps (`packages/core/src/connectors.ts`
 | `points`, `x`, `y`, `width`, `height` | **Derived**: `routeConnectors` rebuilds them at the end of `runLayout`, in the core and the renderer mirror, so moving a node needs no connector ops |
 
 Renderer, SVG and HTML export all draw from `connectorGeometry` (one path + filled caps). Connectors are part of `formatVersion` 3; an older app quarantines them (kept and saved back, not drawn).
+
+## Groups
+
+`group` already exists in the schema (no fills, effects or layout), so grouping needs no format change. Code: `packages/core/src/groups.ts` (ops), `fit.ts` (bounds), `transform.ts` (page matrices).
+
+| Rule | Behaviour |
+|---|---|
+| Bounds | After every transaction `applyOps` fits each group (deepest first) to the union of its children's turned boxes — hidden children count only when all are hidden; an empty group keeps its box. Children shift so nothing moves on the canvas (a turned group's origin is compensated). The fit is written as `update`s whose inverses join the transaction's undo |
+| Group (Ctrl+G) | Selected layers minus descendants of other selected layers go into a new group in the parent of the **top-most selected layer** (last in paint order), at that layer's z-slot; members keep paint order and page position (turned parents become member rotation). In auto layout the group takes that flow slot; `fill` members become fixed. Locked / hidden layers group as they are. Selection → the group |
+| Ungroup (Ctrl+Shift+G) | Each selected group or plain frame is replaced by its children at its slot; page position kept; group rotation adds to theirs, opacity multiplies, hidden → hidden, locked → locked (meta, bindings dropped). Several and nested picks in one transaction, outer first. Selection → the released layers. Other layers: no-op with a note |
+| Components | Layers inside an instance cannot be grouped or ungrouped (detach first); a main or an instance cannot be ungrouped. Grouping a whole instance is fine |
+| Delete | Deleting a group's last layers deletes the group too (`emptiedGroups`) |
 
 ---
 
@@ -120,7 +132,7 @@ gap:  { $var: 'space/4' }
 
 ---
 
-**Linked from:** [MCP/02](../MCP/02-execute-api.md) · [RENDERING/02](../RENDERING/02-layers-hit-testing.md)
+**Linked from:** [APP_UI/01](../APP_UI/01-shell-tools-panels.md) · [DOCUMENT_MODEL/02](./02-ops-transactions-undo.md) · [MCP/02](../MCP/02-execute-api.md) · [RENDERING/02](../RENDERING/02-layers-hit-testing.md)
 
-**Code:** [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`packages/core/src/bindings.ts`](../../../packages/core/src/bindings.ts) · [`packages/core/src/connectors.ts`](../../../packages/core/src/connectors.ts) · [`packages/core/src/document.ts`](../../../packages/core/src/document.ts) · [`packages/core/src/text.ts`](../../../packages/core/src/text.ts) · [`packages/core/test/connectors.test.ts`](../../../packages/core/test/connectors.test.ts) · [`packages/formats/src/export/html.ts`](../../../packages/formats/src/export/html.ts) · [`packages/formats/test/text.test.ts`](../../../packages/formats/test/text.test.ts) · [`packages/render/src/fonts.ts`](../../../packages/render/src/fonts.ts) · [`packages/schema/src/color.ts`](../../../packages/schema/src/color.ts) · [`packages/schema/src/ids.ts`](../../../packages/schema/src/ids.ts) · [`packages/schema/src/index.ts`](../../../packages/schema/src/index.ts) · [`packages/schema/src/nodes.ts`](../../../packages/schema/src/nodes.ts)
+**Code:** [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`packages/core/src/bindings.ts`](../../../packages/core/src/bindings.ts) · [`packages/core/src/connectors.ts`](../../../packages/core/src/connectors.ts) · [`packages/core/src/document.ts`](../../../packages/core/src/document.ts) · [`packages/core/src/fit.ts`](../../../packages/core/src/fit.ts) · [`packages/core/src/groups.ts`](../../../packages/core/src/groups.ts) · [`packages/core/src/text.ts`](../../../packages/core/src/text.ts) · [`packages/core/src/transform.ts`](../../../packages/core/src/transform.ts) · [`packages/core/test/connectors.test.ts`](../../../packages/core/test/connectors.test.ts) · [`packages/core/test/groups.test.ts`](../../../packages/core/test/groups.test.ts) · [`packages/formats/src/export/html.ts`](../../../packages/formats/src/export/html.ts) · [`packages/formats/test/text.test.ts`](../../../packages/formats/test/text.test.ts) · [`packages/render/src/fonts.ts`](../../../packages/render/src/fonts.ts) · [`packages/schema/src/color.ts`](../../../packages/schema/src/color.ts) · [`packages/schema/src/ids.ts`](../../../packages/schema/src/ids.ts) · [`packages/schema/src/index.ts`](../../../packages/schema/src/index.ts) · [`packages/schema/src/nodes.ts`](../../../packages/schema/src/nodes.ts)
 <!-- backlinks:end -->

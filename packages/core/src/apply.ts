@@ -4,6 +4,7 @@ import { runLayout } from './layout';
 import { boundTo, brokenBindings, resolveBindings } from './bindings';
 import { remapSpans } from './text';
 import { trackOverrides } from './components';
+import { fitGroups } from './fit';
 
 const IMMUTABLE_KEYS = new Set(['id', 'type', 'parentId', 'children']);
 
@@ -11,7 +12,8 @@ export type ApplyResult = { inverse: Op[]; touched: Set<string> };
 
 /**
  * Applies ops atomically: either every op applies or the document is restored.
- * Returns inverse ops (in apply order) for undo. Layout runs once at the end.
+ * Returns inverse ops (in apply order) for undo. Layout runs at the end, then groups fit their
+ * children (recorded in the inverse) and layout runs again for the parents of groups that changed.
  */
 export function applyOps(doc: ArchaDocument, ops: Op[]): ApplyResult {
   const inverse: Op[] = [];
@@ -26,6 +28,13 @@ export function applyOps(doc: ArchaDocument, ops: Op[]): ApplyResult {
       }
     });
     runLayout(doc);
+    // A fitted group can resize a hugging parent, which can move an outer group's child: settle, bounded.
+    for (let pass = 0; pass < 4; pass++) {
+      const fitted = fitGroups(doc, touched);
+      if (!fitted.length) break;
+      inverse.unshift(...fitted);
+      runLayout(doc);
+    }
     return { inverse, touched };
   } catch (e) {
     for (const inv of inverse) applyOne(doc, inv, new Set());

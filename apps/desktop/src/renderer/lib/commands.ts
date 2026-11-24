@@ -1,4 +1,4 @@
-import { componentMeta, instanceOf, insertOpsFor, makeComponentOps, subtreeInput, wrapOps } from '@archa/core';
+import { componentMeta, emptiedGroups, groupOps, instanceOf, insertOpsFor, makeComponentOps, subtreeInput, ungroupOps, wrapOps } from '@archa/core';
 import { isContainer, type Node, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, toast, useStore } from './store';
 import { containerAt, originOf, pageRoot, toWorld } from './geometry';
@@ -24,6 +24,8 @@ export async function deleteSelection() {
   const { doc, ids } = ctx();
   if (!doc || !ids.length) return;
   const roots = ids.filter((id) => !ids.some((other) => other !== id && doc.isAncestor(other, id)));
+  // A group left with no layers goes too (it has no box of its own).
+  roots.push(...emptiedGroups(doc, roots));
   if (await commit(`Delete ${roots.length} layer${roots.length > 1 ? 's' : ''}`, roots.map((id) => ({ op: 'delete', id })))) select([]);
 }
 
@@ -154,45 +156,22 @@ export async function wrapInFrame(layout: boolean) {
   if (await commit(layout ? 'Wrap in auto layout' : 'Frame selection', ops)) select([rootId]);
 }
 
-/** Ctrl+G: wraps the selection in a group (no box of its own; sized to the selection). */
+/** Ctrl+G: wraps the selection in a group at the top-most layer's place (rules: core `groups.ts`). */
 export async function group() {
   const { doc, ids } = ctx();
   if (!doc || !ids.length) return;
-  if (!ids.every((id) => doc.get(id)?.parentId === doc.get(ids[0]!)?.parentId)) { toast('Select layers with the same parent', 'error'); return; }
-  const { ops, rootId } = wrapOps(doc, ids, { type: 'group', name: 'Group' });
-  if (await commit('Group selection', ops)) select([rootId]);
+  const r = groupOps(doc, ids);
+  for (const note of r.notes) toast(note, 'error');
+  if (r.ops.length && await commit(r.label, r.ops)) select(r.selection);
 }
 
-/** Groups and frames that ungroup can dissolve. */
-export function ungroupable(doc: ArchaDocument, ids: string[]) {
-  return ids.map((id) => doc.get(id)).filter((n): n is Node => !!n && (n.type === 'group' || n.type === 'frame') && doc.children(n.id).length > 0);
-}
-
-/** Ctrl+Shift+G: moves the children of each selected group/frame into its parent, where they were, and removes it. */
+/** Ctrl+Shift+G: replaces each selected group (or plain frame) by its layers, kept in place. */
 export async function ungroup() {
   const { doc, ids } = ctx();
-  if (!doc) return;
-  const targets = ungroupable(doc, ids).filter((n) => !ids.some((other) => other !== n.id && doc.isAncestor(other, n.id)));
-  if (!targets.length) return;
-  // Highest index first, so moving one group's children does not shift a sibling group's index.
-  const indexOf = (n: Node) => { const p = doc.require(n.parentId!); return isContainer(p) ? p.children.indexOf(n.id) : 0; };
-  targets.sort((a, c) => indexOf(c) - indexOf(a));
-  const ops: Op[] = [];
-  const released: string[] = [];
-  for (const g of targets) {
-    const parent = doc.require(g.parentId!);
-    const o = originOf(doc, parent.id);
-    const inLayout = parent.type === 'frame' && parent.layout !== 'none';
-    const at = indexOf(g);
-    for (const [i, c] of doc.children(g.id).entries()) {
-      const wb = doc.worldBounds(c.id);
-      ops.push({ op: 'move', id: c.id, parentId: parent.id, index: at + i });
-      if (!inLayout) ops.push({ op: 'update', id: c.id, patch: { x: Math.round(wb.x - o.x), y: Math.round(wb.y - o.y) } });
-      released.push(c.id);
-    }
-    ops.push({ op: 'delete', id: g.id });
-  }
-  if (await commit('Ungroup', ops)) select(released);
+  if (!doc || !ids.length) return;
+  const r = ungroupOps(doc, ids);
+  if (!r.ops.length) { for (const note of r.notes) toast(note); return; }
+  if (await commit(r.label, r.ops)) select(r.selection);
 }
 
 /** Shift+Alt+A: turns auto layout off, keeping every child where the layout put it. */

@@ -126,10 +126,17 @@ function Row({ id, depth, expanded, toggle, dnd }: { id: string; depth: number; 
     if (e.shiftKey || e.ctrlKey || e.metaKey) select(sel.includes(id) ? sel.filter((s) => s !== id) : [...sel, id]);
     else select([id]);
   };
+  // Right-click opens the canvas menu (Group, Ungroup, …) for this row; "Paste here" lands on the layer.
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!useStore.getState().selection.includes(id)) select([id]);
+    const b = doc.worldBounds(id);
+    useStore.setState({ contextMenu: { x: e.clientX, y: e.clientY, world: { x: b.x, y: b.y } } });
+  };
 
   return (
     <>
-      <div onClick={onClick} onDoubleClick={() => setRenaming(true)}
+      <div onClick={onClick} onDoubleClick={() => setRenaming(true)} onContextMenu={onContextMenu}
         draggable={!renaming} onDragStart={(e) => dnd.start(e, id)} onDragEnd={dnd.end}
         onDragOver={(e) => dnd.over(e, id, open ? kids[0] : undefined)} onDrop={dnd.drop}
         onMouseEnter={() => useStore.setState({ hover: id })} onMouseLeave={() => useStore.setState({ hover: null })}

@@ -91,6 +91,7 @@ Saves the agent from regenerating kilobytes of code to fix one typo.
 | `image(src, parent, { width?, height?, fit?, …props })` | 1.6. The host reads a file path / `file://` (or takes an http(s) URL), copies the file into the document's asset folder and sizes the node from the file header (PNG, JPEG, GIF, WebP, SVG); one of width/height keeps the aspect ratio. Agents never send base64 |
 | Auto-fix | New text with no visible fill gets readable ink before the transaction; reported under "Auto-fixed" in `output` |
 | `align(refs, edge, { to? })` · `distribute(refs, axis, { gap? })` · `wrap(refs, frame)` | 0.5: the design panel's arrange commands (core `arrange.ts`); notes such as "set the parent's justify" go to `output` |
+| `group(refs, { name? })` → id · `ungroup(refs)` → ids | Core `groups.ts`, same rules as Ctrl+G / Ctrl+Shift+G; nothing to do throws with the reason |
 | `outline(ref?, { depth? })` | 0.5: compact text tree, same as the `inspect` tool |
 | Input aliases | 0.5: `alignItems`/`justifyContent`/`flexDirection`/`borderRadius`/`itemSpacing`/`stroke`, effect shorthands (`blur`, `inset`, `backdrop`), `context` → `meta.context` (update merges `meta`) |
 | State | 0.5: `get_state` adds an outline of a small selection and every layer's context note |

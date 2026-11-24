@@ -41,7 +41,7 @@ type Transaction = {
 |---|---|
 | Atomic | All ops validate and apply, or none do. Validation failure → `VALIDATION` error naming op index + property path |
 | One bump | A transaction bumps `revision` by exactly one |
-| Hooks | After apply: hashes → layout → indexes → lint (agents) → broadcast → journal |
+| Hooks | After apply: hashes → layout → group fit (recorded in the inverse, then layout again; → [01 → Groups](./01-nodes-properties.md#groups)) → indexes → lint (agents) → broadcast → journal |
 | Size | No hard cap; > 10k ops logs a warning (likely a missing visitor) |
 | Coalescing | Continuous gestures (drag, slider) coalesce into one transaction on pointer-up |
 
@@ -71,5 +71,5 @@ type Transaction = {
 
 **Linked from:** [ARCHITECTURE/04](../ARCHITECTURE/04-single-writer-sync.md)
 
-**Code:** [`apps/desktop/src/renderer/lib/commands.ts`](../../../apps/desktop/src/renderer/lib/commands.ts) · [`packages/core/src/apply.ts`](../../../packages/core/src/apply.ts) · [`packages/core/src/factory.ts`](../../../packages/core/src/factory.ts) · [`packages/core/src/session.ts`](../../../packages/core/src/session.ts) · [`packages/core/test/core.test.ts`](../../../packages/core/test/core.test.ts) · [`packages/schema/src/ops.ts`](../../../packages/schema/src/ops.ts)
+**Code:** [`apps/desktop/src/renderer/lib/commands.ts`](../../../apps/desktop/src/renderer/lib/commands.ts) · [`packages/core/src/apply.ts`](../../../packages/core/src/apply.ts) · [`packages/core/src/factory.ts`](../../../packages/core/src/factory.ts) · [`packages/core/src/fit.ts`](../../../packages/core/src/fit.ts) · [`packages/core/src/session.ts`](../../../packages/core/src/session.ts) · [`packages/core/test/core.test.ts`](../../../packages/core/test/core.test.ts) · [`packages/schema/src/ops.ts`](../../../packages/schema/src/ops.ts)
 <!-- backlinks:end -->

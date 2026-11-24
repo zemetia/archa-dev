@@ -68,7 +68,7 @@ Index maths never lives in UI code: drops are `{ targetId, position: before | af
 1. R-tree query at pointer (world coords) → candidates.
 2. Sort by z-order (reverse paint order).
 3. Precise test per candidate: path `contains` with stroke width; text by line boxes; skip hidden/locked.
-4. Selection rules: click selects top-level child of the current scope; double-click enters a frame/group; Ctrl/Cmd+click deep-selects.
+4. Selection rules: click selects top-level child of the current scope (a click on a group's child selects the group); double-click enters a frame/group; Ctrl/Cmd+click deep-selects.
 
 Runs in the renderer against the view model (node bounds + paths sent by the core), never round-trips to the core.
 
