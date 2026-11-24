@@ -61,7 +61,7 @@ Stale tiles stay visible until the fresh tile is ready — no flashing.
 
 ---
 
-**Linked from:** [DOCUMENT_MODEL/03](../DOCUMENT_MODEL/03-layout.md)
+**Linked from:** [APP_UI/05](../APP_UI/05-slides-view.md) · [DOCUMENT_MODEL/03](../DOCUMENT_MODEL/03-layout.md)
 
 **Code:** [`apps/desktop/src/renderer/lib/thumbs.ts`](../../../apps/desktop/src/renderer/lib/thumbs.ts) · [`packages/core/src/hash.ts`](../../../packages/core/src/hash.ts) · [`packages/render/src/cache.ts`](../../../packages/render/src/cache.ts) · [`packages/render/src/images.ts`](../../../packages/render/src/images.ts)
 <!-- backlinks:end -->

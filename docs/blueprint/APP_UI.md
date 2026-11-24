@@ -10,6 +10,7 @@ The Electron renderer: shell, panels, tools, and the conventions for its React c
 | [02 — Components and tokens](./APP_UI/02-components-tokens.md) | `@archa/ui`, four-file rule, CVA, Tailwind v4 `@theme`, light/dark |
 | [03 — State](./APP_UI/03-state.md) | Core-driven document state, Zustand view stores, decision tree |
 | [04 — Design panel](./APP_UI/04-design-panel.md) | Right sidebar: sections per selection, arrange / style / output rules |
+| [05 — Slide view](./APP_UI/05-slides-view.md) | Canva-like stacked slides, "+" new slide with size presets, per-slide resize |
 
 Code: `apps/desktop/src/renderer/`, `packages/ui/` (target). Today there is no `packages/ui`; shared controls are `renderer/ui/controls.tsx` → [CODE_MAP/03](./CODE_MAP/03-renderer.md).
 

@@ -45,6 +45,7 @@ Fixtures: `packages/formats/test/fixtures/archa-v1/`, `archa-v2/` — every `for
 | [`test/reference.test.ts`](../../../apps/desktop/test/reference.test.ts) | PDF reference reading (text, rect, image into the asset folder) on a generated PDF; `image(path)` natural size | `core-host/reference.ts`, `core-host/execute.ts` | [MCP/05](../MCP/05-reference-compare.md) |
 | [`test/rotation.test.ts`](../../../apps/desktop/test/rotation.test.ts) | Turned corners, hit testing, rotate knob, resize keeps the opposite corner, SVG/HTML rotate export, `done` event and cursor fade | `renderer/lib/geometry.ts`, `canvas/cursors.ts`, `core-host/workspace.ts` | [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
 | [`test/changes.test.ts`](../../../apps/desktop/test/changes.test.ts) | Which changes animate, pop-in + sibling glide, delete closes gap, interrupted glide | `renderer/canvas/changes.ts` | [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
+| [`test/slides.test.ts`](../../../apps/desktop/test/slides.test.ts) | Size presets + labels, custom size parsing, slide order, insert between / top / end as one undo step, placement, resize pins hug | `renderer/lib/slides.ts` | [APP_UI/05](../APP_UI/05-slides-view.md) |
 | [`test/cursors.test.ts`](../../../apps/desktop/test/cursors.test.ts) | Cursor never teleports, clicks only on change, hides after the session ends | `renderer/canvas/cursors.ts` | [RENDERING/02](../RENDERING/02-layers-hit-testing.md) |
 
 ---

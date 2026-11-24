@@ -30,6 +30,8 @@ type State = {
   leftTab: LeftTab;
   /** Conversation shown in the Chat tab; null = a new conversation (blueprint APP_UI/01 → Left menu). */
   chatThread: string | null;
+  /** Slide view (Canva-like vertical list of slides) covers the canvas; Back or Esc returns (blueprint APP_UI/05). */
+  slidesView: boolean;
   /** Lead thread whose team view fills the window (orchestrate mode); null = closed. */
   orchestraView: string | null;
   /** Mode of the next new chat; remembered per machine. */
@@ -87,7 +89,7 @@ type State = {
 
 export const useStore = create<State>(() => ({
   client: null, info: null, docs: [], activeDocId: null, doc: null, rev: 0,
-  selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, orchestraView: null, chatMode: readMode(), library: null,
+  selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, slidesView: false, orchestraView: null, chatMode: readMode(), library: null,
   leftOpen: readFlag('archa.leftOpen'), rightOpen: readFlag('archa.rightOpen'), chatDraft: '',
   agents: [], activity: [], chat: [], runs: {}, chatLive: {}, cursors: {}, editingText: null, textEffectsOpen: false, toasts: [], fitRequest: 0,
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
