@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { CORE_GUIDES, DESIGNER_PROMPT, EXECUTE_API_DOC, GUIDE_INDEX, type ModelOption } from '@archa/protocol';
+import { agyErrorHint } from './agy-tool-schemas';
 
 /*
  * Launch-mode adapters (blueprint AGENT_BRIDGE/01-02), ported from Gungnir's remediate/ package.
@@ -263,10 +264,10 @@ function agyParser(): StreamParser {
             if (r) out.push(r);
           }
           if (output) out.push(callResult(`agy-${i}`, output, output.startsWith('FAILED')));
-        } else if (s.step_type === 'error_message' && s.error) out.push({ kind: 'error', text: clip(s.error) });
+        } else if (s.step_type === 'error_message' && s.error) out.push({ kind: 'error', text: clip(s.error) + agyErrorHint(s.error) });
       } else if (ev.event === 'result') {
         const r = (ev.result ?? {}) as { status?: string; response?: string; error?: string };
-        if (r.status && r.status !== 'SUCCESS') out.push({ kind: 'error', text: clip(r.error || `Antigravity run ended: ${r.status}`) });
+        if (r.status && r.status !== 'SUCCESS') out.push({ kind: 'error', text: r.error ? clip(r.error) + agyErrorHint(r.error) : `Antigravity run ended: ${r.status}` });
         else if (r.response) out.push({ kind: 'final', text: r.response });
         out.push({ kind: 'turn', ok: !r.status || r.status === 'SUCCESS' });
         text.clear();

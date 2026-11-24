@@ -69,6 +69,13 @@ Code: `apps/desktop/src/core-host/agent-adapters.ts` (argv, parsers, models) + `
 
 agy reads MCP tool descriptions from schema files instead of its context, so its prompt carries the tool list + `EXECUTE_API_DOC` (`AGY_TOOLS_NOTE`). Launched runs tag their `archa mcp` connection with `ARCHA_RUN_ID` (`ClientInfo.runId`), and the chat hides that activity so it is not shown twice.
 
+**Gemini tool schemas (agy).** agy hands every MCP tool to Gemini as a function declaration, and Gemini refuses the *whole* request over one schema outside its OpenAPI subset (`INVALID_ARGUMENT … function_declarations[N].parameters.properties[questions].items: missing field`). agy loads **every** server in its own `~/.gemini/config/mcp_config.json` into ArchaDev runs, and ArchaDev cannot narrow that (no per-run flag; `--settings` refuses `mcpServers`). So:
+
+| Whose schema | Handling |
+|---|---|
+| Ours (`archa mcp --agent agy`) | Sent already inside the subset — [MCP/01 rule 7](../MCP/01-transports-tools.md) |
+| Another server in agy's config (seen: a local `english-drill` server's `update_drill.questions` array without `items`; `zemetia-studio` e-mail patterns with lookaheads, not RE2) | Not ours to rewrite. `agy-tool-schemas.ts` reads agy's schema copies (`~/.gemini/antigravity-cli/mcp/<server>/<tool>.json`) when a run fails with such an error and appends which server and tool caused it, plus the fix: correct that server's schema or `agy mcp disable <server>` |
+
 Rules: stdin is always closed (an open pipe makes `claude -p` wait); `chat.delta` streams in-progress text; one run per document; `agents.models` feeds the composer picker.
 
 ---
@@ -99,7 +106,7 @@ Opened from the title bar gear, `Ctrl+,`, or "Accounts" under the chat composer.
 
 ---
 
-**Linked from:** [AGENT_BRIDGE/05](./05-skills-mcp.md) · [APP_UI/03](../APP_UI/03-state.md)
+**Linked from:** [AGENT_BRIDGE/05](./05-skills-mcp.md) · [APP_UI/03](../APP_UI/03-state.md) · [MCP/01](../MCP/01-transports-tools.md)
 
-**Code:** [`apps/desktop/src/core-host/accounts.ts`](../../../apps/desktop/src/core-host/accounts.ts) · [`apps/desktop/src/core-host/agent-adapters.ts`](../../../apps/desktop/src/core-host/agent-adapters.ts) · [`apps/desktop/src/core-host/agents.ts`](../../../apps/desktop/src/core-host/agents.ts) · [`apps/desktop/src/core-host/keyring.ts`](../../../apps/desktop/src/core-host/keyring.ts) · [`apps/desktop/src/renderer/ui/settings/ProvidersPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/ProvidersPage.tsx) · [`apps/desktop/test/accounts.test.ts`](../../../apps/desktop/test/accounts.test.ts) · [`apps/desktop/test/agent-adapters.test.ts`](../../../apps/desktop/test/agent-adapters.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
+**Code:** [`apps/desktop/src/core-host/accounts.ts`](../../../apps/desktop/src/core-host/accounts.ts) · [`apps/desktop/src/core-host/agent-adapters.ts`](../../../apps/desktop/src/core-host/agent-adapters.ts) · [`apps/desktop/src/core-host/agents.ts`](../../../apps/desktop/src/core-host/agents.ts) · [`apps/desktop/src/core-host/agy-tool-schemas.ts`](../../../apps/desktop/src/core-host/agy-tool-schemas.ts) · [`apps/desktop/src/core-host/keyring.ts`](../../../apps/desktop/src/core-host/keyring.ts) · [`apps/desktop/src/renderer/ui/settings/ProvidersPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/ProvidersPage.tsx) · [`apps/desktop/test/accounts.test.ts`](../../../apps/desktop/test/accounts.test.ts) · [`apps/desktop/test/agent-adapters.test.ts`](../../../apps/desktop/test/agent-adapters.test.ts) · [`apps/desktop/test/agy-tool-schemas.test.ts`](../../../apps/desktop/test/agy-tool-schemas.test.ts) · [`packages/protocol/src/gemini-schema.ts`](../../../packages/protocol/src/gemini-schema.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/test/gemini-schema.test.ts`](../../../packages/protocol/test/gemini-schema.test.ts)
 <!-- backlinks:end -->

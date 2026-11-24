@@ -27,6 +27,7 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 | [`design-guides.ts`](../../../packages/protocol/src/design-guides.ts) | Compiled-in design guides for `read_guide`; `guidesFor(request)` picks guides for a chat turn | [MCP/04](../MCP/04-local-skill.md), [MCP/01](../MCP/01-transports-tools.md) |
 | [`fonts.ts`](../../../packages/protocol/src/fonts.ts) | Generated `BUNDLED_FONTS` list (agent docs, font picker) | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) |
 | [`browser.ts`](../../../packages/protocol/src/browser.ts) | `browser` tool: actions, zod command schema, replies, main ↔ core bridge messages, tool doc | [BROWSER](../BROWSER.md) |
+| [`gemini-schema.ts`](../../../packages/protocol/src/gemini-schema.ts) | `sanitizeGeminiSchema` (JSON Schema → Gemini's function-declaration subset) and `geminiSchemaIssues` (what Gemini would refuse, in Gemini's path spelling) | [AGENT_BRIDGE/02](../AGENT_BRIDGE/02-roster-profiles.md), [MCP/01](../MCP/01-transports-tools.md) |
 | [`settings.ts`](../../../packages/protocol/src/settings.ts) | Skills and MCP-server types (secrets never cross — only keys) | [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
 
 ## `@archa/core` — `packages/core/src/` (no Electron, React or DOM)
