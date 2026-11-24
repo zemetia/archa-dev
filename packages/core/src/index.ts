@@ -14,3 +14,4 @@ export * from './arrange';
 export * from './outline';
 export * from './connectors';
 export * from './metrics';
+export * from './layers';
