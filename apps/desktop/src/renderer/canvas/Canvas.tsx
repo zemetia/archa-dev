@@ -3,7 +3,7 @@ import { attachedBox, connectorRoute, insertOpsFor, routeConnectors, runLayout, 
 import { drawNode, drawPage, FrameBitmapCache } from '@archa/render';
 import { isContainer, type ConnectorEnd, type ConnectorNode, type Node, type NodeInput, type Op } from '@archa/schema';
 import { commit, select, setTool, useStore, type Camera, type Tool } from '../lib/store';
-import { applyMat, connectorEnds, containerAt, fitCamera, handlesFor, hitPath, nodeHandlePoint, nodeMatrix, normalizeAngle, originOf, pageRoot, pageRotation, pickFromPath, resizedBox, resizeFrame, rotateHandlePoint, toWorld, turnedCursor, type Handle, type ResizeFrame } from '../lib/geometry';
+import { applyMat, selectionBounds, connectorEnds, containerAt, fitCamera, handlesFor, hitPath, nodeHandlePoint, nodeMatrix, normalizeAngle, originOf, pageRoot, pageRotation, pickFromPath, resizedBox, resizeFrame, rotateHandlePoint, toWorld, turnedCursor, type Handle, type ResizeFrame } from '../lib/geometry';
 import { drawOverlay, type OverlayExtras } from './overlay';
 import { cursorAlive, drawCursors } from './cursors';
 import * as changes from './changes';
@@ -13,6 +13,8 @@ import { CommentsLayer } from './CommentsLayer';
 import { onFontLoaded, onImageLoaded } from '@archa/render';
 import { penBounds, penPath, type PenPoint } from './pen';
 import { scaleOps } from './scale';
+import { groupHandleAt, groupPatches, groupScale, groupStart, mappedCorners, pivotOf, rotateAbout, scaleAbout, type GroupStart } from '../lib/groupTransform';
+import type { Mat } from '../lib/geometry';
 import { ASSET_MIME, assetStyle, insertAsset } from '../lib/assets';
 import { dropFiles } from '../lib/importers';
 
@@ -28,7 +30,9 @@ type Gesture =
   | { kind: 'marquee'; start: Pt; cur: Pt }
   | { kind: 'create'; tool: CreateTool; start: Pt; cur: Pt; parentId: string }
   | { kind: 'scale'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt; cur: { x: number; y: number; width: number; height: number } }
-  | { kind: 'pen'; index: number };
+  | { kind: 'pen'; index: number }
+  /** Several layers scaled (`handle`) or turned (`rotate`) as one unit about their shared box; `t` is the live page-space map. */
+  | { kind: 'group'; handle: Handle | 'rotate'; ids: string[]; start: Pt; from: GroupStart; scaleAll: boolean; t: Mat };
 
 type Ends = { start: ConnectorEnd; end: ConnectorEnd };
 type CreateTool = 'frame' | 'rect' | 'ellipse' | 'polygon' | 'sticky' | 'embed';
@@ -254,6 +258,16 @@ export function Canvas() {
       }
     }
 
+    // Shared box of a multi-selection: its handles scale, its knob turns every layer together.
+    if (st.selection.length > 1) {
+      const from = groupStart(d, st.selection);
+      const handle = from && from.items.length ? groupHandleAt(from.box, w, st.camera.zoom) : null;
+      if (from && handle) {
+        gesture.current = { kind: 'group', handle, ids: [...st.selection], start: w, from, scaleAll: st.tool === 'scale', t: [1, 0, 0, 1, 0, 0] };
+        return;
+      }
+    }
+
     // Resize handle of a single selection.
     if (st.selection.length === 1 && selConn?.type !== 'connector') {
       const n = d.require(st.selection[0]!);
@@ -313,6 +327,10 @@ export function Canvas() {
         const n = d.require(st.selection[0]!);
         const h = handleAt(d, n, w, st.camera.zoom);
         if (h) { setCursor(h === 'rotate' ? 'grab' : turnedCursor(h, pageRotation(d, n.id))); return; }
+      } else if (st.selection.length > 1) {
+        const box = selectionBounds(d, st.selection);
+        const h = box ? groupHandleAt(box, w, st.camera.zoom) : null;
+        if (h) { setCursor(h === 'rotate' ? 'grab' : turnedCursor(h, 0)); return; }
       }
       setCursor('default');
       const label = labelHit(d, st.camera, sx, sy);
@@ -431,6 +449,28 @@ export function Canvas() {
       runLayout(d);
       cache.invalidate();
       useStore.setState((s) => ({ rev: s.rev + 1 }));
+    } else if (g.kind === 'group') {
+      const { box, items } = g.from;
+      let label: string, pivot: Pt | undefined;
+      if (g.handle === 'rotate') {
+        // Mean of the layers' centres (what the owner asked for); Alt turns about the shared box's centre instead.
+        pivot = pivotOf(items, box, e.altKey ? 'box' : 'mean');
+        let turn = angleOf(pivot, w) - angleOf(pivot, g.start);
+        if (e.shiftKey) turn = Math.round(turn / 15) * 15;
+        g.t = rotateAbout(pivot, turn);
+        label = `${normalizeAngle(turn)}°`;
+      } else {
+        const s = groupScale(box, g.handle, w.x - g.start.x, w.y - g.start.y, { fromCenter: e.altKey, keepRatio: e.shiftKey });
+        g.t = scaleAbout(s.anchor, s.sx, s.sy);
+        label = `${round2(Math.abs(s.sx) * box.width)} × ${round2(Math.abs(s.sy) * box.height)}`;
+      }
+      // Live preview on the view model only; the core gets one transaction on release.
+      for (const [id, patch] of groupPatches(g.from, g.t, g.ids, g.scaleAll)) d.nodes.set(id, { ...g.from.nodes.get(id)!, ...patch } as Node);
+      routeConnectors(d);
+      runLayout(d);
+      extras.current = { group: { corners: mappedCorners(box, g.t), pivot, label } };
+      cache.invalidate();
+      useStore.setState((s) => ({ rev: s.rev + 1 }));
     } else if (g.kind === 'rotate') {
       const n = d.require(g.id);
       let deg = g.orig + angleOf(g.center, w) - g.startAngle;
@@ -450,6 +490,20 @@ export function Canvas() {
     if (!g || !d) return;
     if (g.kind === 'pan') { setCursor(st.tool === 'hand' || spaceDown.current ? 'grab' : 'default'); return; }
     if (g.kind === 'pen') return;
+    if (g.kind === 'group') {
+      redraw();
+      if (g.t.every((v, i) => v === [1, 0, 0, 1, 0, 0][i])) return;
+      const patches = groupPatches(g.from, g.t, g.ids, g.scaleAll);
+      const ops: Op[] = [];
+      for (const [id, patch] of patches) {
+        const was = g.from.nodes.get(id) as Record<string, unknown> | undefined;
+        const changed = Object.fromEntries(Object.entries(patch).filter(([k, v]) => JSON.stringify(was?.[k]) !== JSON.stringify(v)));
+        if (Object.keys(changed).length) ops.push({ op: 'update', id, patch: changed });
+      }
+      const label = g.handle === 'rotate' ? `Rotate ${g.from.items.length} layers` : `${g.scaleAll ? 'Scale' : 'Resize'} ${g.from.items.length} layers`;
+      if (ops.length) await commit(label, ops);
+      return;
+    }
     if (g.kind === 'scale') {
       redraw();
       const ops = scaleOps(d, g.id, g.cur);

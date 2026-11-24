@@ -40,6 +40,7 @@ A–Z keyword → the doc that owns the rules → the code that implements it to
 | `execute` sandbox (QuickJS) | [MCP/02](./MCP/02-execute-api.md) | `core-host/execute.ts`, `packages/protocol/src/agent-docs.ts` |
 | Export (PNG / JPG / SVG / PDF) | [RENDERING/03](./RENDERING/03-export.md) | `packages/render/src/scene.ts`, `packages/formats/src/svg.ts`, `main/pdf.ts` |
 | Format version / migrations | [FILE_FORMATS/03](./FILE_FORMATS/03-migrations-validation.md) | `packages/formats/src/migrations/archa/`, fixtures in `packages/formats/test/fixtures/` |
+| Multi-selection scale / rotate (shared box, pivot) | [RENDERING/02](./RENDERING/02-layers-hit-testing.md) | `renderer/lib/groupTransform.ts`, `renderer/canvas/Canvas.tsx` (`group` gesture), `renderer/canvas/overlay.ts` |
 | Hit testing / selection | [RENDERING/02](./RENDERING/02-layers-hit-testing.md) | `renderer/lib/geometry.ts`, `renderer/canvas/overlay.ts` |
 | Icons, logos, Assets panel, My icons | [DESIGN_SYSTEM/05](./DESIGN_SYSTEM/05-icons-assets.md), [MCP/02](./MCP/02-execute-api.md) | `packages/icons/`, `scripts/gen-icon-sets.mjs`, `ui/AssetsPanel.tsx`, `core-host/icons.ts` |
 | Import (image, SVG, `.pen`) | [FILE_FORMATS/04](./FILE_FORMATS/04-importers.md) | `renderer/lib/importers.ts`, `packages/formats/src/import/svg.ts`; `.pen` not built |
