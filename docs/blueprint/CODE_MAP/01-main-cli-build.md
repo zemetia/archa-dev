@@ -36,7 +36,7 @@ Each row: file → what it does → the blueprint docs that govern it. Links are
 |---|---|---|
 | [`cli/src/index.ts`](../../../apps/cli/src/index.ts) | commander root: `mcp`, `status`, `browser`, `open` (full list → [05](./05-interfaces.md)) | [CLI/01](../CLI/01-commands.md), [CLI/02](../CLI/02-parity-exit-codes.md) |
 | [`cli/src/connect.ts`](../../../apps/cli/src/connect.ts) | `connectCore`: reads `runtime/core.json`, connects to the core socket with the token; `CoreUnavailable` when the app is not running (no headless core yet) | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [CLI/01](../CLI/01-commands.md) |
-| [`cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) | `archa mcp`: stdio MCP server; each tool relays to an `agent.*` RPC on the running core | [MCP/01](../MCP/01-transports-tools.md), [MCP/03](../MCP/03-response-contract-lint.md) |
+| [`cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) | `archa mcp`: stdio MCP server; each tool relays to an `agent.*` RPC on the running core; `--agent agy` lists tools inside Gemini's schema subset | [MCP/01](../MCP/01-transports-tools.md), [MCP/03](../MCP/03-response-contract-lint.md) |
 | [`cli/tsup.config.ts`](../../../apps/cli/tsup.config.ts) | Bundles the CLI (workspace sources included) into one file the app spawns | [STRUCTURE/01](../STRUCTURE/01-root-apps.md) |
 
 ---

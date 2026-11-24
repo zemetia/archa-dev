@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BROWSER_TOOL_DOC, browserInputShape, EXECUTE_API_DOC, PLACE_IMAGE_DOC, placeImageInputShape, GUIDE_INDEX, guideText, type ExecuteResult, type RpcClient, type Shot } from '@archa/protocol';
+import { BROWSER_TOOL_DOC, browserInputShape, EXECUTE_API_DOC, PLACE_IMAGE_DOC, placeImageInputShape, GUIDE_INDEX, guideText, sanitizeGeminiSchema, type ExecuteResult, type RpcClient, type Shot } from '@archa/protocol';
 import { connectCore } from './connect';
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
@@ -224,7 +224,9 @@ ${GUIDE_INDEX}`,
     inputSchema: { ...placeImageInputShape, doc: docParam },
   }, ({ doc, ...args }) => guard(async (c) => formatExecute(await c.call('agent.placeImage', { docId: pick(doc), ...args }))));
 
-  await server.connect(new StdioServerTransport());
+  const transport = new StdioServerTransport();
+  if (agentName === 'agy') geminiTools(transport);
+  await server.connect(transport);
 }
 
 const verifyLine = 'Check: nothing broken, collapsed, clipped or overflowing; spacing and alignment even; contrast readable; matches what you intended.';
@@ -275,4 +277,18 @@ function formatExecute(r: ExecuteResult): Content[] {
     out.push({ type: 'text', text: ['Issues detected:', ...r.issues.map((i) => `  [${i.rule}] ${i.nodeName} "${i.nodeId}": ${i.message} → ${i.remedy}`), 'Resolve these in your next call.'].join('\n') });
   }
   return out;
+}
+
+/**
+ * agy hands MCP tools to Gemini as function declarations, and Gemini refuses the whole request over one
+ * keyword outside its schema subset ($schema, additionalProperties, exclusiveMinimum, …). The tool list
+ * leaves this server already inside it; inputs are still checked against the full zod shapes.
+ */
+function geminiTools(transport: StdioServerTransport) {
+  const send = transport.send.bind(transport);
+  transport.send = (message) => {
+    const tools = (message as { result?: { tools?: unknown } }).result?.tools;
+    if (Array.isArray(tools)) for (const t of tools as { inputSchema?: unknown }[]) t.inputSchema = sanitizeGeminiSchema(t.inputSchema);
+    return send(message);
+  };
 }
