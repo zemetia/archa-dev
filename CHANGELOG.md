@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-24
+
+### Layers
+- **Layer order matches the canvas**: the top of the Layers list is the top-most layer; auto-layout frames list children in flow order.
+- **Drag & drop in Layers**: reorder siblings, drop into another frame, or drop out to the parent / page root. Canvas position is kept, self/descendant drops are refused, and each move is one undo step.
+
+### Groups
+- **Group / Ungroup** (Ctrl+G / Ctrl+Shift+G, canvas and Layers right-click, agent `group()` / `ungroup()`): works across parents, keeps page position, rotation and z-order, takes the flow slot in auto layout, and handles nested and multiple groups in one step. Ungroup folds the group's rotation, opacity, hidden and locked state into its children. Group bounds refit to their children on every commit. Click selects the group, double-click enters it.
+
+### Canvas
+- **Multi-selection transforms as one unit**: one shared box for the whole selection. Scaling moves and resizes every layer together so the arrangement keeps its shape (Shift ratio, Alt from centre); the Scale tool (K) also scales fonts, strokes and radii. Rotating turns every layer around the mean of their centres (Alt: box centre, Shift: 15° steps). Live size / angle readout; one undo step per gesture.
+
+### Slides
+- **Slide view**: a Canva-style vertical, scrollable view of every slide from the Slides tab, with a **+** between and after slides that adds a new frame from presets (16:9, 4:3, 5:4, A4, Letter, square, 4:5, story) or a custom size. Each slide's size can be changed from its row.
+
+### App
+- **App menu on the ArchaDev logo**: File, Edit, View, Import, Export selection, Settings and Help, with shortcuts; items without a backend are disabled with the reason.
+
+### Agents
+- **Gemini / Antigravity delegation**: our MCP tools are listed in Gemini's schema subset, and when agy fails with `function_declarations[N]...items: missing field` the error now names the MCP server and tool that caused it and how to disable it.
+
 ## [1.6.0] - 2026-11-23
 
 ### Design fidelity

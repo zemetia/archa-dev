@@ -19,7 +19,7 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
   const defaultDoc = opts.doc ?? process.env.ARCHA_DOC_ID;
   const pick = (doc?: string) => doc || defaultDoc;
 
-  const server = new McpServer({ name: 'archadev', version: '1.6.0' });
+  const server = new McpServer({ name: 'archadev', version: '1.7.0' });
   const guard = async (fn: (c: RpcClient) => Promise<Content[]>) => {
     try {
       return { content: await fn(await getCore()) };
