@@ -31,6 +31,7 @@ API (ids are strings; any ref may be a node id or a unique node name):
   align(refs, "left"|"center"|"right"|"top"|"middle"|"bottom", { to?: "parent"|"selection" })   one layer aligns in its parent, several to their bounds; layers in auto layout set the parent's align/justify instead
   distribute(refs, "horizontal"|"vertical", { gap? })  equal spacing (3+ layers), or pack with a fixed gap
   wrap(refs, { layout?: "row"|"column"|"auto", gap?, padding?, name?, ...frame props }) -> id   put sibling layers in a new frame at their place (auto layout when layout is set)
+  group(refs, { name? }) -> id   group layers in place (box = union of children, kept fitted); ungroup(refs) -> ids   release groups/frames into their parent, kept in place
   outline(ref?, { depth? }) -> text                  compact tree (sizes, layout, fills, text, context notes); print(outline(card)) to read a design cheaply
   icon(name, parentRef | null, { size?, color?, strokeWidth?, index?, x?, y?, name? }) -> id   icon as a vector. "search" = lucide; other sets by prefix:
       tabler:, tabler-filled:, ph: (Phosphor) ph-thin: ph-light: ph-bold: ph-fill:, hero: (Heroicons outline) hero-solid: hero-mini: hero-micro:,

@@ -403,7 +403,10 @@ export function Canvas() {
       routeConnectors(d);
       const exclude = new Set(g.ids);
       const target = containerAt(d, w.x, w.y, exclude);
-      g.drop = target.id !== first.parentId ? target.id : null;
+      // A group's layer stays in its group while over the frame that holds the group (groups are no drop targets).
+      let home = first.parentId;
+      while (home && d.get(home)?.type === 'group') home = d.get(home)!.parentId;
+      g.drop = target.id !== first.parentId && target.id !== home ? target.id : null;
       // Dropping into an auto-layout frame shows where the layers will land.
       const slot = g.drop && target.type === 'frame' && target.layout !== 'none' ? layoutSlot(d, target.id, w, exclude) : null;
       // The dragged layers draw on top, so a clipping frame never hides them on the way out.

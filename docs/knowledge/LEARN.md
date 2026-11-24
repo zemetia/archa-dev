@@ -8,6 +8,8 @@
 
 <!-- Entries below, newest first -->
 
+[2026-11-24] - Live check showed dragging a group's child on the canvas pulled it out of the group into the frame below (containerAt skips groups, so the drop target was the frame) - The move gesture now treats the frame holding the group as "home" - Test canvas drags of nested layers live; unit tests on ops never exercise the canvas drop-target logic.
+
 [2026-11-23] - `reference` / `compare` passed in the dev app but hung in the packaged 1.6.0 build (300 s timeouts): the test window was hidden, so `requestAnimationFrame` never fired and pdf.js's display-intent `render()` waited forever - Render reference pages with `intent: 'print'` (no rAF pacing) - Anything the renderer does for an agent must work with the window minimised or hidden; smoke-test the packaged app with its window in the background before releasing.
 
 [2026-11-23] - The new `reference` tool passed its vitest test but failed in the app with "No GlobalWorkerOptions.workerSrc": in Electron's utility process pdf.js does not detect Node, so it wants a worker script - Point `workerSrc` at the legacy worker (`createRequire(...).resolve`); pdf.js then runs it in-process - Code that behaves differently by runtime (pdf.js, workers, fetch) must be run once in the real app process, not only in vitest.

@@ -122,7 +122,7 @@ Right-click on the canvas picks like a click (a hit inside the selection keeps i
 | Target | Items |
 |---|---|
 | Empty canvas | Paste here (in-app layers, top-left at the pointer, into the frame under it) · Select all · Zoom to fit · Settings ▸ |
-| Selection | Copy · Paste here · Duplicate · Bring to front Ctrl+] / Send to back Ctrl+[ · Group Ctrl+G · Frame Ctrl+Alt+G · Ungroup Ctrl+Shift+G (groups and frames with children) · Add / Remove auto layout Shift+A / Shift+Alt+A · Create component Ctrl+Alt+K (one plain frame) · Delete · Settings ▸ |
+| Selection | Copy · Paste here · Duplicate · Bring to front Ctrl+] / Send to back Ctrl+[ · Group Ctrl+G · Frame Ctrl+Alt+G · Ungroup Ctrl+Shift+G (groups and plain frames; rules → [DOCUMENT_MODEL/01 → Groups](../DOCUMENT_MODEL/01-nodes-properties.md#groups)). Right-clicking a Layers row opens the same menu for that row · Add / Remove auto layout Shift+A / Shift+Alt+A · Create component Ctrl+Alt+K (one plain frame) · Delete · Settings ▸ |
 | Settings ▸ | Show pixel grid (1px lines from zoom 8×, `pixelGrid`, localStorage `archa.pixelGrid`) · Open settings… |
 
 Groups are sized to the selection when made; the core does not refit them yet. Not built: Copy as, Paste to replace, flip, snapping.

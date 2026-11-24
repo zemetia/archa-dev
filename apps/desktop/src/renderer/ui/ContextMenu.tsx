@@ -2,8 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { exportPdf, openSettings, readingOrder, togglePixelGrid, useStore } from '../lib/store';
 import {
-  arrange, canMakeComponent, copy, createComponent, deleteSelection, duplicate, group, hasCopiedLayers, pasteAt, removeLayout, selectAll, ungroup, ungroupable, wrapInFrame,
+  arrange, canMakeComponent, copy, createComponent, deleteSelection, duplicate, group, hasCopiedLayers, pasteAt, removeLayout, selectAll, ungroup, wrapInFrame,
 } from '../lib/commands';
+import { canUngroup } from '@archa/core';
 import { cn } from './controls';
 import { canRemoveBackground, removeBackground } from '../lib/removeBackground';
 
@@ -92,7 +93,7 @@ function Menu({ x, y, world }: { x: number; y: number; world: { x: number; y: nu
       SEP,
       { kind: 'item', label: 'Group selection', keys: 'Ctrl+G', run: group },
       { kind: 'item', label: 'Frame selection', keys: 'Ctrl+Alt+G', run: () => wrapInFrame(false) },
-      ...(ungroupable(doc, ids).length ? [{ kind: 'item', label: 'Ungroup', keys: 'Ctrl+Shift+G', run: ungroup } as const] : []),
+      ...(canUngroup(doc, ids) ? [{ kind: 'item', label: 'Ungroup', keys: 'Ctrl+Shift+G', run: ungroup } as const] : []),
       { kind: 'item', label: 'Add auto layout', keys: 'Shift+A', run: () => wrapInFrame(true) },
       ...(ids.some((id) => { const n = doc.get(id); return n?.type === 'frame' && n.layout !== 'none'; })
         ? [{ kind: 'item', label: 'Remove auto layout', keys: 'Shift+Alt+A', run: removeLayout } as const] : []),

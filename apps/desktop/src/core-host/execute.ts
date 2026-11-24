@@ -1,6 +1,6 @@
 import { getQuickJS, shouldInterruptAfterDeadline, type QuickJSContext, type QuickJSWASMModule } from 'quickjs-emscripten';
 import {
-  alignOps, applyOps, bindTokens, boundTo, contextOf, distributeOps, DocumentError, findEmptySpace, findVariable, insertOpsFor, outline, wrapOps, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, setPropsOps, subtreeInput, syncInstanceOps,
+  alignOps, applyOps, bindTokens, boundTo, contextOf, distributeOps, DocumentError, findEmptySpace, findVariable, groupOps, insertOpsFor, outline, ungroupOps, wrapOps, instanceOps, libraryInsertOps, instancesOf, lint, listComponents, makeComponentOps, normaliseInput, setPropsOps, subtreeInput, syncInstanceOps,
   type ArchaDocument, type DocumentSession,
 } from '@archa/core';
 import { CUSTOM_SET, customIconNode, getIcon, ICON_SETS, iconNode, iconSetMeta, loadAllIconSets, loadedIconSet, parseIconRef, searchIcons, searchNames } from '@archa/icons';
@@ -48,6 +48,8 @@ var resolveComment = (id) => __call('resolveComment', [id]);
 var align = (refs, edge, opts) => __call('align', [[].concat(refs), edge, opts || {}]);
 var distribute = (refs, axis, opts) => __call('distribute', [[].concat(refs), axis, typeof opts === 'number' ? { gap: opts } : opts || {}]);
 var wrap = (refs, frame) => __call('wrap', [[].concat(refs), frame || {}]);
+var group = (refs, opts) => __call('group', [[].concat(refs), opts || {}]);
+var ungroup = (refs) => __call('ungroup', [[].concat(refs)]);
 var outline = (ref, opts) => __call('outline', [ref, opts || {}]);
 var icon = (name, parent, opts) => __call('icon', [name, parent, opts || {}]);
 var image = (src, parent, opts) => __call('imageFile', [src, parent, opts || {}]);
@@ -560,6 +562,17 @@ export class AgentExecutor {
         st.created.push({ id: rootId, name: doc.require(rootId).name });
         step('create', rootId);
         return rootId;
+      }
+      case 'group':
+      case 'ungroup': {
+        const [refs, opts] = args as [string[], { name?: string }];
+        const r = name === 'group' ? groupOps(doc, refs.map(ref), { name: opts?.name }) : ungroupOps(doc, refs.map(ref));
+        if (!r.ops.length) throw new Error(`${name}: ${r.notes.join(' ') || 'nothing to do'}`);
+        commit(r.ops);
+        if (name === 'group') { st.created.push({ id: r.selection[0]!, name: doc.require(r.selection[0]!).name }); step('create', r.selection[0]!); }
+        else for (const id of r.selection) { st.changed.set(id, doc.require(id).name); step('edit', id); }
+        st.output.push(...r.notes.map((n) => `${name}: ${n}`));
+        return name === 'group' ? r.selection[0]! : r.selection;
       }
       case 'outline': {
         const [r, opts] = args as [string | null | undefined, { depth?: number }];
