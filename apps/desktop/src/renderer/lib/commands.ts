@@ -253,3 +253,14 @@ export function selectChildren() {
   const kids = doc.children(ids[0]!);
   if (kids.length) select(kids.map((k) => k.id));
 }
+
+/** Zoom about the centre of the canvas, clamped to 2%–6400%. */
+export function zoomTo(z: number) {
+  const el = document.querySelector('[data-canvas-host]');
+  if (!el) return;
+  const { camera } = useStore.getState();
+  const cx = el.clientWidth / 2, cy = el.clientHeight / 2;
+  const wx = (cx - camera.x) / camera.zoom, wy = (cy - camera.y) / camera.zoom;
+  const zoom = Math.min(64, Math.max(0.02, z));
+  useStore.setState({ camera: { zoom, x: cx - wx * zoom, y: cy - wy * zoom } });
+}

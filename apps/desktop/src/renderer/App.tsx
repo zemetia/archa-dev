@@ -3,7 +3,7 @@ import { PanelRightOpen } from 'lucide-react';
 import { init, newDoc, openFile, redo, save, setTool, togglePanel, toggleRailPanel, undo, useStore } from './lib/store';
 import { importImageOrSvg } from './lib/importers';
 import {
-  arrange, copy, createComponent, deleteSelection, duplicate, group, nudge, pasteFrom, removeLayout, reorder, selectAll, selectChildren, selectParent, ungroup, wrapInFrame,
+  arrange, copy, createComponent, deleteSelection, duplicate, group, nudge, pasteFrom, removeLayout, reorder, selectAll, selectChildren, selectParent, ungroup, wrapInFrame, zoomTo,
 } from './lib/commands';
 import { ContextMenu } from './ui/ContextMenu';
 import { Canvas } from './canvas/Canvas';
@@ -154,14 +154,4 @@ function onKey(e: KeyboardEvent) {
   if (k === 'arrowdown') return run(() => nudge(0, step));
   const tool = TOOL_KEYS[k];
   if (tool && !e.altKey && !e.shiftKey) { e.preventDefault(); setTool(tool); }
-}
-
-function zoomTo(z: number) {
-  const el = document.querySelector('[data-canvas-host]');
-  if (!el) return;
-  const { camera } = useStore.getState();
-  const cx = el.clientWidth / 2, cy = el.clientHeight / 2;
-  const wx = (cx - camera.x) / camera.zoom, wy = (cy - camera.y) / camera.zoom;
-  const zoom = Math.min(64, Math.max(0.02, z));
-  useStore.setState({ camera: { zoom, x: cx - wx * zoom, y: cy - wy * zoom } });
 }
