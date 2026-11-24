@@ -40,13 +40,26 @@ Top-level nodes with an animating subtree skip the frame bitmap cache while they
 |---|---|
 | Rendering | Virtualised list (`@tanstack/react-virtual`); 50k nodes stays smooth |
 | Data | Derived from core subscription; collapsed state is view-only (Zustand) |
-| Reorder | Drag → one `move`/`reorder` transaction |
+| Order | See **Layer order** below — `layerOrder()` in `@archa/core` `layers.ts` |
+| Drag & drop | Drop above / below a row = reorder (accent line); middle of a frame or group row = drop into it (accent ring); bottom of the list = page root. `layerMoveOps()` → one `move` transaction (+ `update` x/y), undoable |
+| Drop rules | No drop into itself or a descendant; a selected row drags the whole selection in stacking order; into a free container the layer keeps its canvas position; into auto layout it joins the end of the flow; out of auto layout `fill` sizes become `fixed` |
 | Visibility / lock | `update` ops; locked nodes skipped by hit testing |
 | Group / frame / wrap in auto-layout | Single transaction each |
 | Boolean ops, mask | Create `boolean` node or `mask: true` on the first child |
 | Rename | Inline; batch rename with `{n}`, `{name}` patterns |
 | Filter | Name, type, component, variable used |
 | Sync | Selection shared between tree and canvas; agent cursor highlights both |
+
+### Layer order (decided 2026-11-24)
+
+`children` is paint order — the last child draws on top ([DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md)). The panel reads top row first:
+
+| Container | Panel order | Why |
+|---|---|---|
+| Page, group, frame without auto layout | Reverse of `children` — top row = drawn on top | Matches overlap on the canvas (Figma convention) |
+| Auto-layout frame (`layout` row / column) | Same as `children` — top row = first in the flow | Children do not overlap; the list reads like the canvas (left→right, top→bottom) |
+
+Index maths never lives in UI code: drops are `{ targetId, position: before | after | inside }` in list terms and the core converts them.
 
 ---
 
@@ -82,5 +95,5 @@ Wireframe nodes always render with the dashed "idea" style so they are never mis
 
 **Linked from:** [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md) · [APP_UI/01](../APP_UI/01-shell-tools-panels.md) · [CACHE/02](../CACHE/02-render-tiles.md) · [DOCUMENT_MODEL/01](../DOCUMENT_MODEL/01-nodes-properties.md) · [MCP/01](../MCP/01-transports-tools.md)
 
-**Code:** [`apps/desktop/src/renderer/canvas/Canvas.tsx`](../../../apps/desktop/src/renderer/canvas/Canvas.tsx) · [`apps/desktop/src/renderer/canvas/changes.ts`](../../../apps/desktop/src/renderer/canvas/changes.ts) · [`apps/desktop/src/renderer/canvas/cursors.ts`](../../../apps/desktop/src/renderer/canvas/cursors.ts) · [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`apps/desktop/src/renderer/canvas/overlay.ts`](../../../apps/desktop/src/renderer/canvas/overlay.ts) · [`apps/desktop/src/renderer/lib/geometry.ts`](../../../apps/desktop/src/renderer/lib/geometry.ts) · [`apps/desktop/src/renderer/ui/LayersPanel.tsx`](../../../apps/desktop/src/renderer/ui/LayersPanel.tsx) · [`apps/desktop/test/changes.test.ts`](../../../apps/desktop/test/changes.test.ts) · [`apps/desktop/test/cursors.test.ts`](../../../apps/desktop/test/cursors.test.ts) · [`apps/desktop/test/rotation.test.ts`](../../../apps/desktop/test/rotation.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
+**Code:** [`apps/desktop/src/renderer/canvas/Canvas.tsx`](../../../apps/desktop/src/renderer/canvas/Canvas.tsx) · [`apps/desktop/src/renderer/canvas/changes.ts`](../../../apps/desktop/src/renderer/canvas/changes.ts) · [`apps/desktop/src/renderer/canvas/cursors.ts`](../../../apps/desktop/src/renderer/canvas/cursors.ts) · [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`apps/desktop/src/renderer/canvas/overlay.ts`](../../../apps/desktop/src/renderer/canvas/overlay.ts) · [`apps/desktop/src/renderer/lib/geometry.ts`](../../../apps/desktop/src/renderer/lib/geometry.ts) · [`apps/desktop/src/renderer/ui/LayersPanel.tsx`](../../../apps/desktop/src/renderer/ui/LayersPanel.tsx) · [`apps/desktop/test/changes.test.ts`](../../../apps/desktop/test/changes.test.ts) · [`apps/desktop/test/cursors.test.ts`](../../../apps/desktop/test/cursors.test.ts) · [`apps/desktop/test/rotation.test.ts`](../../../apps/desktop/test/rotation.test.ts) · [`packages/core/src/layers.ts`](../../../packages/core/src/layers.ts) · [`packages/core/test/layers.test.ts`](../../../packages/core/test/layers.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
 <!-- backlinks:end -->

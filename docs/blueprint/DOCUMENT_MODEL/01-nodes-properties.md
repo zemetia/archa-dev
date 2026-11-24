@@ -120,7 +120,7 @@ gap:  { $var: 'space/4' }
 
 ---
 
-**Linked from:** [MCP/02](../MCP/02-execute-api.md)
+**Linked from:** [MCP/02](../MCP/02-execute-api.md) · [RENDERING/02](../RENDERING/02-layers-hit-testing.md)
 
 **Code:** [`apps/desktop/src/renderer/canvas/EmbedLayer.tsx`](../../../apps/desktop/src/renderer/canvas/EmbedLayer.tsx) · [`packages/core/src/bindings.ts`](../../../packages/core/src/bindings.ts) · [`packages/core/src/connectors.ts`](../../../packages/core/src/connectors.ts) · [`packages/core/src/document.ts`](../../../packages/core/src/document.ts) · [`packages/core/src/text.ts`](../../../packages/core/src/text.ts) · [`packages/core/test/connectors.test.ts`](../../../packages/core/test/connectors.test.ts) · [`packages/formats/src/export/html.ts`](../../../packages/formats/src/export/html.ts) · [`packages/formats/test/text.test.ts`](../../../packages/formats/test/text.test.ts) · [`packages/render/src/fonts.ts`](../../../packages/render/src/fonts.ts) · [`packages/schema/src/color.ts`](../../../packages/schema/src/color.ts) · [`packages/schema/src/ids.ts`](../../../packages/schema/src/ids.ts) · [`packages/schema/src/index.ts`](../../../packages/schema/src/index.ts) · [`packages/schema/src/nodes.ts`](../../../packages/schema/src/nodes.ts)
 <!-- backlinks:end -->
