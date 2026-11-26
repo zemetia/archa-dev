@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, threadOf, type AccountsOverview, type ChatMode, type CustomIconInfo, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, threadOf, type AccountsOverview, type ChatMode, type CustomIconInfo, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatQueued, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodeImage, renderNodePng, renderNodeSlices } from '@archa/render';
 import { onChatRun } from './comments';
@@ -48,6 +48,8 @@ type State = {
   chat: ChatMessage[];
   /** Launched runs still working, by run id. Sessions run in parallel, one per thread. */
   runs: Record<string, ChatRunEvent>;
+  /** Messages waiting for a thread's running turn (pinned above the composer), by thread. */
+  chatQueue: Record<string, ChatQueued[]>;
   /** Replies still being written (streamed), by thread. */
   chatLive: Record<string, { runId: string; threadId: string; agent: string; text: string }>;
   /** One cursor per agent session on the active document, by author id (canvas/cursors.ts). */
@@ -87,13 +89,16 @@ type State = {
   bgJob: { nodeId: string; phase: 'download' | 'working'; progress: number } | null;
 };
 
+/** The browser pane opens at this width (fits a phone-width page) and can only be dragged wider. */
+export const BROWSER_MIN_WIDTH = 360;
+
 export const useStore = create<State>(() => ({
   client: null, info: null, docs: [], activeDocId: null, doc: null, rev: 0,
   selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, slidesView: false, orchestraView: null, chatMode: readMode(), library: null,
   leftOpen: readFlag('archa.leftOpen'), rightOpen: readFlag('archa.rightOpen'), chatDraft: '',
-  agents: [], activity: [], chat: [], runs: {}, chatLive: {}, cursors: {}, editingText: null, textEffectsOpen: false, toasts: [], fitRequest: 0,
+  agents: [], activity: [], chat: [], runs: {}, chatQueue: {}, chatLive: {}, cursors: {}, editingText: null, textEffectsOpen: false, toasts: [], fitRequest: 0,
   settingsOpen: false, settingsPage: 'providers', accounts: null, skills: null, mcpServers: null,
-  browserOpen: false, browserWidth: 620, browser: { tabs: [], activeId: null, agent: null, emulated: null },
+  browserOpen: false, browserWidth: BROWSER_MIN_WIDTH, browser: { tabs: [], activeId: null, agent: null, emulated: null },
   railPanel: null, showComments: true, openComment: null, commentDraft: null, interactEmbed: null,
   contextMenu: null, customIcons: null, pixelGrid: readFlag('archa.pixelGrid'), bgJob: null,
 }));
@@ -200,6 +205,9 @@ export async function init() {
   client.on('chat.delta', (d) => {
     if (d.docId !== get().activeDocId) return;
     set((s) => ({ chatLive: d.text ? { ...s.chatLive, [d.threadId]: { runId: d.runId, threadId: d.threadId, agent: d.agent, text: d.text } } : omit(s.chatLive, d.threadId) }));
+  });
+  client.on('chat.queue', (q) => {
+    set((s) => ({ chatQueue: q.items.length ? { ...s.chatQueue, [q.threadId]: q.items } : omit(s.chatQueue, q.threadId) }));
   });
   client.on('chat.run', (r) => {
     onChatRun(r.runId, r.status);

@@ -32,7 +32,7 @@ function statusOf(msgs: ChatMessage[], working: boolean): Status {
   if (working) return 'working';
   const last = [...msgs].reverse().find((m) => m.role !== 'user' && m.role !== 'tool');
   if (last?.role === 'error') return 'failed';
-  if (last?.role === 'status' && last.text === 'Stopped') return 'stopped';
+  if (last?.role === 'status' && (last.text === 'Stopped' || last.text.startsWith('Stopped after'))) return 'stopped';
   return 'finished';
 }
 

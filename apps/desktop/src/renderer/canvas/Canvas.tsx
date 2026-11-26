@@ -13,26 +13,33 @@ import { CommentsLayer } from './CommentsLayer';
 import { onFontLoaded, onImageLoaded } from '@archa/render';
 import { penBounds, penPath, type PenPoint } from './pen';
 import { scaleOps } from './scale';
+import { snapMove, snapTargets, type Guide } from '../lib/snap';
 import { groupHandleAt, groupPatches, groupScale, groupStart, mappedCorners, pivotOf, rotateAbout, scaleAbout, type GroupStart } from '../lib/groupTransform';
 import type { Mat } from '../lib/geometry';
 import { ASSET_MIME, assetStyle, insertAsset } from '../lib/assets';
 import { dropFiles } from '../lib/importers';
 
 type Pt = { x: number; y: number };
+type Rect = { x: number; y: number; width: number; height: number };
 type Gesture =
   | { kind: 'pan'; sx: number; sy: number; cam: Camera }
-  | { kind: 'move'; start: Pt; ids: string[]; orig: Map<string, Pt>; ends: Map<string, Ends>; moved: boolean; reorder: { parentId: string; index: number } | null; drop: string | null }
+  /** `box`: the dragged layers' bounds at the start, for smart guides. */
+  | { kind: 'move'; start: Pt; ids: string[]; orig: Map<string, Pt>; ends: Map<string, Ends>; moved: boolean; reorder: { parentId: string; index: number } | null; drop: string | null; box: Rect | null }
   /** Drawing a new connector (id null) or dragging one end of an existing one. */
   | { kind: 'connect'; id: string | null; which: 'start' | 'end'; fixed: ConnectorEnd; start: Pt; end: ConnectorEnd | null }
-  /** `text`: a corner drag on text scales it (font size with the box), Canva-like. */
-  | { kind: 'resize'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt; frame: ResizeFrame; text: { fontSize: number; letterSpacing: number } | null }
+  /**
+   * `text`: a corner drag on text scales it (font size with the box), Canva-like. Holding Alt scales the
+   * layer's contents with it (what the Scale tool does): `before` keeps the subtree as it was so each
+   * frame scales from the original, `scaled` holds the ops to commit.
+   */
+  | { kind: 'resize'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt; frame: ResizeFrame; text: { fontSize: number; letterSpacing: number } | null; before: Node[]; scaled: Op[] | null }
   | { kind: 'rotate'; id: string; center: Pt; startAngle: number; orig: number }
   | { kind: 'marquee'; start: Pt; cur: Pt }
   | { kind: 'create'; tool: CreateTool; start: Pt; cur: Pt; parentId: string }
   | { kind: 'scale'; id: string; handle: Handle; orig: { x: number; y: number; width: number; height: number }; start: Pt; cur: { x: number; y: number; width: number; height: number } }
   | { kind: 'pen'; index: number }
   /** Several layers scaled (`handle`) or turned (`rotate`) as one unit about their shared box; `t` is the live page-space map. */
-  | { kind: 'group'; handle: Handle | 'rotate'; ids: string[]; start: Pt; from: GroupStart; scaleAll: boolean; t: Mat };
+  | { kind: 'group'; handle: Handle | 'rotate'; ids: string[]; start: Pt; from: GroupStart; scaleTool: boolean; scaleAll: boolean; t: Mat };
 
 type Ends = { start: ConnectorEnd; end: ConnectorEnd };
 type CreateTool = 'frame' | 'rect' | 'ellipse' | 'polygon' | 'sticky' | 'embed';
@@ -46,6 +53,8 @@ const cache = new FrameBitmapCache();
 export const invalidateCanvas = () => cache.invalidate();
 /** Width of a text box placed with the text tool. */
 const TEXT_BOX_WIDTH = 240;
+/** Smart guides pull a dragged layer into line from this many screen pixels away. */
+const SNAP_PX = 6;
 const DEFAULT_FILL: Record<string, string> = { frame: '#ffffff', rect: '#d4d4d8', ellipse: '#d4d4d8', polygon: '#d4d4d8', sticky: '#fde68a' };
 let frameCounter = 1;
 /** Line style of connectors drawn with the tool. */
@@ -263,7 +272,7 @@ export function Canvas() {
       const from = groupStart(d, st.selection);
       const handle = from && from.items.length ? groupHandleAt(from.box, w, st.camera.zoom) : null;
       if (from && handle) {
-        gesture.current = { kind: 'group', handle, ids: [...st.selection], start: w, from, scaleAll: st.tool === 'scale', t: [1, 0, 0, 1, 0, 0] };
+        gesture.current = { kind: 'group', handle, ids: [...st.selection], start: w, from, scaleTool: st.tool === 'scale', scaleAll: st.tool === 'scale', t: [1, 0, 0, 1, 0, 0] };
         return;
       }
     }
@@ -282,7 +291,7 @@ export function Canvas() {
         const orig = { x: n.x, y: n.y, width: n.width, height: n.height };
         gesture.current = st.tool === 'scale'
           ? { kind: 'scale', id: n.id, handle, orig, start: w, cur: d.worldBounds(n.id) }
-          : { kind: 'resize', id: n.id, handle, orig, start: w, frame: resizeFrame(d, n.id, handle), text: n.type === 'text' && handle.length === 2 ? { fontSize: n.fontSize, letterSpacing: n.letterSpacing } : null };
+          : { kind: 'resize', id: n.id, handle, orig, start: w, frame: resizeFrame(d, n.id, handle), text: n.type === 'text' && handle.length === 2 ? { fontSize: n.fontSize, letterSpacing: n.letterSpacing } : null, before: [...d.walk(n.id)], scaled: null };
         return;
       }
     }
@@ -306,7 +315,8 @@ export function Canvas() {
     picked = d.require(ids[0]!);
     const orig = new Map(ids.map((id) => [id, { x: d.require(id).x, y: d.require(id).y }]));
     const ends = new Map(ids.flatMap((id) => { const n = d.require(id); return n.type === 'connector' ? [[id, { start: n.start, end: n.end }] as const] : []; }));
-    gesture.current = { kind: 'move', start: w, ids, orig, ends, moved: false, reorder: null, drop: null };
+    const box = ids.some((id) => d.require(id).type !== 'connector') ? selectionBounds(d, ids.filter((id) => d.require(id).type !== 'connector')) : null;
+    gesture.current = { kind: 'move', start: w, ids, orig, ends, moved: false, reorder: null, drop: null, box };
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -390,7 +400,7 @@ export function Canvas() {
       extras.current = g.kind === 'marquee' ? { marquee: rectOf(g.start, w) } : { create: rectOf(g.start, w, e.shiftKey || g.tool === 'sticky') };
       redraw();
     } else if (g.kind === 'move') {
-      const dx = w.x - g.start.x, dy = w.y - g.start.y;
+      let dx = w.x - g.start.x, dy = w.y - g.start.y;
       if (!g.moved && Math.hypot(dx, dy) * st.camera.zoom < 3) return;
       g.moved = true;
       const first = d.require(g.ids[0]!);
@@ -408,6 +418,17 @@ export function Canvas() {
         return;
       }
       g.reorder = null;
+      const exclude = new Set(g.ids);
+      const target = containerAt(d, w.x, w.y, exclude);
+      // Smart guides: line the layers up with their neighbours (Ctrl / Cmd moves freely).
+      dx = Math.round(dx); dy = Math.round(dy);
+      let guides: Guide[] = [];
+      if (g.box && !(e.ctrlKey || e.metaKey)) {
+        const lifted = new Set(g.ids.flatMap((id) => [...d.walk(id)].map((n) => n.id)));
+        const targets = snapTargets(d, [first.parentId ?? pageRoot(d), target.id], lifted);
+        const s = snapMove({ ...g.box, x: g.box.x + dx, y: g.box.y + dy }, targets, SNAP_PX / st.camera.zoom);
+        dx += s.dx; dy += s.dy; guides = s.guides;
+      }
       for (const id of g.ids) {
         const o = g.orig.get(id)!;
         const n = d.require(id);
@@ -419,8 +440,6 @@ export function Canvas() {
         } else d.nodes.set(id, { ...n, x: Math.round(o.x + dx), y: Math.round(o.y + dy) });
       }
       routeConnectors(d);
-      const exclude = new Set(g.ids);
-      const target = containerAt(d, w.x, w.y, exclude);
       // A group's layer stays in its group while over the frame that holds the group (groups are no drop targets).
       let home = first.parentId;
       while (home && d.get(home)?.type === 'group') home = d.get(home)!.parentId;
@@ -428,15 +447,29 @@ export function Canvas() {
       // Dropping into an auto-layout frame shows where the layers will land.
       const slot = g.drop && target.type === 'frame' && target.layout !== 'none' ? layoutSlot(d, target.id, w, exclude) : null;
       // The dragged layers draw on top, so a clipping frame never hides them on the way out.
-      extras.current = { dropTarget: g.drop, insertLine: slot?.line, lifted: g.ids };
+      extras.current = { dropTarget: g.drop, insertLine: slot?.line, lifted: g.ids, guides };
       cache.invalidate();
       useStore.setState((s) => ({ rev: s.rev + 1 }));
     } else if (g.kind === 'resize') {
+      // Every frame starts from the layer as it was, so Alt can be pressed or let go mid-drag.
+      for (const b of g.before) d.nodes.set(b.id, b);
       const n = d.require(g.id);
       // Corners scale text (font with the box); Shift keeps the ratio for everything else.
       const b = resizedBox(g.frame, g.handle, g.orig, w.x - g.start.x, w.y - g.start.y, !!g.text || e.shiftKey);
       const turned = !!pageRotation(d, g.id);
       const snap = (v: number) => (turned ? round2(v) : Math.round(v));
+      // Alt: the contents scale with the box (children, fonts, strokes, radii, gaps); Alt+Shift keeps the ratio too.
+      g.scaled = null;
+      if (e.altKey && !g.text && isContainer(n) && g.before.length > 1) {
+        const o = originOf(d, n.parentId!);
+        const ops = scaleOps(d, g.id, { x: snap(b.x) + o.x, y: snap(b.y) + o.y, width: Math.max(1, snap(b.width)), height: Math.max(1, snap(b.height)) });
+        for (const op of ops) if (op.op === 'update') d.nodes.set(op.id, { ...d.require(op.id), ...op.patch } as Node);
+        g.scaled = ops;
+        runLayout(d);
+        cache.invalidate();
+        useStore.setState((s) => ({ rev: s.rev + 1 }));
+        return;
+      }
       const patch: Record<string, unknown> = { x: snap(b.x), y: snap(b.y), width: Math.max(1, snap(b.width)), height: Math.max(1, snap(b.height)) };
       let sizing = sizingAfterResize(n, g.handle);
       if (g.text && n.type === 'text') {
@@ -460,7 +493,9 @@ export function Canvas() {
         g.t = rotateAbout(pivot, turn);
         label = `${normalizeAngle(turn)}°`;
       } else {
-        const s = groupScale(box, g.handle, w.x - g.start.x, w.y - g.start.y, { fromCenter: e.altKey, keepRatio: e.shiftKey });
+        // Alt scales what is inside the layers too (like the Scale tool); Shift keeps the ratio.
+        g.scaleAll = g.scaleTool || e.altKey;
+        const s = groupScale(box, g.handle, w.x - g.start.x, w.y - g.start.y, { keepRatio: e.shiftKey });
         g.t = scaleAbout(s.anchor, s.sx, s.sy);
         label = `${round2(Math.abs(s.sx) * box.width)} × ${round2(Math.abs(s.sy) * box.height)}`;
       }
@@ -601,6 +636,10 @@ export function Canvas() {
       return;
     }
 
+    if (g.kind === 'resize' && g.scaled) {
+      if (g.scaled.length) await commit('Scale', g.scaled);
+      return;
+    }
     if (g.kind === 'resize') {
       const n = d.require(g.id);
       const patch: Record<string, unknown> = { x: n.x, y: n.y, width: n.width, height: n.height, sizing: n.sizing };

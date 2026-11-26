@@ -95,11 +95,11 @@ No session id seen yet → new session with the original task + previous output.
 | Rule | Detail |
 |---|---|
 | Process | An adapter with `warm` (Claude, agy) keeps **one CLI process per thread**, fed one NDJSON message per turn (`--input-format stream-json`). Codex stays one process per turn (`exec resume`) |
-| Turn end | Parser emits `{ kind: 'turn', ok, costUsd? }` (Claude `result`, agy `event: result`) → status `Done in N s · $x` |
+| Turn end | Parser emits `{ kind: 'turn', ok, costUsd? }` (Claude `result`, agy `event: result`) → every turn ends with one status carrying `elapsedMs`: `Worked for 1m 05s · $x` / `Stopped after …` / `Failed after …` (`formatElapsed`); the chat shows it with a timer icon under the reply, and a live `· 12s` ticks next to a running turn (`ChatRunEvent.startedAt`) |
 | Images | Pasted into the composer (max 6, long side ≤ 1568 px). Saved to the document's `<name>-asset/chats/attachments/<threadId>/`; Claude gets them as inline image blocks (no file tools), agy/codex get the paths (codex also `--image=`). History keeps 160 px thumbnails as attachment files (`asset:` references), never base64 |
 | Pre-warm | `chat.warm` on composer focus spawns the process (no thread yet → a thread id is reserved and returned) |
 | Identity | `ARCHA_RUN_ID` = the process id, so its `archa mcp` keeps the thread's session name across turns |
-| Queue | A message to a working thread is queued (`queued: true`); `now: true` stops the turn first. The queue drains in order when a turn ends |
+| Queue | A message to a working thread is queued (`queued: true`); `now: true` stops the turn first. The queue drains in order when a turn ends. Queued messages are **not** in the history until their turn starts: `chat.queue` events (+ `chat.queued` on open) pin them above the composer, each with **Send** (`chat.sendQueued`: move to the front, stop the turn, workers keep going) and remove (`chat.unqueue`) |
 | Stop | Claude: `control_request` interrupt keeps the process; no answer in 5 s (or agy) → kill tree |
 | Lifetime | Idle 10 min → closed; max 6 processes (least recently used idle first); settings change (model, account, MCP servers, skills) → new process resuming the session; app exit kills all |
 

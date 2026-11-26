@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeft, ArrowUp, BookOpen, Camera, Check, ChevronRight, Code2, Copy, Crosshair, FileText, Globe, History, ImagePlus, Layers, Loader2, MessageSquare, Network, ScanSearch, Settings, Shapes, Sparkles, Square, SquarePen, UserRound, Wrench, X, Zap } from 'lucide-react';
-import { chatThreads, GUIDES, threadOf, type ChatImage, type ChatMessage, type ChatMode, type ModelOption } from '@archa/protocol';
+import { ArrowLeft, ArrowUp, BookOpen, Camera, Check, ChevronRight, Code2, Copy, Crosshair, FileText, Globe, History, ImagePlus, Layers, Loader2, MessageSquare, Network, ScanSearch, Settings, Shapes, Sparkles, Square, SquarePen, Timer, UserRound, Wrench, X, Zap } from 'lucide-react';
+import { chatThreads, formatElapsed, GUIDES, threadOf, type ChatImage, type ChatMessage, type ChatMode, type ModelOption } from '@archa/protocol';
 import { loadSkills, runOfThread, select, toast, useStore } from '../lib/store';
 import { imageFiles, MAX_CHAT_IMAGES, toChatImage } from '../lib/chatImages';
 import { assetUrl } from '../lib/asset-urls';
 import { personaBg } from './persona';
 import { cn } from './controls';
 import { Dropdown, type DropdownOption } from './Dropdown';
+import { BrandMark, type Brand } from './settings/Logo';
 import { Markdown } from './Markdown';
 import { ArchaLogo } from './ArchaLogo';
 import { SvgBlock } from './SvgBlock';
@@ -156,14 +157,66 @@ export function ChatThread() {
             )}
             {m.role === 'agent' && <AgentText agent={m.agent} persona={m.persona} label={agentLabel(m.agent)} text={m.text} />}
             {m.role === 'tool' && <ToolRow m={m} pending={!!running && 'callId' in m && !!m.callId && m.runId === running.runId && m.result === undefined} />}
-            {m.role === 'status' && <div className="flex items-center gap-1.5 px-1 text-[11px] text-fg-subtle"><UserRound size={11} className="shrink-0" /><span className="truncate">{m.text}</span></div>}
+            {m.role === 'status' && m.elapsedMs !== undefined && (
+              <div title={`This turn took ${formatElapsed(m.elapsedMs)}`} className="flex items-center gap-1.5 px-1 text-[11px] tabular-nums text-fg-subtle"><Timer size={11} className="shrink-0" /><span className="truncate">{m.text}</span></div>
+            )}
+            {m.role === 'status' && m.elapsedMs === undefined && <div className="flex items-center gap-1.5 px-1 text-[11px] text-fg-subtle"><UserRound size={11} className="shrink-0" /><span className="truncate">{m.text}</span></div>}
             {m.role === 'error' && <div className="whitespace-pre-wrap rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{m.text}</div>}
           </div>
         ))}
         {live && <AgentText agent={live.agent} persona={persona} label={agentLabel(live.agent)} text={live.text} streaming />}
-        {running && !live && <div className="flex items-center gap-2 px-1 text-[12px] text-agent"><Loader2 size={13} className="animate-spin" />{running.persona} is working on the canvas…</div>}
+        {running && !live && <div className="flex items-center gap-2 px-1 text-[12px] text-agent"><Loader2 size={13} className="animate-spin" />{running.persona} is working on the canvas…<Elapsed since={running.startedAt} /></div>}
+        {running && live && <div className="flex items-center gap-1.5 px-1 text-[11px] text-fg-subtle"><Timer size={11} className="shrink-0" />Working<Elapsed since={running.startedAt} /></div>}
         <div ref={end} />
       </div>
+    </div>
+  );
+}
+
+/** Live "· 1m 05s" next to a running turn; ticks once a second. */
+function Elapsed({ since }: { since?: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!since) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [since]);
+  if (!since) return null;
+  return <span className="tabular-nums text-fg-subtle">· {formatElapsed(now - since)}</span>;
+}
+
+/**
+ * Messages sent while the agent works wait here, pinned above the composer, until their turn starts.
+ * Send interrupts the running turn and runs that message next; X drops it.
+ */
+function QueuedMessages({ threadId, persona }: { threadId: string; persona: string }) {
+  const client = useStore((s) => s.client);
+  const items = useStore((s) => s.chatQueue[threadId]);
+  // The queue lives in the core: pick it up when the thread opens (events keep it current after that).
+  useEffect(() => {
+    if (!client) return;
+    let live = true;
+    client.call('chat.queued', { threadId })
+      .then((list) => { if (live) useStore.setState((s) => ({ chatQueue: list.length ? { ...s.chatQueue, [threadId]: list } : Object.fromEntries(Object.entries(s.chatQueue).filter(([k]) => k !== threadId)) })); })
+      .catch(() => { /* an older core without a queue list: events still fill it */ });
+    return () => { live = false; };
+  }, [client, threadId]);
+  if (!items?.length) return null;
+  const act = (method: 'chat.sendQueued' | 'chat.unqueue', id: string) => client?.call(method, { threadId, id }).catch((e: Error) => toast(e.message, 'error'));
+  return (
+    <div className="mb-1.5 space-y-1">
+      {items.map((q, i) => (
+        <div key={q.id} className="flex items-start gap-2 rounded-xl border border-line bg-panel-2 py-1.5 pl-2.5 pr-1.5">
+          <span className="min-w-0 flex-1">
+            <span className="line-clamp-2 text-[12px] leading-snug text-fg-muted">{q.text}</span>
+            <span className="text-[10.5px] text-fg-subtle">{i === 0 ? `Runs when ${persona} finishes` : `Waiting · ${i + 1} in line`}{q.images?.length ? ` · ${q.images.length} image${q.images.length > 1 ? 's' : ''}` : ''}</span>
+          </span>
+          <button title={`Send now — stops ${persona}'s current turn and runs this next`} onClick={() => void act('chat.sendQueued', q.id)}
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md bg-agent px-2 text-[11px] font-medium text-fg hover:opacity-90"><Zap size={11} />Send</button>
+          <button title="Remove from the queue" onClick={() => void act('chat.unqueue', q.id)}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-subtle hover:bg-panel-3 hover:text-fg"><X size={12} /></button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -271,9 +324,14 @@ function remember(key: string, value: string) {
   try { localStorage.setItem(key, value); } catch { /* storage blocked: choice lasts this session */ }
 }
 
-const Dot = ({ agent, dim }: { agent: string; dim?: boolean }) => (
-  <span className={cn('h-2 w-2 shrink-0 rounded-full', AGENT_DOT[agent] ?? 'bg-fg-subtle', dim && 'opacity-40')} />
-);
+const AGENT_BRAND: Record<string, Brand> = { claude: 'claude', agy: 'agy', codex: 'codex' };
+
+/** The agent's logo (a dot for agents without one); dimmed when its CLI is not installed. */
+const AgentIcon = ({ agent, dim }: { agent: string; dim?: boolean }) => {
+  const brand = AGENT_BRAND[agent];
+  if (brand) return <BrandMark brand={brand} size={14} className={cn(dim && 'opacity-40 grayscale')} />;
+  return <span className={cn('h-2 w-2 shrink-0 rounded-full', AGENT_DOT[agent] ?? 'bg-fg-subtle', dim && 'opacity-40')} />;
+};
 
 export function ChatComposer() {
   const info = useStore((s) => s.info);
@@ -357,7 +415,7 @@ export function ChatComposer() {
   ];
 
   const agentOptions: Array<DropdownOption<string>> = (info?.agents ?? []).map((a) => ({
-    value: a.id, label: a.label, description: AGENT_HINT[a.id], icon: <Dot agent={a.id} dim={!a.available} />,
+    value: a.id, label: a.label, description: AGENT_HINT[a.id], icon: <AgentIcon agent={a.id} dim={!a.available} />,
     note: a.available ? undefined : 'Not installed', disabled: !a.available,
   }));
 
@@ -490,6 +548,7 @@ export function ChatComposer() {
           ))}
         </div>
       )}
+      {thread && <QueuedMessages threadId={thread} persona={running?.persona ?? 'the agent'} />}
       <div className="flex items-center gap-1.5 px-1 pb-1">
         <span title="The agent works on this document" className="flex h-6 max-w-[140px] shrink-0 items-center gap-1 rounded-md border border-line px-1.5 text-[11px] text-fg-muted">
           <FileText size={11} className="shrink-0" /><span className="truncate">{docName ?? 'Canvas'}</span>

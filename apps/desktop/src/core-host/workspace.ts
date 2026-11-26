@@ -34,6 +34,8 @@ const chatWarmSchema = z.object({
   docId: z.string().min(1), agent: z.string().min(1), model: z.string().max(100).optional(), account: z.string().max(100).optional(),
   threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
 });
+const chatQueueSchema = z.object({ threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/), id: z.string().min(1).max(64) });
+const chatQueuedSchema = z.object({ threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/) });
 const agentModelsSchema = z.object({ agent: z.enum(['claude', 'agy', 'codex']), account: z.string().max(100).optional() });
 const clientInfoSchema = z.object({
   kind: z.enum(['renderer', 'cli', 'mcp']), name: z.string().min(1).max(200), agentId: z.string().max(200).optional(),
@@ -472,6 +474,9 @@ export class Workspace {
       return this.chat.warmUp(this.session(p.docId).id, p.agent, p.model, p.account, p.threadId);
     },
     'chat.stop': ({ runId }) => this.chat.stop(runId),
+    'chat.queued': (params) => this.chat.queued(parse(chatQueuedSchema, params).threadId),
+    'chat.sendQueued': (params) => { const p = parse(chatQueueSchema, params); this.chat.sendQueued(p.threadId, p.id); },
+    'chat.unqueue': (params) => { const p = parse(chatQueueSchema, params); this.chat.unqueue(p.threadId, p.id); },
     // Team tools of an orchestrate lead; the connection's thread is the lead (blueprint AGENT_BRIDGE/06).
     'orchestra.delegate': (params, conn) => this.chat.delegate(conn.threadId, parse(orchestraDelegateSchema, params).tasks),
     'orchestra.wait': (params, conn) => { const p = parse(orchestraWaitSchema, params ?? {}); return this.chat.wait(conn.threadId, p.workers, p.timeoutSec); },

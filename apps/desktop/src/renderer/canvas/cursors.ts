@@ -1,6 +1,9 @@
 import { personaColor, type AgentTrail, type TrailAction, type TrailStep } from '@archa/protocol';
 import { toScreen } from '../lib/geometry';
 import type { Camera } from '../lib/store';
+import claudeLogo from '../assets/logos/claude.svg';
+import openaiLogo from '../assets/logos/openai.svg';
+import agyLogo from '../assets/logos/antigravity.png';
 
 /*
  * Agent session cursors (blueprint RENDERING/02 → Agent presence). Every agent tool call arrives as a
@@ -234,7 +237,7 @@ export function drawCursors(ctx: CanvasRenderingContext2D, cam: Camera, cursors:
     }
     arrow(ctx, s.x, s.y, color, clicking >= 0 && clicking < 0.35 ? 0.86 : 1);
     const doing = at.step ? `${VERB[at.step.action]} ${at.step.name}` : live ? 'Thinking…' : '';
-    label(ctx, s.x + 14, s.y + 16, c.name, doing, color);
+    label(ctx, s.x + 14, s.y + 16, c.name, doing, color, logoOf(c.id));
     ctx.restore();
   }
 }
@@ -261,23 +264,69 @@ function arrow(ctx: CanvasRenderingContext2D, x: number, y: number, color: strin
   ctx.restore();
 }
 
-function label(ctx: CanvasRenderingContext2D, x: number, y: number, name: string, doing: string, color: string) {
+/*
+ * The agent's logo leads its label: a small white chip with the brand mark, so you can tell which CLI a
+ * cursor belongs to. The author id starts with the agent id (`claude:<thread>`, `codex:<client>`…).
+ * Monochrome marks are tinted onto a bitmap once; the chip waits a frame or two while images load.
+ */
+type Logo = { src: string; tint?: string };
+const LOGOS: Record<string, Logo> = { claude: { src: claudeLogo, tint: 'claude' }, codex: { src: openaiLogo, tint: 'fg' }, agy: { src: agyLogo } };
+const LOGO_PX = 12;
+const logoImages = new Map<string, HTMLCanvasElement | null>();
+
+function logoOf(authorId: string): HTMLCanvasElement | null {
+  const agent = authorId.split(':')[0]!.toLowerCase();
+  const key = agent.startsWith('claude') ? 'claude' : agent.startsWith('codex') || agent.startsWith('openai') ? 'codex'
+    : agent.startsWith('agy') || agent.startsWith('antigravity') || agent.startsWith('gemini') ? 'agy' : null;
+  if (!key) return null;
+  if (logoImages.has(key)) return logoImages.get(key)!;
+  logoImages.set(key, null);
+  const logo = LOGOS[key]!;
+  const img = new Image();
+  img.onload = () => {
+    const px = LOGO_PX * 2; // drawn at 2x so it stays crisp on high-density screens
+    const bmp = document.createElement('canvas');
+    bmp.width = bmp.height = px;
+    const g = bmp.getContext('2d')!;
+    g.drawImage(img, 0, 0, px, px);
+    if (logo.tint) {
+      const css = getComputedStyle(document.documentElement);
+      g.globalCompositeOperation = 'source-in';
+      g.fillStyle = logo.tint === 'fg' ? '#111111' : css.getPropertyValue(`--color-${logo.tint}`).trim() || '#d97757';
+      g.fillRect(0, 0, px, px);
+    }
+    logoImages.set(key, bmp);
+  };
+  img.src = logo.src;
+  return null;
+}
+
+function label(ctx: CanvasRenderingContext2D, x: number, y: number, name: string, doing: string, color: string, logo: HTMLCanvasElement | null) {
   ctx.font = '600 11px Inter, "Segoe UI", system-ui, sans-serif';
   const nameW = ctx.measureText(name).width;
   ctx.font = '400 11px Inter, "Segoe UI", system-ui, sans-serif';
   const shown = doing.length > 40 ? `${doing.slice(0, 39)}…` : doing;
   const doingW = shown ? ctx.measureText(shown).width + 8 : 0;
+  const logoW = logo ? 20 : 0;
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.roundRect(x, y, nameW + doingW + 14, 20, 6);
+  ctx.roundRect(x, y, logoW + nameW + doingW + 14, 20, 6);
   ctx.fill();
+  if (logo) {
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(x + 12, y + 10, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.drawImage(logo, x + 12 - LOGO_PX / 2, y + 10 - LOGO_PX / 2, LOGO_PX, LOGO_PX);
+  }
+  const tx = x + 7 + logoW;
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'alphabetic';
   ctx.font = '600 11px Inter, "Segoe UI", system-ui, sans-serif';
-  ctx.fillText(name, x + 7, y + 14);
+  ctx.fillText(name, tx, y + 14);
   if (shown) {
     ctx.globalAlpha *= 0.85;
     ctx.font = '400 11px Inter, "Segoe UI", system-ui, sans-serif';
-    ctx.fillText(shown, x + 7 + nameW + 8, y + 14);
+    ctx.fillText(shown, tx + nameW + 8, y + 14);
   }
 }

@@ -110,8 +110,10 @@ describe('parallel chat sessions', () => {
     const conn = ws.attach(fakeChannel().channel, { kind: 'mcp', name: 'fake', agentId: 'fake', runId: one.runId });
     expect(conn.author).toMatchObject({ kind: 'agent', name: one.persona });
     expect(conn.threadId).toBe(one.threadId);
+    // The queued message waits outside the history (pinned above the composer) until its turn starts.
     const messages = ws.chat.list(docId).filter((m) => m.role === 'user');
-    expect(messages.map((m) => m.persona)).toEqual([one.persona, two.persona, one.persona]);
+    expect(messages.map((m) => m.persona)).toEqual([one.persona, two.persona]);
+    expect(ws.chat.queued(one.threadId).map((q) => q.text)).toEqual(['again']);
 
     const stopped = (runId: string) => new Promise<void>((resolve) => {
       const check = setInterval(() => {
@@ -124,6 +126,8 @@ describe('parallel chat sessions', () => {
     // The queued message started as soon as its thread was free.
     const next = ws.chat.active().find((r) => r.threadId === one.threadId)!;
     expect(next.persona).toBe(one.persona);
+    expect(ws.chat.queued(one.threadId)).toEqual([]);
+    expect(ws.chat.list(docId).filter((m) => m.role === 'user').map((m) => m.text)).toContain('again');
     ws.chat.stop(next.runId);
     await stopped(next.runId);
     expect(ws.chat.active()).toEqual([]);
