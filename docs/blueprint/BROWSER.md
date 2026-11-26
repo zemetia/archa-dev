@@ -100,7 +100,7 @@ Every reply steers the next step, like `execute` ([MCP/03](./MCP/03-response-con
 
 ## Person UI
 
-Title bar globe button / `Ctrl+Shift+B` toggles the pane (right of the canvas, resizable 360 px → window − 640). Tab strip, back/forward/reload-stop, address bar (non-addresses become a web search), emulated-viewport badge, DevTools (detached).
+Title bar globe button / `Ctrl+Shift+B` toggles the pane (right of the canvas). It opens at its minimum, 360 px (`BROWSER_MIN_WIDTH`), and drags only wider (→ window − 640). The page is a native view laid over a placeholder: the renderer reports the placeholder's rect every frame when it changes, so the page follows the pane when side panels slide it sideways (a ResizeObserver alone misses moves). Tab strip, back/forward/reload-stop, address bar (non-addresses become a web search), emulated-viewport badge, DevTools (detached).
 
 ## Surfaces
 

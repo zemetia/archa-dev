@@ -119,6 +119,10 @@ export interface CoreMethods {
   /** Start (or keep) the agent process for a thread before the person sends, so the first turn starts at once. No threadId = a fresh thread id is reserved and returned. */
   'chat.warm': { params: { docId: string; agent: string; model?: string; account?: string; threadId?: string }; result: { threadId: string; warm: boolean } };
   'chat.stop': { params: { runId: string }; result: void };
+  /** Messages waiting in a thread; `chat.sendQueued` runs one now (stops the current turn), `chat.unqueue` drops it. */
+  'chat.queued': { params: { threadId: string }; result: ChatQueued[] };
+  'chat.sendQueued': { params: { threadId: string; id: string }; result: void };
+  'chat.unqueue': { params: { threadId: string; id: string }; result: void };
   /** Runs still working, so a reloaded window shows every parallel session. */
   'chat.runs': { params: void; result: ChatRunEvent[] };
   'chat.list': { params: { docId: string }; result: ChatMessage[] };
@@ -220,8 +224,20 @@ export type ChatMessage = {
   callId?: string;
   /** Orchestrate mode: set on every message of a lead thread and of its worker threads. */
   orchestra?: OrchestraMeta;
+  /** The status that ends a turn: how long the agent worked on it (ms), shown under its reply. */
+  elapsedMs?: number;
   ts: number;
 };
+/** A message waiting for the thread's running turn; the chat pins it above the composer until it starts. */
+export type ChatQueued = { id: string; text: string; images?: string[]; ts: number };
+/** "42s", "3m 05s", "1h 02m": how long a turn took. */
+export function formatElapsed(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+}
 export type ChatMode = 'chat' | 'orchestrate';
 /** lead: the thread that plans and delegates. Worker threads carry their lead's thread id, task title and prompt. */
 export type OrchestraMeta = { lead: true } | { parent: string; title: string; kind?: string; prompt: string };
@@ -254,7 +270,8 @@ export function personaColor(name: string): number {
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
   return Math.abs(h) % PERSONA_COLORS;
 }
-export type ChatRunEvent = { runId: string; docId: string; threadId: string; agent: string; persona: string; status: 'running' | 'finished' | 'failed' | 'stopped' };
+/** startedAt: when the turn began (epoch ms), for the live "working for" timer. */
+export type ChatRunEvent = { runId: string; docId: string; threadId: string; agent: string; persona: string; status: 'running' | 'finished' | 'failed' | 'stopped'; startedAt?: number };
 export type MethodName = keyof CoreMethods;
 export type Params<M extends MethodName> = CoreMethods[M]['params'];
 export type Result<M extends MethodName> = CoreMethods[M]['result'];
@@ -274,6 +291,8 @@ export interface CoreEvents {
   /** Text the agent is still writing (whole text so far); '' clears it. */
   'chat.delta': { docId: string; runId: string; threadId: string; agent: string; text: string };
   'chat.run': ChatRunEvent;
+  /** A thread's queue changed (every item, oldest first; empty when nothing waits). */
+  'chat.queue': { docId: string; threadId: string; items: ChatQueued[] };
   /** Where an agent session just worked; the canvas moves its cursor along the steps. */
   'agent.trail': AgentTrail;
   /** An agent session called done(): its cursor fades now instead of idling until the process exits. */

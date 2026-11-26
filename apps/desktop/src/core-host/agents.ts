@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { newId } from '@archa/schema';
-import { GUIDES, guidesFor, guideText, ORCHESTRATOR_PROMPT, threadOf, workerBrief, type ChatImage, type ChatMessage, type ChatMode, type ChatRunEvent, type ModelOption, type OrchestraMeta, type OrchestraReport, type OrchestraTask, type OrchestraWorker } from '@archa/protocol';
+import { formatElapsed, GUIDES, guidesFor, guideText, ORCHESTRATOR_PROMPT, threadOf, workerBrief, type ChatImage, type ChatMessage, type ChatMode, type ChatQueued, type ChatRunEvent, type ModelOption, type OrchestraMeta, type OrchestraReport, type OrchestraTask, type OrchestraWorker } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import type { Workspace } from './workspace';
 import { describeState } from './execute';
@@ -23,7 +23,7 @@ export { ADAPTERS, findBin, type McpCommand } from './agent-adapters';
 type Run = { id: string; docId: string; threadId: string; agent: string; persona: string; prompt: string; child: ChildProcess | null; stopped: boolean; replied: boolean; failed: boolean; startedAt: number; fromLead: boolean };
 /** brief: what the agent gets instead of `prompt` (a worker's team brief); fromLead: the turn was started by its orchestrate lead. */
 type SendOptions = { now?: boolean; focus?: string[]; images?: ChatImage[]; mode?: ChatMode; brief?: string; fromLead?: boolean };
-type Queued = { docId: string; agentId: string; prompt: string; model?: string; account?: string; focus?: string[]; images?: ChatImage[]; brief?: string; fromLead?: boolean };
+type Queued = { docId: string; agentId: string; prompt: string; model?: string; account?: string; focus?: string[]; images?: ChatImage[]; brief?: string; fromLead?: boolean; id?: string; ts?: number };
 type Waiter = { check: () => void };
 /** A thread's agent process kept alive between turns (plan CHAT_AGENT, D-11 A). */
 type Warm = {
@@ -100,7 +100,7 @@ export class ChatRunner {
   }
 
   private runEvent(r: Run, status: ChatRunEvent['status']): ChatRunEvent {
-    return { runId: r.id, docId: r.docId, threadId: r.threadId, agent: r.agent, persona: r.persona, status };
+    return { runId: r.id, docId: r.docId, threadId: r.threadId, agent: r.agent, persona: r.persona, status, startedAt: r.startedAt };
   }
 
   /** A thread keeps its name across turns; a new one gets a name no other session on the doc uses. */
@@ -118,7 +118,7 @@ export class ChatRunner {
     for (const id of ids) {
       const w = this.warm.get(id);
       if (w) this.killWarm(w);
-      this.queue.delete(id);
+      this.dropQueue(id);
       this.meta.delete(id);
       rmSync(threadDir(id), { recursive: true, force: true });
     }
@@ -145,7 +145,7 @@ export class ChatRunner {
     } catch { /* resume is best-effort */ }
   }
 
-  private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent' | 'persona'>, role: ChatMessage['role'], text: string, images?: ChatImage[], extra?: Pick<ChatMessage, 'detail' | 'callId'>) {
+  private emit(run: Pick<Run, 'docId' | 'id' | 'threadId' | 'agent' | 'persona'>, role: ChatMessage['role'], text: string, images?: ChatImage[], extra?: Pick<ChatMessage, 'detail' | 'callId' | 'elapsedMs'>) {
     const m: ChatMessage = { id: newId(), docId: run.docId, runId: run.id, threadId: run.threadId, role, agent: run.agent, persona: run.persona, text, ts: Date.now(), ...extra };
     // Thumbnails become files in the thread's attachments; the message keeps `asset:` references only.
     if (images?.length) m.images = images.map((i) => this.store.saveImage(run.docId, run.threadId, '', i.thumb)?.ref ?? i.thumb);
@@ -174,7 +174,9 @@ export class ChatRunner {
 
   /**
    * One turn of a conversation. A thread that is still working queues the message (`now` stops the
-   * running turn first). Agents with a warm mode keep one process per thread between turns.
+   * running turn first). Queued messages are not in the history yet: the chat pins them above the
+   * composer (`chat.queue`) and each lands in the thread when its turn starts. Agents with a warm mode
+   * keep one process per thread between turns.
    */
   send(docId: string, agentId: string, prompt: string, model?: string, account?: string, threadId = newId(), opts: SendOptions = {}): { runId: string; threadId: string; persona: string; queued?: boolean } {
     if (opts.mode === 'orchestrate' && !this.metaOf(docId, threadId)) this.meta.set(threadId, { lead: true });
@@ -183,12 +185,10 @@ export class ChatRunner {
     const busy = [...this.runs.values()].find((r) => r.threadId === threadId);
     if (busy) {
       const q = this.queue.get(threadId) ?? [];
-      const item: Queued = { docId, agentId, prompt, model, account, focus: opts.focus, images: opts.images, brief: opts.brief, fromLead: opts.fromLead };
+      const item: Queued = { docId, agentId, prompt, model, account, focus: opts.focus, images: opts.images, brief: opts.brief, fromLead: opts.fromLead, id: newId(), ts: Date.now() };
       if (opts.now) q.unshift(item); else q.push(item);
       this.queue.set(threadId, q);
-      const echo = { docId, id: newId(), threadId, agent: agentId, persona: busy.persona };
-      this.emit(echo, 'user', prompt, opts.images);
-      this.emit(echo, 'status', opts.now ? `Stopping ${busy.persona} — this runs next` : 'Queued — runs when the current turn ends');
+      this.queueChanged(docId, threadId);
       if (opts.now) this.stop(busy.id, false);
       return { runId: '', threadId, persona: busy.persona, queued: true };
     }
@@ -370,27 +370,28 @@ export class ChatRunner {
     w.turn = null;
     clearTimeout(w.stopTimer);
     if (run) {
-      const secs = Math.round((Date.now() - run.startedAt) / 1000);
       const cost = costUsd !== undefined ? costUsd - (w.cost ?? 0) : undefined;
       if (costUsd !== undefined) w.cost = costUsd;
       const status = run.stopped ? 'stopped' : ok && !run.failed ? 'finished' : 'failed';
       if (status === 'failed' && !run.failed) this.emit(run, 'error', 'The agent ended this turn with an error');
-      if (status === 'finished') this.emit(run, 'status', `Done in ${secs < 60 ? `${secs} s` : `${Math.floor(secs / 60)} min ${secs % 60} s`}${cost !== undefined && cost > 0 ? ` · $${cost.toFixed(3)}` : ''}`);
-      this.finishRun(run, status);
+      this.finishRun(run, status, cost !== undefined && cost > 0 ? ` · $${cost.toFixed(3)}` : '');
     }
     this.armIdle(w);
   }
 
-  /** Common end of a turn: statuses, chat.run broadcast, then the next queued message of the thread. */
-  private finishRun(run: Run, status: 'finished' | 'failed' | 'stopped') {
+  /**
+   * Common end of a turn: statuses, chat.run broadcast, then the next queued message of the thread.
+   * Every turn ends with one status carrying `elapsedMs` (how long it worked); `note` adds the cost.
+   */
+  private finishRun(run: Run, status: 'finished' | 'failed' | 'stopped', note = '') {
     if (!this.runs.has(run.id)) return;
     this.runs.delete(run.id);
     this.ws.broadcast('chat.delta', { docId: run.docId, runId: run.id, threadId: run.threadId, agent: run.agent, text: '' });
     if (status === 'finished' && !run.replied) this.emit(run, 'status', 'Finished without a reply');
-    if (status === 'stopped') {
-      this.emit(run, 'status', 'Stopped');
-      if (!run.replied) this.interrupted.set(run.threadId, run.prompt);
-    }
+    if (status === 'stopped' && !run.replied) this.interrupted.set(run.threadId, run.prompt);
+    const elapsedMs = Date.now() - run.startedAt;
+    const verb = status === 'finished' ? 'Worked for' : status === 'stopped' ? 'Stopped after' : 'Failed after';
+    this.emit(run, 'status', `${verb} ${formatElapsed(elapsedMs)}${note}`, undefined, { elapsedMs });
     this.ws.broadcast('chat.run', this.runEvent(run, status));
     this.lastStatus.set(run.threadId, status);
     const role = this.metaOf(run.docId, run.threadId);
@@ -398,7 +399,8 @@ export class ChatRunner {
     const next = this.queue.get(run.threadId)?.shift();
     if (!this.queue.get(run.threadId)?.length) this.queue.delete(run.threadId);
     if (next) {
-      try { this.start(next, run.threadId, true); } catch (e) { this.emit(run, 'error', (e as Error).message); }
+      this.queueChanged(run.docId, run.threadId);
+      try { this.start(next, run.threadId, false); } catch (e) { this.emit(run, 'error', (e as Error).message); }
     }
     for (const w of [...this.waiters]) w.check();
     if (role) this.reportToLead(run.docId, 'parent' in role ? role.parent : run.threadId);
@@ -621,6 +623,48 @@ export class ChatRunner {
     else if (ev.kind === 'final' && !run.replied && ev.text.trim()) { run.replied = true; this.emit(run, 'agent', ev.text.trim()); }
   }
 
+  /* -------------------------------- queue -------------------------------- */
+
+  /** What waits in a thread, oldest first, as the chat shows it. */
+  queued(threadId: string): ChatQueued[] {
+    return (this.queue.get(threadId) ?? []).map((q) => ({ id: q.id!, text: q.prompt, ts: q.ts!, ...(q.images?.length ? { images: q.images.map((i) => i.thumb) } : {}) }));
+  }
+
+  private queueChanged(docId: string, threadId: string) {
+    this.ws.broadcast('chat.queue', { docId, threadId, items: this.queued(threadId) });
+  }
+
+  private dropQueue(threadId: string) {
+    const q = this.queue.get(threadId);
+    if (!q?.length) return;
+    this.queue.delete(threadId);
+    this.queueChanged(q[0]!.docId, threadId);
+  }
+
+  /** Send now: the queued message moves to the front and the running turn stops (its workers keep going). */
+  sendQueued(threadId: string, id: string) {
+    const q = this.queue.get(threadId);
+    const i = q ? q.findIndex((x) => x.id === id) : -1;
+    if (!q || i < 0) throw new Error('That message is no longer waiting');
+    q.unshift(...q.splice(i, 1));
+    const busy = [...this.runs.values()].find((r) => r.threadId === threadId);
+    if (busy) { this.queueChanged(q[0]!.docId, threadId); this.stop(busy.id, false); return; }
+    // Nothing running (the turn just ended): start it straight away.
+    const next = q.shift()!;
+    if (!q.length) this.queue.delete(threadId);
+    this.queueChanged(next.docId, threadId);
+    this.start(next, threadId, false);
+  }
+
+  unqueue(threadId: string, id: string) {
+    const q = this.queue.get(threadId);
+    const i = q ? q.findIndex((x) => x.id === id) : -1;
+    if (!q || i < 0) return;
+    const [gone] = q.splice(i, 1);
+    if (!q.length) this.queue.delete(threadId);
+    this.queueChanged(gone!.docId, threadId);
+  }
+
   /** cascade: stopping a lead also stops the workers it has running (Send now does not). */
   stop(runId: string, cascade = true) {
     const run = this.runs.get(runId);
@@ -629,7 +673,7 @@ export class ChatRunner {
     if (cascade && this.isLead(run.docId, run.threadId)) {
       this.halted.add(run.threadId);
       for (const id of this.workersOf(run.docId, run.threadId)) {
-        this.queue.delete(id);
+        this.dropQueue(id);
         const r = [...this.runs.values()].find((x) => x.threadId === id);
         if (r) this.stop(r.id, false);
       }

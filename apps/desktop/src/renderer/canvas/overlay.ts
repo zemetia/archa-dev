@@ -16,6 +16,8 @@ export type OverlayExtras = {
   connect?: { points: Array<{ x: number; y: number }> | null; target: { x: number; y: number; width: number; height: number } | null };
   /** Multi-selection being scaled or turned: the shared box as it maps now, the turn pivot, the size / angle readout. */
   group?: { corners: Array<{ x: number; y: number }>; pivot?: { x: number; y: number }; label: string };
+  /** Smart guides while moving: lines where the dragged layers line up with their neighbours (page coords). */
+  guides?: Array<{ axis: 'x' | 'y'; at: number; from: number; to: number }>;
   pen?: { d: string; points: Array<{ x: number; y: number; in?: { x: number; y: number }; out?: { x: number; y: number } }>; cursor: { x: number; y: number } | null };
 };
 
@@ -25,6 +27,8 @@ type View = { camera: Camera; selection: string[]; hover: string | null; editing
 const PIXEL_GRID_ZOOM = 8;
 
 const ACCENT = '#8b5cf6';
+/** Smart guides: a warm red that reads against the purple selection and most fills. */
+const GUIDE = '#f43f5e';
 
 /** Selection, hover, labels and guides, drawn in screen space (blueprint RENDERING/02). Agent cursors: cursors.ts. */
 export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v: View, x: OverlayExtras) {
@@ -275,6 +279,27 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, doc: ArchaDocument, v
       ctx.lineWidth = 1.5;
       ctx.fillRect(s.x - 3.5, s.y - 3.5, 7, 7);
       ctx.strokeRect(s.x - 3.5, s.y - 3.5, 7, 7);
+    }
+  }
+  if (x.guides?.length) {
+    ctx.strokeStyle = GUIDE;
+    ctx.fillStyle = GUIDE;
+    ctx.lineWidth = 1;
+    for (const g of x.guides) {
+      const a = g.axis === 'x' ? toScreen(cam, g.at, g.from) : toScreen(cam, g.from, g.at);
+      const b = g.axis === 'x' ? toScreen(cam, g.at, g.to) : toScreen(cam, g.to, g.at);
+      // Half-pixel offset keeps a 1px line crisp; small ticks mark both ends like a ruler.
+      const ax = Math.round(a.x) + 0.5, ay = Math.round(a.y) + 0.5, bx = Math.round(b.x) + 0.5, by = Math.round(b.y) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      for (const [px, py] of [[ax, ay], [bx, by]] as const) {
+        ctx.beginPath();
+        ctx.moveTo(px - 3, py - 3); ctx.lineTo(px + 3, py + 3);
+        ctx.moveTo(px + 3, py - 3); ctx.lineTo(px - 3, py + 3);
+        ctx.stroke();
+      }
     }
   }
   if (x.insertLine) {

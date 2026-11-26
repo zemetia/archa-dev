@@ -85,19 +85,31 @@ describe('warm chat sessions', () => {
     const pids = replies().map((t) => t.split(' ')[1]);
     expect(pids).toHaveLength(2);
     expect(pids[0]).toBe(pids[1]); // same process: no cold start on the follow-up
-    expect(ws.chat.list(docId).some((m) => m.role === 'status' && /^Done in/.test(m.text))).toBe(true);
+    // Every turn ends with how long it worked.
+    const timed = ws.chat.list(docId).filter((m) => m.role === 'status' && m.elapsedMs !== undefined);
+    expect(timed).toHaveLength(2);
+    expect(timed[0]!.text).toMatch(/^Worked for \d+s$/);
 
-    // A slow turn is interrupted (process kept), and the queued message runs next in that process.
+    // A follow-up sent during a slow turn waits in the queue (not in the history yet) until Send now
+    // interrupts the turn (process kept) and runs it next in that process.
     const slow = ws.chat.send(docId, 'fakewarm', 'slow', undefined, undefined, threadId);
-    const queued = ws.chat.send(docId, 'fakewarm', 'after', undefined, undefined, threadId, { now: true });
+    const queued = ws.chat.send(docId, 'fakewarm', 'after', undefined, undefined, threadId);
     expect(queued.queued).toBe(true);
+    const waiting = ws.chat.queued(threadId);
+    expect(waiting.map((q) => q.text)).toEqual(['after']);
+    expect(ws.chat.list(docId).some((m) => m.role === 'user' && m.text === 'after')).toBe(false);
+    ws.chat.sendQueued(threadId, waiting[0]!.id);
     expect(await ended(slow.runId)).toBe('stopped');
     await new Promise<void>((resolve) => {
       const check = setInterval(() => { if (replies().length === 3) { clearInterval(check); resolve(); } }, 10);
     });
     // Same process; the stopped request had no reply yet, so it is carried into the next message.
     expect(replies()[2]).toBe(`pid ${pids[0]} Earlier request (stopped before you answered it):`);
-    expect(ws.chat.list(docId).some((m) => m.role === 'status' && m.text === 'Stopped')).toBe(true);
+    expect(ws.chat.list(docId).some((m) => m.role === 'status' && /^Stopped after \d+s$/.test(m.text))).toBe(true);
+    expect(ws.chat.queued(threadId)).toEqual([]);
+    expect(ws.chat.list(docId).filter((m) => m.role === 'user' && m.text === 'after')).toHaveLength(1);
+    const queueEvents = ui.events.filter((x) => x.event === 'chat.queue').map((x) => (x.data as { items: unknown[] }).items.length);
+    expect(queueEvents).toEqual([1, 1, 0]);
     expect(ws.chat.active()).toEqual([]);
     await ws.chat.shutdown();
   }, 20_000);

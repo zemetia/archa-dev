@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowLeft, ArrowRight, Bot, Bug, Globe, Loader2, Plus, RotateCw, Smartphone, X } from 'lucide-react';
-import { toast, useStore } from '../lib/store';
+import { BROWSER_MIN_WIDTH, toast, useStore } from '../lib/store';
 import type { BrowserUiAction } from '../env';
 import { cn, IconButton } from './controls';
 
@@ -42,34 +42,39 @@ export function BrowserPanel() {
 
   useEffect(() => { if (!editing) setAddress(tab?.url && tab.url !== 'about:blank' ? tab.url : ''); }, [tab?.url, editing]);
 
-  // Report the placeholder's rect so main can lay the page over it; hide it under dialogs.
+  // Report the placeholder's rect so main can lay the page over it; hide it under dialogs. Checked every
+  // frame, not only on resize: opening the Design / Layers panel slides this pane sideways without
+  // changing its size, and a ResizeObserver never sees a move (the page then stayed behind until a resize).
   useLayoutEffect(() => {
     const el = viewport.current;
     if (!el) return;
+    let sent = '';
+    let raf = 0;
     const report = () => {
       const r = el.getBoundingClientRect();
-      window.archa.browser.setBounds(settingsOpen ? null : { x: r.left, y: r.top, width: r.width, height: r.height });
+      const b = settingsOpen ? null : { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) };
+      const key = JSON.stringify(b);
+      if (key !== sent) { sent = key; window.archa.browser.setBounds(b); }
+      raf = requestAnimationFrame(report);
     };
     report();
-    const ro = new ResizeObserver(report);
-    ro.observe(el);
-    window.addEventListener('resize', report);
-    return () => { ro.disconnect(); window.removeEventListener('resize', report); };
-  }, [settingsOpen, width]);
+    return () => cancelAnimationFrame(raf);
+  }, [settingsOpen]);
   useEffect(() => () => window.archa.browser.setBounds(null), []);
 
   const startResize = (e: ReactPointerEvent) => {
     e.preventDefault();
     const startX = e.clientX;
     const start = width;
-    const move = (ev: PointerEvent) => useStore.setState({ browserWidth: Math.min(Math.max(start + startX - ev.clientX, 360), window.innerWidth - 640) });
+    // Never narrower than it opens at; wider up to what leaves the canvas room.
+    const move = (ev: PointerEvent) => useStore.setState({ browserWidth: Math.max(BROWSER_MIN_WIDTH, Math.min(start + startX - ev.clientX, window.innerWidth - 640)) });
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   };
 
   return (
-    <aside style={{ width }} className="relative flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-panel">
+    <aside style={{ width, minWidth: BROWSER_MIN_WIDTH }} className="relative flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-panel">
       <div onPointerDown={startResize} className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize hover:bg-accent-soft" title="Drag to resize" />
 
       <div className="flex items-center gap-1 border-b border-line px-1.5 pt-1.5">
