@@ -276,7 +276,7 @@ export async function init() {
   await activate(docs.at(-1)?.id ?? null);
 }
 
-export type SettingsPage = 'providers' | 'skills' | 'mcp' | 'connect' | 'github' | 'integrations' | 'about';
+export type SettingsPage = 'providers' | 'skills' | 'memory' | 'mcp' | 'connect' | 'github' | 'integrations' | 'about';
 
 export function openSettings(page?: SettingsPage) {
   set({ settingsOpen: true, ...(page ? { settingsPage: page } : {}) });
@@ -286,7 +286,7 @@ export async function loadSkills() {
   const { client } = get();
   if (!client) return;
   try {
-    set({ skills: await client.call('skills.list') });
+    set({ skills: await client.call('skills.list', { docId: get().activeDocId ?? undefined }) });
   } catch (e) {
     toast((e as Error).message, 'error');
   }

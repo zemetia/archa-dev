@@ -6,8 +6,8 @@ import { assetFile, decodeDataUrl, storeBytes } from './assets';
 
 /*
  * Chat history (blueprint AGENT_BRIDGE/03 → Chat History). Every conversation is one JSON file in the
- * document's asset folder — `<name>-asset/chats/<threadId>.json` — and pasted images sit beside it in
- * `chats/attachments/<threadId>/`. Nothing of a chat goes into the `.archa`; opening a document loads
+ * document's data folder — `<name>-data/chats/<threadId>.json` — and pasted images sit beside it in
+ * `chats/attachments/<threadId>/` (their `asset:chats/…` references resolve against the data folder). Nothing of a chat goes into the `.archa`; opening a document loads
  * its conversations from this folder. Before 0.4.1 history lived in ARCHA_HOME/chats/<docId>.jsonl;
  * that file is split into thread files on first load and renamed `.migrated`.
  */
@@ -29,11 +29,11 @@ const IMAGE_EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'j
 export class ChatStore {
   private cache = new Map<string, ChatMessage[]>();
 
-  /** assetDirOf: the document's asset folder — resolved on every write, so a Save As moves future writes along. */
-  constructor(private assetDirOf: (docId: string) => string, private legacyDir = () => join(archaHome(), 'chats')) {}
+  /** dataDirOf: the document's data folder — resolved on every write, so a Save As moves future writes along. */
+  constructor(private dataDirOf: (docId: string) => string, private legacyDir = () => join(archaHome(), 'chats')) {}
 
   chatsDir(docId: string): string {
-    return join(this.assetDirOf(docId), 'chats');
+    return join(this.dataDirOf(docId), 'chats');
   }
 
   /** Every message of the document's conversations, oldest first. */
@@ -84,9 +84,9 @@ export class ChatStore {
     const decoded = base64OrDataUrl.startsWith('data:') ? decodeDataUrl(base64OrDataUrl) : { mime, bytes: Buffer.from(base64OrDataUrl, 'base64') };
     const ext = decoded && IMAGE_EXT[decoded.mime];
     if (!decoded || !ext) return null;
-    const assetDir = this.assetDirOf(docId);
-    const ref = storeBytes(assetDir, decoded.bytes, ext, `chats/attachments/${safeName(threadId)}`);
-    return { ref, file: assetFile(assetDir, ref)! };
+    const dataDir = this.dataDirOf(docId);
+    const ref = storeBytes(dataDir, decoded.bytes, ext, `chats/attachments/${safeName(threadId)}`);
+    return { ref, file: assetFile(dataDir, ref)! };
   }
 
   private writeThread(docId: string, threadId: string): void {

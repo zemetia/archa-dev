@@ -6,7 +6,7 @@ import type { Comment, Variable } from './variables';
  * 2: polygon, path, image, sticky and embed nodes; document variables and comments.
  * 3: inner-shadow, layer-blur and background-blur effects; justify "space-around".
  * 4: gradient and image paints, rich-text spans, token bindings (`node.bindings`), grid frames (`wrap`, `lineGap`).
- * 5: image sources (image nodes and image paints) may be `asset:` references into the `<name>-asset/` folder beside the file.
+ * 5: image sources (image nodes and image paints) may be `asset:` references into the folder beside the file (`<name>-data/assets/` since 1.8, `<name>-asset/` before).
  */
 export const FORMAT_VERSION = 5;
 

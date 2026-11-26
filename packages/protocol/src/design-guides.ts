@@ -9,7 +9,7 @@ export const GUIDES: Record<GuideTopic, { title: string; when: string; body: str
   rebuild: {
     title: 'Rebuild from a reference (PDF, mockup, screenshot)',
     when: 'the person gives a PDF / image to recreate',
-    body: `Measure first, then build — never eyeball a screenshot.
+    body: `Measure first, then build — never eyeball a screenshot. Measuring is one call per page, not a phase: never re-read the same page or its JSON, and never screenshot before you have built something. Multi-page PDF: one page at a time — read it, build it, then the next.
 1. reference({ path, page }) — read the summary: page size, fill palette, type scale, text lines (x, y, size, colour), boxes (rects / rounded rects with radius), images. The full data with SVG paths is in the JSON file it names; read it for exact values.
 2. Tokens: setVariable for every palette colour you will reuse (color/ink, color/muted, color/accent, color/canvas…), the radii and the type sizes. Bind nodes to them: write "$color/accent" as the value (fills: ["$color/accent"], cornerRadius: "$radius/card") or bind(node, { fill: "color/accent" }).
 3. Fonts: use the reference's family when it is one of the bundled fonts (listed in the execute API; drawn and measured exactly), else the closest one.
@@ -18,7 +18,7 @@ export const GUIDES: Record<GuideTopic, { title: string; when: string; body: str
 6. Photos: the reference already copied them into the asset folder — image("<file from the summary>", parent, { width, height }) or src "asset:images/…". Never send base64.
 7. Scrims and glass: real gradients — fills: [image, { type: "linear-gradient", angle: 180, stops: ["#16181b00", "#16181bbf"] }]; glass = a see-through fill + backdropBlur (read_guide("effects")).
 8. Vectors (logos, routes, icons that are not lucide): take the path's SVG d from the JSON and insert a path node with that d and a viewBox of its box.
-9. compare({ node, reference, page }) after each section or two: fix the worst region first (the reply names the nodes under it), re-run until the remaining differences are photos or anti-aliasing. Heights that differ shift everything below — fix the first gap before judging the rest.`,
+9. compare({ node, reference, page }) after each section or two: fix the worst region first (the reply names the nodes under it), re-run until the remaining differences are photos or anti-aliasing — at most 3 rounds per section, then move on. Heights that differ shift everything below — fix the first gap before judging the rest.`,
   },
   process: {
     title: 'Working loop',

@@ -88,6 +88,7 @@
 | [`ui/SettingsDialog.tsx`](../../../apps/desktop/src/renderer/ui/SettingsDialog.tsx) | Grouped dialog (Ctrl+,), page routing | [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
 | [`ui/settings/ProvidersPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/ProvidersPage.tsx) | AI providers: accounts, sign in, default, enable | [AGENT_BRIDGE/02](../AGENT_BRIDGE/02-roster-profiles.md) |
 | [`ui/settings/SkillsPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/SkillsPage.tsx), [`McpPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/McpPage.tsx) | Skills; external MCP servers (add, test, import) | [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
+| [`ui/settings/MemoryPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/MemoryPage.tsx) | Settings → Memory: global and this document's facts, add, forget, open folder | [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) |
 | [`ui/settings/OtherPages.tsx`](../../../apps/desktop/src/renderer/ui/settings/OtherPages.tsx) | Connect (Listen mode), GitHub / Integrations placeholders, About | [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md), [MCP/01](../MCP/01-transports-tools.md) |
 | [`ui/settings/kit.tsx`](../../../apps/desktop/src/renderer/ui/settings/kit.tsx), [`Logo.tsx`](../../../apps/desktop/src/renderer/ui/settings/Logo.tsx) | Page building blocks; brand marks | [APP_UI/02](../APP_UI/02-components-tokens.md) |
 

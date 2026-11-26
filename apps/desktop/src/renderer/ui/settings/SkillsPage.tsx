@@ -8,10 +8,11 @@ import { call, Chip, Empty, Field, FormCard, IconAction, Notice, openFolder, Pag
 
 /*
  * Settings → Skills (blueprint AGENT_BRIDGE/05). The ArchaDev library (~/.archadev/skills) is handed to
- * chat runs; skills the agent CLIs load on their own are listed read-only and can be copied in.
+ * chat runs; skills the agent CLIs load on their own are listed read-only and can be copied in. The open
+ * document's own skills (`<name>-data/skills/`) are listed too: always on for that document's chats.
  */
 
-const SOURCE_BRAND: Record<SkillSource, Brand | null> = { archadev: null, builtin: null, claude: 'claude', codex: 'codex', gemini: 'agy', agents: null };
+const SOURCE_BRAND: Record<SkillSource, Brand | null> = { archadev: null, builtin: null, document: null, claude: 'claude', codex: 'codex', gemini: 'agy', agents: null };
 
 export function SkillsPage() {
   const data = useStore((s) => s.skills);
@@ -98,7 +99,7 @@ function SkillRow({ skill: s }: { skill: Skill }) {
   const toggleOpen = async () => {
     const next = !open;
     setOpen(next);
-    if (next && content === null) await call(() => undefined, async (c) => setContent((await c.call('skills.read', { id: s.id })).content));
+    if (next && content === null) await call(() => undefined, async (c) => setContent((await c.call('skills.read', { id: s.id, docId: useStore.getState().activeDocId ?? undefined })).content));
   };
   const copyIn = () => call(setBusy, async (c) => { const n = await c.call('skills.import', { dir: s.dir }); toast(`Copied ${n.name} to the ArchaDev library`); });
   const remove = () => call(setBusy, async (c) => { await c.call('skills.delete', { id: s.id }); toast(`Deleted ${s.name}`); });

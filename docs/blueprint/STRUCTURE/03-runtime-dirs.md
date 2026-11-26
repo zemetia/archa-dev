@@ -42,11 +42,12 @@
 | `cache/` | Fonts, plugin bundles, standalone-file assets, `index.sqlite` |
 | `journal/<fileId>/` | Journals for standalone `.archa` files |
 | `runtime/core.json` | Running app: socket path + auth token (file mode 0600) |
-| `runtime/threads/<threadId>/` | **Built:** per chat thread — MCP config, mirrored skills (pasted images go to the asset folder) |
-| `chats/sessions.json` | **Built:** agent CLI session ids for resume. Chat history itself lives in each document's `<name>-asset/chats/` (pre-1.6 `chats/<docId>.jsonl` is migrated there) |
+| `runtime/threads/<threadId>/` | **Built:** per chat thread — MCP config, mirrored skills (pasted images go to the data folder) |
+| `chats/sessions.json` | **Built:** agent CLI session ids for resume. Chat history itself lives in each document's `<name>-data/chats/` (pre-1.6 `chats/<docId>.jsonl` is migrated there) |
 | `skills/`, `skills.json` | **Built:** ArchaDev-owned skills; enabled state → [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
 | `mcp.json` | **Built:** external MCP servers handed to runs (secrets stay here) |
-| `runtime/assets/<docId>/` | Asset folder of an unsaved document; moves next to the file on first save |
+| `memory/<slug>.md` | **Built:** global agent memory, one fact per file → [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) |
+| `runtime/data/<docId>/` | Data folder of an unsaved document (`assets/`, `chats/`, …); moves next to the file as `<name>-data/` on first save. Pre-1.8 `runtime/assets/<docId>/` is migrated |
 | `runtime/screenshots/` | Agent and browser screenshots, temporary (24 h / 300 files) |
 | `logs/` | Rotating logs per process |
 

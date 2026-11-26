@@ -34,11 +34,11 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
   }, ({ doc }) => guard(async (c) => [{ type: 'text', text: await c.call('agent.state', { docId: pick(doc) }) }]));
 
   server.registerTool('list_documents', {
-    description: 'Every document open in ArchaDev: id, name, .archa path, its asset folder, unsaved changes. Pass an id, path or name as `doc` to any tool.',
+    description: 'Every document open in ArchaDev: id, name, .archa path, its <name>-data/ folder, unsaved changes. Pass an id, path or name as `doc` to any tool.',
     inputSchema: {},
   }, () => guard(async (c) => {
     const docs = await c.call('workspace.list');
-    return [{ type: 'text', text: docs.length ? docs.map((d) => `${d.name} (${d.id})${d.dirty ? ' · unsaved changes' : ''}\n  file: ${d.filePath ?? '(not saved yet)'}\n  assets: ${d.assetDir}`).join('\n') : 'No documents are open.' }];
+    return [{ type: 'text', text: docs.length ? docs.map((d) => `${d.name} (${d.id})${d.dirty ? ' · unsaved changes' : ''}\n  file: ${d.filePath ?? '(not saved yet)'}\n  data: ${d.dataDir}`).join('\n') : 'No documents are open.' }];
   }));
 
   server.registerTool('open_document', {
@@ -50,7 +50,7 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
   }));
 
   server.registerTool('new_document', {
-    description: 'Create an empty document. Save it with save_document to give it a file and its <name>-asset/ folder.',
+    description: 'Create an empty document. Save it with save_document to give it a file and its <name>-data/ folder.',
     inputSchema: { name: z.string().max(200).optional() },
   }, ({ name }) => guard(async (c) => {
     const { docId } = await c.call('doc.new', { name });
@@ -58,7 +58,7 @@ export async function runMcp(opts: { doc?: string; agent?: string }) {
   }));
 
   server.registerTool('save_document', {
-    description: 'Save a document to its .archa file, or to `path` (Save As: the asset folder is copied to <new name>-asset/).',
+    description: 'Save a document to its .archa file, or to `path` (Save As: the data folder is copied to <new name>-data/).',
     inputSchema: { doc: docParam, path: z.string().optional().describe('Absolute .archa path; required the first time') },
   }, ({ doc, path }) => guard(async (c) => {
     const docId = pick(doc);
@@ -104,6 +104,15 @@ ${GUIDE_INDEX}`,
     inputSchema: { topic: z.string().describe('Topic name from the list') },
   }, async ({ topic }) => ({ content: [{ type: 'text' as const, text: guideText(topic) }] }));
 
+  server.registerTool('read_skill', {
+    description: 'Read a skill: its SKILL.md plus the list of files in its folder, or one of those files (references, examples, templates) with `file`. Works for this document\'s own skills, the ArchaDev library and the built-in ones. Use it whenever a skill fits the task or a SKILL.md points at one of its files — you have no other way to open them.',
+    inputSchema: {
+      name: z.string().min(1).max(120).describe('Skill name, e.g. "design-website"'),
+      file: z.string().max(400).optional().describe('Path inside the skill folder, e.g. "references/tokens.md"'),
+      doc: docParam,
+    },
+  }, ({ name, file, doc }) => guard(async (c) => [{ type: 'text', text: (await c.call('agent.readSkill', { docId: pick(doc), name, file })).text }]));
+
   server.registerTool('screenshot', {
     description: 'PNG of a node (id or unique name) at full size — no size cap; the file is also saved to a temporary path you can open. A tall node (a whole landing page) comes back as full-width slices labelled with their y range, so text stays readable; slices: false forces one image, true forces slices. Says "unchanged" if it did not change since your last screenshot of it.',
     inputSchema: { node: z.string(), scale: z.number().min(0.1).max(4).optional(), slices: z.boolean().optional(), doc: docParam },
@@ -114,7 +123,7 @@ ${GUIDE_INDEX}`,
   }));
 
   server.registerTool('reference', {
-    description: 'Read a reference (a PDF page or an image mockup) into numbers before rebuilding it: page size, fill palette, type scale, every text line with x/y/size/colour, rects and rounded rects with radius, and every placed image — already copied into this document\'s asset folder, ready for image(). The full data (with SVG paths) is written to <name>-asset/reference/*.json. Follow read_guide("rebuild").',
+    description: 'Read a reference (a PDF page or an image mockup) into numbers before rebuilding it: page size, fill palette, type scale, every text line with x/y/size/colour, rects and rounded rects with radius, and every placed image — already copied into this document\'s asset folder, ready for image(). The full data (with SVG paths) is written to <name>-data/reference/*.json. Follow read_guide("rebuild").',
     inputSchema: {
       path: z.string().describe('Absolute path of a .pdf, .png, .jpg or .webp'),
       page: z.number().int().min(1).optional().describe('PDF page, 1-based (default 1)'),
@@ -163,6 +172,37 @@ ${GUIDE_INDEX}`,
   }, ({ text, nodeId, doc }) => guard(async (c) => {
     await c.call('agent.say', { docId: pick(doc), text, nodeId });
     return [{ type: 'text', text: 'ok' }];
+  }));
+
+  // Memory (blueprint AGENT_BRIDGE/07): facts that ride along with the first message of every later chat.
+  server.registerTool('remember', {
+    description: 'Keep one fact for later chats: a preference or correction the person gave ("no labels above headings", "always 8px radius"), a brand rule, or a lesson from a mistake. scope "global" = every document, "document" = this design only. One short, self-contained sentence or two; pass `replaces` (an id from the Memory list) to rewrite a fact instead of adding a near-duplicate. Do not store the task itself or anything already in the design.',
+    inputSchema: {
+      text: z.string().min(1).max(4000),
+      scope: z.enum(['global', 'document']).describe('global: every document · document: this design only'),
+      name: z.string().max(80).optional().describe('Short title (default: first sentence)'),
+      replaces: z.string().max(200).optional().describe('Id of the fact this one rewrites, e.g. "global:no-eyebrow-labels"'),
+      doc: docParam,
+    },
+  }, ({ text, scope, name, replaces, doc }) => guard(async (c) => {
+    const m = await c.call('memory.remember', { docId: pick(doc), text, scope, name, replaces });
+    return [{ type: 'text', text: `Remembered [${m.id}] ${m.name}` }];
+  }));
+
+  server.registerTool('forget', {
+    description: 'Remove a remembered fact that is wrong or no longer wanted (id from the Memory list or recall).',
+    inputSchema: { id: z.string().min(1).max(200), doc: docParam },
+  }, ({ id, doc }) => guard(async (c) => {
+    const m = await c.call('memory.forget', { docId: pick(doc), id });
+    return [{ type: 'text', text: `Forgot [${m.id}] ${m.name}` }];
+  }));
+
+  server.registerTool('recall', {
+    description: 'Every remembered fact (global and this document\'s), newest first. The newest ones already came with your first message; call this only to see older ones.',
+    inputSchema: { doc: docParam },
+  }, ({ doc }) => guard(async (c) => {
+    const list = await c.call('memory.list', { docId: pick(doc) });
+    return [{ type: 'text', text: list.length ? list.map((m) => `[${m.id}] ${m.text}`).join('\n') : 'Nothing remembered yet.' }];
   }));
 
   server.registerTool('done', {

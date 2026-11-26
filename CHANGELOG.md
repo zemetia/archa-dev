@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### Data folder
+- **`<name>-asset/` is now `<name>-data/`**, one folder for everything that belongs to a design but not inside the `.archa`: `assets/` (by type: `images/`, `svg/`, `videos/`, `fonts/`), `chats/`, `skills/`, `memory/` and `reference/`. Older folders move into the new layout the first time the file is opened; image references keep working.
+
+### Agent memory
+- **Agents remember between chats.** Global facts (your taste, standing rules) live in `~/.archadev/memory/`; facts for one design live in its `<name>-data/memory/`. The newest ones come with the first message of every chat, for every agent.
+- New MCP tools `remember`, `forget` and `recall`: an agent saves a fact when you correct it or say how you always want something.
+- **Settings → Memory** lists both scopes, adds a fact by hand and forgets one.
+
+### Skills
+- **Document skills**: skill folders in `<name>-data/skills/` are on for that design's chats and win over a same-named library or built-in skill. Settings → Skills lists them under "This document".
+- **`read_skill` for every agent**: a new MCP tool returns a skill's `SKILL.md` with the list of its files, or one of those files (references, examples). Codex and Antigravity now actually use skills on their own, and every agent — Claude included — can open a skill's reference files, without file access.
+
+### Agents
+- The rebuild guide keeps reference work moving: one `reference` call per page, no screenshots before anything is built, one PDF page at a time, at most 3 `compare` rounds per section — so an agent no longer loops over the same reference.
+
 ## [1.7.0] - 2026-11-24
 
 ### Layers

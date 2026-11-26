@@ -50,7 +50,7 @@ export async function readReference(ws: Workspace, p: z.infer<typeof referenceSc
   const assetDir = ws.assetDir(s);
   const path = referenceFile(p.path);
   const page = p.page ?? 1;
-  const dir = join(assetDir, 'reference');
+  const dir = join(ws.dataDir(s), 'reference');
   mkdirSync(dir, { recursive: true });
   const ext = extname(path).toLowerCase();
   ws.log(s.id, conn.author, 'reference', `Reference ${basename(path)}${ext === '.pdf' ? ` · page ${page}` : ''}`, [], conn.client.runId);

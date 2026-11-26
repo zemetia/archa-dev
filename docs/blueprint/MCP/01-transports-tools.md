@@ -42,6 +42,8 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 | `place_image` | `{ url \| ref \| selector, capture?, parent?, x?, y?, width?, height?, fit?, cornerRadius?, name?, path? }` | **Built 1.5:** a real picture onto the canvas. RPC `agent.placeImage` downloads it through the browser bridge, then `AgentExecutor.placeImage` inserts an image node (same reply contract) → [BROWSER](../BROWSER.md#images) |
 | `reference` | `{ path, page?, images?, doc? }` | **Built:** read a PDF page / image mockup into numbers → [05](./05-reference-compare.md) |
 | `compare` | `{ node, reference, page?, scale?, doc? }` | **Built:** visual diff + worst regions with the nodes under them → [05](./05-reference-compare.md) |
+| `read_skill` | `{ name, file?, doc? }` | **Built:** a skill's `SKILL.md` + file list, or one text file of it → [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
+| `remember` / `forget` / `recall` | `{ text, scope, name?, replaces?, doc? }` / `{ id, doc? }` / `{ doc? }` | **Built:** agent memory, global or per document → [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) |
 | `list_documents` / `open_document` / `new_document` / `save_document` | `{}` / `{ path }` / `{ name? }` / `{ doc?, path? }` | **Built:** open documents with id, file and asset folder; open, create, save (Save As copies the asset folder) |
 | `export` | `{ nodeId?, format, options? }` | png/jpeg/webp/svg/pdf/html/react/tokens; returns path or content |
 | `get_style` | `{ name?, params? }` | Style profiles, two-step load → [DESIGN_SYSTEM/03](../DESIGN_SYSTEM/03-style-profiles.md) |

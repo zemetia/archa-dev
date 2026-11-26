@@ -1,6 +1,6 @@
 import type { Author, DocumentData, Issue, NodeInput, Op } from '@archa/schema';
 import type { BrowserCommand, BrowserReply, PlaceImageParams } from './browser';
-import type { McpImportCandidate, McpImportSource, McpServer, McpServerInput, McpTestResult, SkillsOverview, Skill } from './settings';
+import type { McpImportCandidate, McpImportSource, McpServer, McpServerInput, McpTestResult, MemoryEntry, MemoryScope, SkillsOverview, Skill } from './settings';
 
 
 /** An icon the person uploaded: a node tree at its natural size. */
@@ -24,8 +24,11 @@ export type ClientKind = 'renderer' | 'cli' | 'mcp';
 /** runId: set by an `archa mcp` that a launched chat run started (ARCHA_RUN_ID), so its activity is not shown twice. */
 export type ClientInfo = { kind: ClientKind; name: string; agentId?: string; runId?: string };
 
-/** assetDir: where the document's images and chats live — `<name>-asset/` next to its `.archa`, or a runtime folder while unsaved. */
-export type DocSummary = { id: string; name: string; filePath: string | null; assetDir: string; dirty: boolean; revision: number };
+/**
+ * dataDir: the document's `<name>-data/` folder next to its `.archa` (a runtime folder while unsaved) — assets, chats,
+ * skills, memory. assetDir: its `assets/`, where `asset:` references resolve.
+ */
+export type DocSummary = { id: string; name: string; filePath: string | null; dataDir: string; assetDir: string; dirty: boolean; revision: number };
 export type AppliedEvent = { docId: string; revision: number; txnId: string; author: Author; label: string; ops: Op[]; touched: string[] };
 export type ActivityEntry = { id: string; ts: number; docId: string; author: Author; tool: string; text: string; nodeIds: string[]; runId?: string };
 export type AgentClient = { id: string; name: string; kind: ClientKind; connectedAt: number };
@@ -87,6 +90,7 @@ export interface CoreMethods {
   /** Compact text tree of a node (default: the selection, else the page) — what the design panel shows, per layer. */
   'agent.outline': { params: { docId?: string; node?: string; depth?: number }; result: string };
   'agent.say': { params: { docId?: string; text: string; nodeId?: string }; result: void };
+  'agent.readSkill': { params: { docId?: string; name: string; file?: string }; result: { text: string } };
   /** The agent finished its turn: its canvas cursor stops and fades (blueprint RENDERING/02, Agent presence). */
   'agent.done': { params: { docId?: string; summary?: string }; result: void };
   /** Drive the in-app browser (blueprint BROWSER). */
@@ -142,12 +146,15 @@ export interface CoreMethods {
   'accounts.login.code': { params: { id: string; code: string }; result: AgentAccount };
   'accounts.login.cancel': { params: { id: string }; result: void };
   // Skills handed to chat runs (blueprint AGENT_BRIDGE/05)
-  'skills.list': { params: void; result: SkillsOverview };
+  'memory.list': { params: { docId?: string }; result: MemoryEntry[] };
+  'memory.remember': { params: { docId?: string; scope: MemoryScope; text: string; name?: string; replaces?: string }; result: MemoryEntry };
+  'memory.forget': { params: { docId?: string; id: string }; result: MemoryEntry };
+  'skills.list': { params: { docId?: string } | void; result: SkillsOverview };
   'skills.create': { params: { name: string; description: string; body: string }; result: Skill };
   'skills.import': { params: { dir: string }; result: Skill };
   'skills.update': { params: { id: string; enabled: boolean }; result: Skill };
   'skills.delete': { params: { id: string }; result: void };
-  'skills.read': { params: { id: string }; result: { content: string } };
+  'skills.read': { params: { id: string; docId?: string }; result: { content: string } };
   // External MCP servers handed to chat runs (blueprint AGENT_BRIDGE/05)
   'mcp.list': { params: void; result: McpServer[] };
   'mcp.save': { params: McpServerInput; result: McpServer };
@@ -275,6 +282,7 @@ export interface CoreEvents {
   'accounts.changed': { accountId?: string };
   /** Skills or MCP servers changed; clients re-read `skills.list` / `mcp.list`. */
   'skills.changed': Record<string, never>;
+  'memory.changed': Record<string, never>;
   'mcp.changed': Record<string, never>;
 }
 export type EventName = keyof CoreEvents;

@@ -16,7 +16,8 @@ import { SkillManager } from './skills';
 import { McpServerManager } from './mcp-servers';
 import { callBrowser } from './main-bridge';
 import { randomPersona } from './personas';
-import { assetDirFor, externalizeData, externalizeOps, inlineData, isRuntimeAssetDir, moveAssets } from './assets';
+import { MemoryStore, memoryParams } from './memory';
+import { assetDirFor, dataDirFor, externalizeData, externalizeOps, inlineData, isRuntimeDataDir, migrateDataDir, moveDataDir } from './assets';
 import { compareReference, compareSchema, readReference, referenceSchema } from './reference-tools';
 import { canvasFit, fitBudget, INLINE_BUDGET, INLINE_MAX_SIDE, MAX_SLICES, saveShot, SLICE_HEIGHT, SLICE_MIN_HEIGHT, SLICE_RATIO, sweepShots } from './shots';
 
@@ -89,6 +90,8 @@ export class Workspace {
   private lastDocId: string | null = null;
   readonly accounts = new AccountManager((accountId) => this.broadcast('accounts.changed', accountId ? { accountId } : {}));
   readonly skills = new SkillManager(() => this.broadcast('skills.changed', {}));
+  /** Agent memory: global plus the document's own (blueprint AGENT_BRIDGE/07). */
+  readonly memory = new MemoryStore((docId) => { try { return this.dataDir(docId ?? ''); } catch { return null; } }, () => this.broadcast('memory.changed', {}));
   readonly mcpServers = new McpServerManager(() => this.broadcast('mcp.changed', {}));
   readonly chat = new ChatRunner(this, mcpCommand);
   readonly library = new LibraryStore();
@@ -150,10 +153,21 @@ export class Workspace {
   /* -------------------------------- documents ------------------------------- */
 
   summaries(): DocSummary[] {
-    return [...this.sessions.values()].map((s) => ({ id: s.id, name: s.doc.meta.name, filePath: s.filePath, assetDir: this.assetDir(s), dirty: s.dirty, revision: s.revision }));
+    return [...this.sessions.values()].map((s) => ({ id: s.id, name: s.doc.meta.name, filePath: s.filePath, dataDir: this.dataDir(s), assetDir: this.assetDir(s), dirty: s.dirty, revision: s.revision }));
   }
 
-  /** The document's `<name>-asset/` folder (images, chats); a runtime folder while it has no file. */
+  /** The document's `<name>-data/` folder (assets, chats, skills, memory); a runtime folder while it has no file. */
+  dataDir(s: DocumentSession | string): string {
+    const session = typeof s === 'string' ? this.session(s) : s;
+    return dataDirFor(session.filePath, session.id);
+  }
+
+  /** `<name>-data/skills/`: the document's own skills; undefined when no document is open. */
+  skillsDir(docId?: string): string | undefined {
+    try { return join(this.dataDir(docId ?? ''), 'skills'); } catch { return undefined; }
+  }
+
+  /** `<name>-data/assets/`: where the document's `asset:` references resolve. */
   assetDir(s: DocumentSession | string): string {
     const session = typeof s === 'string' ? this.session(s) : s;
     return assetDirFor(session.filePath, session.id);
@@ -286,7 +300,9 @@ export class Workspace {
       if (existing) return { docId: existing.id };
       const data = decodeArcha(new Uint8Array(await readFile(path)));
       if (this.sessions.has(data.meta.id)) data.meta.id = newId();
-      // Older files carry images as base64: write them out to `<name>-asset/`; the next save drops the base64.
+      // A pre-1.8 `<name>-asset/` folder moves into `<name>-data/`.
+      migrateDataDir(path, data.meta.id);
+      // Older files carry images as base64: write them out to `<name>-data/assets/`; the next save drops the base64.
       const moved = externalizeData(assetDirFor(path, data.meta.id), data);
       const s = new DocumentSession(data, path);
       s.dirty = moved > 0;
@@ -297,10 +313,11 @@ export class Workspace {
       if (path && !isAbsolute(path)) throw new DocumentError('VALIDATION', `Save path must be absolute (got "${path}")`);
       const target = path ? (/\.archa$/i.test(path) ? path : `${path}.archa`) : s.filePath;
       if (!target) throw new DocumentError('VALIDATION', 'No file path yet — choose where to save');
-      // The asset folder travels with the file: a first save or Save As copies it to `<new name>-asset/`.
-      const fromDir = this.assetDir(s);
-      const toDir = assetDirFor(target, s.id);
-      if (fromDir !== toDir) moveAssets(fromDir, toDir, isRuntimeAssetDir(fromDir));
+      // The data folder travels with the file: a first save or Save As copies it to `<new name>-data/`.
+      migrateDataDir(target, s.id);
+      const fromDir = this.dataDir(s);
+      const toDir = dataDirFor(target, s.id);
+      if (fromDir !== toDir) moveDataDir(fromDir, toDir, isRuntimeDataDir(fromDir));
       const tmp = `${target}.tmp`;
       await writeFile(tmp, encodeArcha(s.doc.toData()));
       await rename(tmp, target);
@@ -382,6 +399,7 @@ export class Workspace {
       const head = node ? '' : sel.length ? `Selection (${sel.length}):\n` : 'Nothing selected — the page:\n';
       return head + ids.map((id) => outline(s.doc, id, depth ?? (id === s.doc.pages[0]!.rootId ? 1 : 3))).join('\n');
     },
+    'agent.readSkill': (p) => ({ text: this.skills.readForAgent(p, this.skillsDir(p?.docId)) }),
     'agent.say': ({ docId, text, nodeId }, conn) => {
       const s = this.session(docId);
       const id = nodeId ? resolveRef(s, nodeId) : null;
@@ -522,12 +540,15 @@ export class Workspace {
     'accounts.login.start': (p) => this.accounts.startLogin(p),
     'accounts.login.code': (p) => this.accounts.submitCode(p),
     'accounts.login.cancel': (p) => this.accounts.cancelLogin(p),
-    'skills.list': () => this.skills.overview(),
+    'skills.list': (p) => this.skills.overview(this.skillsDir(p?.docId)),
+    'memory.list': (p) => this.memory.list(parse(memoryParams.list, p ?? {}).docId),
+    'memory.remember': (p) => this.memory.remember(p),
+    'memory.forget': (p) => this.memory.forget(p),
     'skills.create': (p) => this.skills.create(p),
     'skills.import': (p) => this.skills.import(p),
     'skills.update': (p) => this.skills.update(p),
     'skills.delete': (p) => this.skills.delete(p),
-    'skills.read': (p) => this.skills.read(p),
+    'skills.read': (p) => this.skills.read(p, this.skillsDir(p?.docId)),
     'mcp.list': () => this.mcpServers.list(),
     'mcp.save': (p) => this.mcpServers.save(p),
     'mcp.delete': (p) => this.mcpServers.delete(p),

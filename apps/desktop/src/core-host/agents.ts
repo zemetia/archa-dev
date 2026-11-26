@@ -10,7 +10,7 @@ import { ADAPTERS, type Adapter, type AgentEvent, type Attachment, type McpComma
 import { resolveCli, type AccountManager } from './accounts';
 import { randomPersona } from './personas';
 import { ChatStore } from './chat-store';
-import { assetDirFor } from './assets';
+import { dataDirFor } from './assets';
 
 /*
  * Launch mode (blueprint AGENT_BRIDGE): the app starts the agent's own CLI headless,
@@ -47,7 +47,7 @@ function killTree(child: ChildProcess | null) {
 }
 
 /*
- * Conversations live in the document's asset folder, one JSON file per thread (chat-store.ts), so
+ * Conversations live in the document's data folder, one JSON file per thread (chat-store.ts), so
  * they travel with the `.archa` and never enter it. The agent CLI session ids stay per machine in
  * ARCHA_HOME/chats/sessions.json, so a thread can be resumed after a restart. Deleting either only
  * loses history, never design data.
@@ -64,7 +64,7 @@ export class ChatRunner {
   private sessions: Map<string, string> | null = null; // threadId:agent:login -> CLI session id
   /** A run can outlive its document's tab; its history then lands in the runtime folder of that id. */
   readonly store = new ChatStore((docId) => {
-    try { return this.ws.assetDir(docId); } catch { return assetDirFor(null, docId); }
+    try { return this.ws.dataDir(docId); } catch { return dataDirFor(null, docId); }
   });
   // Orchestrate mode (blueprint AGENT_BRIDGE/06)
   private meta = new Map<string, OrchestraMeta | null>(); // threadId -> lead / worker role (null = plain chat)
@@ -223,13 +223,16 @@ export class ChatRunner {
       : '';
     // The internal skill: guides that fit the request ride along on the first turn (saves a guide call).
     const guides = firstTurn ? guidesFor(request).map((t) => guideText(t)).join('\n\n') : '';
-    // Claude Code loads skills itself (mirrored into its project, Skill tool); other CLIs get the list to read from.
-    const runSkills = firstTurn && adapter.id !== 'claude' ? this.ws.skills.forRunSkills() : [];
+    // Claude Code loads skills itself (mirrored into its project, Skill tool); other CLIs get the list and read them with read_skill.
+    const runSkills = firstTurn && adapter.id !== 'claude' ? this.ws.skills.forRunSkills(this.ws.skillsDir(docId)) : [];
     const skillIndex = runSkills.length
-      ? `\n\n---\nSkills you can use — when the task fits one, read its SKILL.md first and follow it:\n${runSkills.map((s) => `- ${s.name}: ${s.description.slice(0, 300)} (${join(s.dir, 'SKILL.md')})`).join('\n')}`
+      ? `\n\n---\nSkills you can use — when the task fits one, call read_skill { name } first and follow it:\n${runSkills.map((s) => `- ${s.name}: ${s.description.slice(0, 300)}`).join('\n')}`
       : '';
-    const skillLine = this.mentions(asked);
-    const fullPrompt = `${lead ? `${ORCHESTRATOR_PROMPT}\n\n---\nRequest:\n` : ''}${request}${focusLine}${imageLine}${skillLine}${skillIndex}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}${guides ? `\n\n---\nGuides for this task:\n${guides}` : ''}`;
+    const skillLine = this.mentions(docId, asked);
+    // Memory (blueprint AGENT_BRIDGE/07): what earlier chats asked to keep rides on the first turn of a thread.
+    const memory = firstTurn ? this.ws.memory.forPrompt(docId) : '';
+    const memoryBlock = memory ? `\n\n---\n${memory}` : '';
+    const fullPrompt = `${lead ? `${ORCHESTRATOR_PROMPT}\n\n---\nRequest:\n` : ''}${request}${focusLine}${imageLine}${skillLine}${skillIndex}${memoryBlock}\n\n---\nCurrent canvas state (fresh, no need to call get_state first):\n${describeState(this.ws, session)}${guides ? `\n\n---\nGuides for this task:\n${guides}` : ''}`;
     const run: Run = { id: runId, docId, threadId, agent: agentId, persona: this.personaFor(docId, threadId), prompt: request, child: null, stopped: false, replied: false, failed: false, startedAt: Date.now(), fromLead: !!q.fromLead };
     this.runs.set(runId, run);
     if (!echoed) this.emit(run, 'user', prompt, q.images);
@@ -255,12 +258,12 @@ export class ChatRunner {
    * `/skill-name` in a message: that skill's instructions (or a built-in guide) go with the message,
    * so the agent follows them whichever CLI it is. Unknown names are left as plain text.
    */
-  private mentions(text: string): string {
+  private mentions(docId: string, text: string): string {
     const names = [...new Set([...text.matchAll(/(?:^|\s)\/([a-z0-9][a-z0-9-]{0,63})(?=$|[\s.,;:!?)])/gi)].map((m) => m[1]!.toLowerCase()))].slice(0, 5);
     const blocks: string[] = [];
     for (const name of names) {
-      const skill = this.ws.skills.mention(name);
-      if (skill) blocks.push(`## /${name} — ${skill.description}\n(Skill folder: ${skill.dir} — its examples and references are there.)\n\n${skill.body}`);
+      const skill = this.ws.skills.mention(name, this.ws.skillsDir(docId));
+      if (skill) blocks.push(`## /${name} — ${skill.description}\n(Its examples and references: read_skill { name: "${skill.name}" } lists them, read_skill { name, file } opens one.)\n\n${skill.body}`);
       else if (name in GUIDES) blocks.push(`## /${name}\n${guideText(name)}`);
     }
     return blocks.length ? `\n\n---\nSkills the person asked for with /name — follow them for this request:\n\n${blocks.join('\n\n')}` : '';
@@ -277,7 +280,7 @@ export class ChatRunner {
   }
 
   private warmKey(docId: string, agentId: string, model?: string, account?: string) {
-    return JSON.stringify([docId, agentId, model ?? '', account ?? '', Object.keys(this.ws.mcpServers.forRun()).sort(), this.ws.skills.forRun()]);
+    return JSON.stringify([docId, agentId, model ?? '', account ?? '', Object.keys(this.ws.mcpServers.forRun()).sort(), this.ws.skills.forRun(this.ws.skillsDir(docId))]);
   }
 
   /** The thread's live process when its settings still match, else a fresh one (resuming the CLI session). */
@@ -301,7 +304,7 @@ export class ChatRunner {
     const mcpConfigFile = join(cfgDir, `mcp-${id}.json`);
     const extra = this.ws.mcpServers.forRun();
     writeFileSync(mcpConfigFile, JSON.stringify({ mcpServers: { ...extra, archadev: { command: mcp.command, args: mcp.args, env: mcp.env } } }, null, 2), { mode: 0o600 });
-    const skills = syncRunSkills(cfgDir, this.ws.skills.forRun());
+    const skills = syncRunSkills(cfgDir, this.ws.skills.forRun(this.ws.skillsDir(docId)));
 
     const w: Warm = {
       id, threadId, docId, agent: adapter.id, key, persona: this.personaFor(docId, threadId), child: null as unknown as ChildProcess, sessionKey, mcpConfigFile,
@@ -558,7 +561,7 @@ export class ChatRunner {
     // Settings → MCP servers join the run next to archadev; the file may hold their secrets.
     const extra = this.ws.mcpServers.forRun();
     writeFileSync(mcpConfigFile, JSON.stringify({ mcpServers: { ...extra, archadev: { command: mcp.command, args: mcp.args, env: mcp.env } } }, null, 2), { mode: 0o600 });
-    const skills = syncRunSkills(cfgDir, this.ws.skills.forRun());
+    const skills = syncRunSkills(cfgDir, this.ws.skills.forRun(this.ws.skillsDir(run.docId)));
 
     const start = () => {
       if (run.stopped) {
