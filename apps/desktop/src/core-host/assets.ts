@@ -1,15 +1,18 @@
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { archaHome } from '@archa/protocol/node';
 import { ASSET_SCHEME, type DocumentData, type Node, type Op } from '@archa/schema';
 
 /*
- * Document assets (blueprint FILE_FORMATS/01 → Asset folder). Images live as files in `<name>-asset/`
- * next to the `.archa`, and image nodes point at them with `asset:images/<hash>.<ext>` — never base64.
- * Any data: URL or local image path that reaches the core (paste, import, agent, library) is copied here first.
- * Unsaved documents keep their folder under ARCHA_HOME/runtime/assets/<docId> until the first save.
+ * Document data folder (blueprint FILE_FORMATS/01 → Data folder). Everything that belongs to a document but
+ * not inside its `.archa` lives in `<name>-data/` next to the file: `assets/` (images, svg, videos…),
+ * `chats/`, `skills/`, `memory/` and `reference/`. Image nodes point into `assets/` with
+ * `asset:images/<hash>.<ext>` — never base64. Any data: URL or local image path that reaches the core
+ * (paste, import, agent, library) is copied there first. Unsaved documents keep their folder under
+ * ARCHA_HOME/runtime/data/<docId> until the first save. Before 1.8 the folder was `<name>-asset/` with
+ * images at its root; it is moved into the new layout when the document is opened.
  */
 
 const MIME_EXT: Record<string, string> = {
@@ -20,13 +23,48 @@ const EXT_MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', 
 
 const safe = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80) || 'doc';
 
-/** `D:/x/landing.archa` → `D:/x/landing-asset`; an unsaved document → its runtime folder. */
-export function assetDirFor(filePath: string | null, docId: string): string {
-  if (filePath) return join(dirname(filePath), `${basename(filePath).replace(/\.archa$/i, '')}-asset`);
-  return join(archaHome(), 'runtime', 'assets', safe(docId));
+const stem = (filePath: string) => basename(filePath).replace(/\.archa$/i, '');
+
+/** `D:/x/landing.archa` → `D:/x/landing-data`; an unsaved document → its runtime folder. */
+export function dataDirFor(filePath: string | null, docId: string): string {
+  if (filePath) return join(dirname(filePath), `${stem(filePath)}-data`);
+  return join(archaHome(), 'runtime', 'data', safe(docId));
 }
 
-export const isRuntimeAssetDir = (dir: string) => !relative(join(archaHome(), 'runtime', 'assets'), dir).startsWith('..');
+/** Where `asset:` references resolve: the data folder's `assets/`. */
+export const assetDirFor = (filePath: string | null, docId: string) => join(dataDirFor(filePath, docId), 'assets');
+
+export const isRuntimeDataDir = (dir: string) => !relative(join(archaHome(), 'runtime', 'data'), dir).startsWith('..');
+
+/** Folders of the data root that are not assets; anything else in a pre-1.8 `-asset/` folder was an asset. */
+const DATA_DIRS = new Set(['assets', 'chats', 'skills', 'memory', 'reference']);
+
+/**
+ * Pre-1.8 `<name>-asset/` (images at its root, chats/, reference/) → `<name>-data/` with images under
+ * `assets/`. `asset:` references keep working because they resolve inside `assets/`. Also moves an
+ * unsaved document's old runtime folder. Never overwrites: a file already in the new place wins.
+ */
+export function migrateDataDir(filePath: string | null, docId: string): void {
+  const to = dataDirFor(filePath, docId);
+  const from = filePath ? join(dirname(filePath), `${stem(filePath)}-asset`) : join(archaHome(), 'runtime', 'assets', safe(docId));
+  if (!existsSync(from)) return;
+  mkdirSync(join(to, 'assets'), { recursive: true });
+  for (const entry of readdirSync(from)) {
+    const dest = DATA_DIRS.has(entry) ? join(to, entry) : join(to, 'assets', entry);
+    cpSync(join(from, entry), dest, { recursive: true, force: false, errorOnExist: false });
+  }
+  rmSync(from, { recursive: true, force: true });
+}
+
+/** Sub-folder of `assets/` for a file type: images, svg, videos, fonts, files. */
+export function assetKind(ext: string): string {
+  const e = ext.toLowerCase();
+  if (e === 'svg') return 'svg';
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif'].includes(e)) return 'images';
+  if (['mp4', 'webm', 'mov', 'm4v'].includes(e)) return 'videos';
+  if (['ttf', 'otf', 'woff', 'woff2'].includes(e)) return 'fonts';
+  return 'files';
+}
 
 /** Decodes a data: URL (base64 or percent-encoded). Null when it is not an image. */
 export function decodeDataUrl(src: string): { mime: string; bytes: Buffer } | null {
@@ -38,8 +76,8 @@ export function decodeDataUrl(src: string): { mime: string; bytes: Buffer } | nu
   return { mime, bytes };
 }
 
-/** Writes bytes once (content-addressed) under `sub/` and returns the `asset:` reference. */
-export function storeBytes(assetDir: string, bytes: Buffer, ext: string, sub = 'images'): string {
+/** Writes bytes once (content-addressed) under `sub/` (default: by file type) and returns the `asset:` reference. */
+export function storeBytes(assetDir: string, bytes: Buffer, ext: string, sub = assetKind(ext)): string {
   const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 24);
   const rel = `${sub}/${hash}.${ext}`;
   const file = join(assetDir, ...rel.split('/'));
@@ -163,8 +201,8 @@ export function inlineData(assetDir: string, data: DocumentData): DocumentData {
   return { ...data, nodes };
 }
 
-/** Carries a document's folder to its new place on Save As / first save. Existing files are kept. */
-export function moveAssets(from: string, to: string, removeSource: boolean): void {
+/** Carries a document's data folder to its new place on Save As / first save. Existing files are kept. */
+export function moveDataDir(from: string, to: string, removeSource: boolean): void {
   if (from === to || !existsSync(from)) return;
   mkdirSync(to, { recursive: true });
   cpSync(from, to, { recursive: true, force: false, errorOnExist: false });

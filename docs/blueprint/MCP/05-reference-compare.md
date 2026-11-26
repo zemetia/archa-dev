@@ -20,7 +20,7 @@ Rebuilding a mockup from a screenshot is guessing. Reading the source PDF gives 
 | Shapes | Core host | Fill/stroke paths in page px: `rect`, `rounded-rect` (+ radius from the first corner's curves), `ellipse`, else `path` with SVG `d`. A rect filled inside a rounded clip is that rounded box. The page background is skipped |
 | Images | Core host | Decoded pixels → PNG → the document's asset folder (`images/`, content-addressed): ready for `image()` / `src: "asset:…"` |
 | Colours | Renderer (pdf.js + canvas) | The page is rasterised; each text box's ink = the colour farthest from its edge colour, averaged over the clearly-inked pixels (Type3 fonts keep colour in their glyphs) |
-| Output | `<name>-asset/reference/<file>-p<N>.{json,png}` | JSON = every line, shape (with `d`), image; the reply = summary: size, fill palette by area, text colours, type scale, images, boxes ≥ 2000 px², first 160 lines |
+| Output | `<name>-data/reference/<file>-p<N>.{json,png}` | JSON = every line, shape (with `d`), image; the reply = summary: size, fill palette by area, text colours, type scale, images, boxes ≥ 2000 px², first 160 lines |
 
 Images (`.png .jpg .webp`): copied to `reference/`, size reported.
 
@@ -50,7 +50,7 @@ References are staged into `ARCHA_HOME/runtime/reference/<hash>.<ext>` so `archa
 
 ---
 
-**Linked from:** [MCP/01](./01-transports-tools.md)
+**Linked from:** [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) · [MCP/01](./01-transports-tools.md)
 
 **Code:** [`apps/desktop/src/core-host/reference-tools.ts`](../../../apps/desktop/src/core-host/reference-tools.ts) · [`apps/desktop/src/core-host/reference.ts`](../../../apps/desktop/src/core-host/reference.ts) · [`apps/desktop/src/renderer/lib/reference.ts`](../../../apps/desktop/src/renderer/lib/reference.ts) · [`apps/desktop/test/reference.test.ts`](../../../apps/desktop/test/reference.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
 <!-- backlinks:end -->

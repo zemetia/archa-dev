@@ -63,6 +63,8 @@ A–Z keyword → the doc that owns the rules → the code that implements it to
 | Screenshots for agents | [RENDERING/03](./RENDERING/03-export.md) | `core-host/workspace.ts` (`screenshot`), `renderer/lib/store.ts` (`render.request`) |
 | Settings dialog | [AGENT_BRIDGE/05](./AGENT_BRIDGE/05-skills-mcp.md) | `renderer/ui/SettingsDialog.tsx`, `renderer/ui/settings/` |
 | Shortcuts / tools / tool rail | [APP_UI/01](./APP_UI/01-shell-tools-panels.md) | `renderer/ui/ToolRail.tsx` (`TOOL_KEYS`), `renderer/App.tsx`, `renderer/lib/commands.ts` |
+| Memory (agent, global / per document) | [AGENT_BRIDGE/07](./AGENT_BRIDGE/07-memory.md) | `core-host/memory.ts`, `apps/cli/src/mcp.ts` (`remember`), `renderer/ui/settings/MemoryPage.tsx` |
+| Data folder (`<name>-data/`) | [FILE_FORMATS/01](./FILE_FORMATS/01-archa.md) | `core-host/assets.ts` (`dataDirFor`, `migrateDataDir`) |
 | Skills (for agent runs, `/name` mentions) | [AGENT_BRIDGE/05](./AGENT_BRIDGE/05-skills-mcp.md), [MCP/04](./MCP/04-local-skill.md) | `core-host/skills.ts` (`mention`), `core-host/agents.ts` (`mentions`), `renderer/ui/settings/SkillsPage.tsx`, `renderer/ui/ChatPanel.tsx` |
 | Slides panel / thumbnails | [APP_UI/01](./APP_UI/01-shell-tools-panels.md) | `renderer/ui/SlidesPanel.tsx`, `renderer/lib/thumbs.ts` |
 | Slide view, slide size presets, new slide | [APP_UI/05](./APP_UI/05-slides-view.md) | `renderer/ui/SlidesView.tsx`, `renderer/lib/slides.ts` |

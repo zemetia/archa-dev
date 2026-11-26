@@ -70,6 +70,7 @@ Everything else in [CLI/01](../CLI/01-commands.md) is the target. The app must b
 | `chats/<docId>.jsonl`, `chats/sessions.json` | `core-host/agents.ts` | Chat history; agent CLI session ids for resume |
 | `profiles/` | `core-host/accounts.ts` | Agent login profiles |
 | `skills/`, `skills.json` | `core-host/skills.ts` | ArchaDev-owned skills; enabled state |
+| `memory/` | `core-host/memory.ts` | Global agent memory, one `.md` per fact |
 | `mcp.json` | `core-host/mcp-servers.ts` | External MCP servers (secrets stay here) |
 | `libraries/<name>/` | `core-host/library.ts` | Global component libraries |
 

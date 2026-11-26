@@ -94,13 +94,14 @@ describe('chat tool rows', () => {
     expect(lastPrompt).toContain('Skills the person asked for with /name');
     expect(lastPrompt).toContain('## /brand-voice — Our tone of voice');
     expect(lastPrompt).toContain('Always write in a calm, plain voice.');
-    expect(lastPrompt).toContain(`(Skill folder: ${dir}`);
+    expect(lastPrompt).toContain('read_skill { name: "brand-voice" } lists them');
     expect(lastPrompt).toContain('## /landing\n# Landing page');
     expect(lastPrompt).not.toContain('## /nope');
     expect(lastPrompt).not.toContain('## /path');
-    // A CLI without a Skill tool is told which skills are on and where their SKILL.md is.
+    // A CLI without a Skill tool is told which skills are on and to read them with read_skill.
     expect(lastPrompt).toContain('Skills you can use');
-    expect(lastPrompt).toContain(`- brand-voice: Our tone of voice (${join(dir, 'SKILL.md')})`);
+    expect(lastPrompt).toContain('call read_skill { name } first');
+    expect(lastPrompt).toContain('- brand-voice: Our tone of voice\n');
     // The message itself is shown as typed.
     expect(ws.chat.list(docId).find((m) => m.role === 'user')!.text).toBe('a hero for a bakery /brand-voice, see /landing. Not a skill: /nope or a/path');
   }, 20_000);

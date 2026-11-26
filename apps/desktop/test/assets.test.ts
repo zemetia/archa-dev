@@ -8,12 +8,12 @@ import { ArchaDocument, DocumentSession, insertOpsFor } from '@archa/core';
 import { encodeArcha } from '@archa/formats';
 import type { Channel, ChatMessage, Message } from '@archa/protocol';
 import { Workspace } from '../src/core-host/workspace';
-import { assetDirFor, assetFile, externalizeSrc, inlineSrc } from '../src/core-host/assets';
+import { assetDirFor, assetFile, dataDirFor, externalizeSrc, inlineSrc, storeBytes } from '../src/core-host/assets';
 import { ChatStore } from '../src/core-host/chat-store';
 import { canvasFit, CANVAS_MAX_SIDE, fitBudget, INLINE_BUDGET, INLINE_MAX_SIDE, shotsDir, sweepShots } from '../src/core-host/shots';
 import { allowedAssetFile } from '../src/main/asset-paths';
 
-/* Asset folder, document refs and screenshots (blueprint FILE_FORMATS/01 → Asset folder, MCP/01, RENDERING/03). */
+/* Data folder, document refs and screenshots (blueprint FILE_FORMATS/01 → Data folder, MCP/01, RENDERING/03). */
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const DATA = `data:image/png;base64,${PNG}`;
@@ -43,7 +43,7 @@ function addImage(ws: Workspace, docId: string) {
   return rootId;
 }
 
-describe('asset folder', () => {
+describe('data folder', () => {
   it('writes pasted base64 images to the folder and keeps only an asset: reference', () => {
     const ws = new Workspace();
     const docId = ws.summaries()[0]!.id;
@@ -54,21 +54,22 @@ describe('asset folder', () => {
     expect(readFileSync(file).toString('base64')).toBe(PNG);
   });
 
-  it('first save moves the folder next to the file as <name>-asset, and the file has no base64', async () => {
+  it('first save moves the folder next to the file as <name>-data, and the file has no base64', async () => {
     const ws = new Workspace();
     const docId = ws.summaries()[0]!.id;
     const id = addImage(ws, docId);
     const runtimeDir = ws.assetDir(docId);
     const path = join(work, 'landing.archa');
     await call(ws, 'doc.save', { docId, path });
-    expect(ws.assetDir(docId)).toBe(join(work, 'landing-asset'));
+    expect(ws.assetDir(docId)).toBe(join(work, 'landing-data', 'assets'));
     expect(existsSync(runtimeDir)).toBe(false);
     const src = (ws.session(docId).doc.get(id) as { src: string }).src;
-    expect(existsSync(assetFile(join(work, 'landing-asset'), src)!)).toBe(true);
+    expect(existsSync(assetFile(join(work, 'landing-data', 'assets'), src)!)).toBe(true);
     const zip = unzipSync(new Uint8Array(readFileSync(path)));
     const page = Object.keys(zip).find((k) => k.startsWith('pages/'))!;
     expect(strFromU8(zip[page]!)).not.toContain('base64');
-    expect(ws.summaries()[0]!.assetDir).toBe(join(work, 'landing-asset'));
+    expect(ws.summaries()[0]!.assetDir).toBe(join(work, 'landing-data', 'assets'));
+    expect(ws.summaries()[0]!.dataDir).toBe(join(work, 'landing-data'));
   });
 
   it('opening an older file moves its base64 images out and marks it to save', async () => {
@@ -80,7 +81,7 @@ describe('asset folder', () => {
     const { docId } = await call<{ docId: string }>(ws, 'doc.open', { path });
     const img = Object.values(ws.session(docId).doc.toData().nodes).find((n) => n.type === 'image') as { src: string };
     expect(img.src.startsWith('asset:images/')).toBe(true);
-    expect(readdirSync(join(work, 'old-asset', 'images'))).toHaveLength(1);
+    expect(readdirSync(join(work, 'old-data', 'assets', 'images'))).toHaveLength(1);
     expect(ws.session(docId).dirty).toBe(true);
   });
 
@@ -93,13 +94,47 @@ describe('asset folder', () => {
     expect(externalizeSrc(dir, 'https://example.com/a.png')).toBe('https://example.com/a.png');
   });
 
-  it('names the folder after the file, and serves only images inside asset folders', () => {
-    expect(assetDirFor(join(work, 'Sehati.archa'), 'd1')).toBe(join(work, 'Sehati-asset'));
+  it('names the folder after the file, and serves only images inside data folders', () => {
+    expect(dataDirFor(join(work, 'Sehati.archa'), 'd1')).toBe(join(work, 'Sehati-data'));
+    expect(assetDirFor(join(work, 'Sehati.archa'), 'd1')).toBe(join(work, 'Sehati-data', 'assets'));
+    expect(allowedAssetFile(join(work, 'Sehati-data', 'assets', 'images', 'a.png'), home)).toBe(true);
+    expect(allowedAssetFile(join(work, 'Sehati-data', 'chats', 'attachments', 't', 'a.png'), home)).toBe(true);
     expect(allowedAssetFile(join(work, 'Sehati-asset', 'images', 'a.png'), home)).toBe(true);
-    expect(allowedAssetFile(join(home, 'runtime', 'assets', 'd1', 'images', 'a.png'), home)).toBe(true);
+    expect(allowedAssetFile(join(home, 'runtime', 'data', 'd1', 'assets', 'images', 'a.png'), home)).toBe(true);
     expect(allowedAssetFile(join(work, 'secrets', 'a.png'), home)).toBe(false);
     expect(allowedAssetFile(join(work, 'Sehati-asset', 'notes.txt'), home)).toBe(false);
     expect(allowedAssetFile('images/a.png', home)).toBe(false);
+  });
+
+  it('files assets by type: images, svg, videos, fonts', () => {
+    const dir = join(work, 'k-data', 'assets');
+    expect(storeBytes(dir, Buffer.from('<svg/>'), 'svg')).toMatch(/^asset:svg\/[0-9a-f]{24}\.svg$/);
+    expect(storeBytes(dir, Buffer.from('x'), 'mp4')).toMatch(/^asset:videos\//);
+    expect(storeBytes(dir, Buffer.from('x'), 'woff2')).toMatch(/^asset:fonts\//);
+    expect(storeBytes(dir, Buffer.from('x'), 'png')).toMatch(/^asset:images\//);
+  });
+
+  it('opening a pre-1.8 file moves its <name>-asset folder into <name>-data with the same references', async () => {
+    const s = new DocumentSession(ArchaDocument.create('Legacy'));
+    const path = join(work, 'legacy.archa');
+    const old = join(work, 'legacy-asset');
+    const ref = externalizeSrc(old, DATA); // asset:images/<hash>.png at the old folder's root
+    s.apply({ author: user, label: 'x', baseRevision: 0, ops: insertOpsFor({ type: 'image', name: 'Photo', src: ref } as never, s.doc.pages[0]!.rootId).ops });
+    writeFileSync(path, encodeArcha(s.doc.toData()));
+    mkdirSync(join(old, 'chats'), { recursive: true });
+    writeFileSync(join(old, 'chats', 't1.json'), JSON.stringify({ version: 1, threadId: 't1', agent: 'claude', createdAt: 1, updatedAt: 1, messages: [] }));
+    mkdirSync(join(old, 'reference'), { recursive: true });
+    writeFileSync(join(old, 'reference', 'mock-p1.json'), '{}');
+
+    const ws = new Workspace();
+    const { docId } = await call<{ docId: string }>(ws, 'doc.open', { path });
+    const data = join(work, 'legacy-data');
+    expect(existsSync(old)).toBe(false);
+    expect(existsSync(assetFile(ws.assetDir(docId), ref)!)).toBe(true);
+    expect(existsSync(join(data, 'chats', 't1.json'))).toBe(true);
+    expect(existsSync(join(data, 'reference', 'mock-p1.json'))).toBe(true);
+    expect(existsSync(join(data, 'assets', 'chats'))).toBe(false);
+    expect(ws.session(docId).dirty).toBe(false);
   });
 });
 

@@ -5,7 +5,8 @@
 
 /** Where a skill folder was found. `archadev` skills live in ~/.archadev/skills and are the only ones ArchaDev edits. */
 /** builtin: the design skills that ship with ArchaDev (repo `skills/`), on by default. */
-export type SkillSource = 'archadev' | 'builtin' | 'claude' | 'codex' | 'gemini' | 'agents';
+/** document: the open document's own skills, in `<name>-data/skills/` — they travel with the file. */
+export type SkillSource = 'archadev' | 'builtin' | 'document' | 'claude' | 'codex' | 'gemini' | 'agents';
 
 export type Skill = {
   /** `<source>:<folder name>` */
@@ -18,6 +19,18 @@ export type Skill = {
   enabled: boolean;
   /** SKILL.md frontmatter could not be read. */
   error?: string;
+};
+
+/** Agent memory (blueprint AGENT_BRIDGE/07): global = ARCHA_HOME/memory, document = `<name>-data/memory/`. */
+export type MemoryScope = 'global' | 'document';
+export type MemoryEntry = {
+  /** `<scope>:<file name without .md>` */
+  id: string;
+  scope: MemoryScope;
+  name: string;
+  text: string;
+  updatedAt: number;
+  file: string;
 };
 
 export type SkillsOverview = { skills: Skill[]; libraryDir: string; sources: Array<{ source: SkillSource; label: string; dir: string; exists: boolean }> };

@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { z } from 'zod';
 import { DocumentError } from '@archa/core';
 import type { Skill, SkillSource, SkillsOverview } from '@archa/protocol';
@@ -12,7 +12,8 @@ import { claudeHostDir, codexHostDir, parse } from './accounts';
  * (YAML frontmatter `name` + `description`, then instructions). ArchaDev keeps its own library in
  * ~/.archadev/skills, ships built-in design skills (repo `skills/`, path from ARCHA_BUILTIN_SKILLS),
  * and hands the enabled ones of both to chat runs; skills the agent CLIs already load on their own
- * (~/.claude/skills, ~/.codex/skills, …) are listed read-only.
+ * (~/.claude/skills, ~/.codex/skills, …) are listed read-only. A document can carry its own skills in
+ * `<name>-data/skills/`: they are always on for that document's chats and win over a same-named one.
  */
 
 export const skillsDir = () => join(archaHome(), 'skills');
@@ -34,19 +35,33 @@ export const skillParams = {
   create: z.object({ name: slug, description: z.string().trim().min(1).max(1024), body: z.string().max(200_000) }),
   import: z.object({ dir: z.string().trim().min(1).max(1024) }),
   update: z.object({ id: z.string().min(1).max(200), enabled: z.boolean() }),
-  byId: z.object({ id: z.string().min(1).max(200) }),
+  byId: z.object({ id: z.string().min(1).max(200), docId: z.string().optional() }),
+  readForAgent: z.object({ docId: z.string().optional(), name: z.string().trim().min(1).max(120), file: z.string().trim().max(400).optional() }),
 };
 
 type State = { version: 1; disabled: string[] };
 /** Longest SKILL.md body sent with a message; longer skills are cut and the agent is pointed at the file. */
 const MAX_MENTION = 40_000;
+/** read_skill: longest text returned and files listed. Text only — the agent has no other way to open the rest. */
+const MAX_SKILL_FILE = 120_000;
+const MAX_LISTED = 80;
+const TEXT_EXT = new Set(['', '.md', '.mdx', '.txt', '.json', '.yaml', '.yml', '.toml', '.csv', '.html', '.htm', '.css', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.py', '.ps1', '.sh', '.svg', '.xml']);
+/** Mentions and read_skill look a name up in this order. */
+const LOOKUP: SkillSource[] = ['document', 'archadev', 'builtin', 'claude', 'agents', 'codex', 'gemini'];
 
 export class SkillManager {
   constructor(private changed: () => void) {}
 
-  overview(): SkillsOverview {
+  /** docSkills: the open document's `<name>-data/skills/` folder, when there is one. */
+  overview(docSkills?: string): SkillsOverview {
     const disabled = new Set(this.state().disabled);
     const skills: Skill[] = [];
+    if (docSkills) {
+      for (const folder of listDirs(docSkills)) {
+        const meta = readSkill(join(docSkills, folder));
+        if (meta) skills.push({ id: `document:${folder}`, name: meta.name || folder, description: meta.description, source: 'document', dir: join(docSkills, folder), enabled: true, error: meta.error });
+      }
+    }
     for (const s of SOURCES) {
       const dir = s.dir();
       if (!dir) continue;
@@ -59,7 +74,9 @@ export class SkillManager {
         });
       }
     }
-    return { skills, libraryDir: skillsDir(), sources: SOURCES.map((s) => ({ source: s.source, label: s.label, dir: s.dir(), exists: !!s.dir() && existsSync(s.dir()) })) };
+    const sources = SOURCES.map((s) => ({ source: s.source, label: s.label, dir: s.dir(), exists: !!s.dir() && existsSync(s.dir()) }));
+    if (docSkills) sources.unshift({ source: 'document', label: 'This document', dir: docSkills, exists: existsSync(docSkills) });
+    return { skills, libraryDir: skillsDir(), sources };
   }
 
   create(params: unknown): Skill {
@@ -110,9 +127,9 @@ export class SkillManager {
     this.changed();
   }
 
-  read(params: unknown): { content: string } {
+  read(params: unknown, docSkills?: string): { content: string } {
     const { id } = parse(skillParams.byId, params);
-    const skill = this.get(id);
+    const skill = this.get(id, docSkills);
     return { content: readFileSync(join(skill.dir, 'SKILL.md'), 'utf8').slice(0, 200_000) };
   }
 
@@ -120,32 +137,71 @@ export class SkillManager {
    * A skill the person named with `/name` in a chat message, from any source (the ArchaDev library
    * first). Its instructions ride along with that message, so every agent CLI can follow it.
    */
-  mention(name: string): { name: string; description: string; dir: string; body: string } | null {
-    const want = name.toLowerCase();
-    const order: SkillSource[] = ['archadev', 'builtin', 'claude', 'agents', 'codex', 'gemini'];
-    const hit = this.overview().skills
-      .filter((s) => !s.error && (s.name.toLowerCase() === want || basename(s.dir).toLowerCase() === want))
-      .sort((a, b) => order.indexOf(a.source) - order.indexOf(b.source))[0];
+  mention(name: string, docSkills?: string): { name: string; description: string; dir: string; body: string } | null {
+    const hit = this.lookup(name, docSkills);
     if (!hit) return null;
     let text: string;
     try { text = readFileSync(join(hit.dir, 'SKILL.md'), 'utf8'); } catch { return null; }
     const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
-    return { name: hit.name, description: hit.description, dir: hit.dir, body: body.length > MAX_MENTION ? `${body.slice(0, MAX_MENTION)}\n… (truncated — read the rest from SKILL.md)` : body };
+    return { name: hit.name, description: hit.description, dir: hit.dir, body: body.length > MAX_MENTION ? `${body.slice(0, MAX_MENTION)}\n… (truncated — read the rest with read_skill)` : body };
   }
 
-  /** Enabled library and built-in skill folders, for a chat run. A library skill replaces a built-in one of the same name. */
-  forRun(): string[] {
-    return this.forRunSkills().map((s) => s.dir);
+  /**
+   * MCP `read_skill` (blueprint AGENT_BRIDGE/05): a skill's SKILL.md plus the list of its files, or one
+   * text file inside its folder — served by the core, so every agent CLI can use a skill and its
+   * references without file tools. Same lookup as a mention. Never reads outside the skill folder.
+   */
+  readForAgent(params: unknown, docSkills?: string): string {
+    const p = parse(skillParams.readForAgent, params);
+    const hit = this.lookup(p.name, docSkills);
+    if (!hit) {
+      const want = p.name.replace(/^\//, '').toLowerCase();
+      const close = this.overview(docSkills).skills.filter((s) => !s.error && (s.name.toLowerCase().includes(want) || s.description.toLowerCase().includes(want))).map((s) => s.name);
+      throw new DocumentError('NOT_FOUND', `No skill "${p.name}".${close.length ? ` Close: ${[...new Set(close)].slice(0, 6).join(', ')}` : ''}`);
+    }
+    const files = listFiles(hit.dir);
+    if (!p.file) {
+      const others = files.filter((f) => f !== 'SKILL.md');
+      const list = others.length
+        ? [``, `Files in this skill — read one with read_skill { name: "${hit.name}", file: "<path>" }:`, ...others.slice(0, MAX_LISTED).map((f) => `- ${f}`), ...(others.length > MAX_LISTED ? [`… ${others.length - MAX_LISTED} more`] : [])]
+        : [];
+      return [`Skill ${hit.name} (${hit.source})`, '', clip(readFileSync(join(hit.dir, 'SKILL.md'), 'utf8')), ...list].join('\n');
+    }
+    const root = resolve(hit.dir);
+    const back = relative(root, resolve(root, p.file)).replace(/\\/g, '/');
+    if (!back || back.startsWith('..') || isAbsolute(back)) throw new DocumentError('VALIDATION', `"${p.file}" is outside the skill folder`);
+    if (!files.includes(back)) throw new DocumentError('NOT_FOUND', `No file "${p.file}" in skill ${hit.name}. Files: ${files.slice(0, 30).join(', ')}`);
+    if (!TEXT_EXT.has(extname(back).toLowerCase())) throw new DocumentError('VALIDATION', `"${p.file}" is not a text file — read_skill returns text only`);
+    return `${hit.name}/${back}\n\n${clip(readFileSync(join(root, back), 'utf8'))}`;
   }
 
-  forRunSkills(): Skill[] {
-    const on = this.overview().skills.filter((s) => (s.source === 'archadev' || s.source === 'builtin') && s.enabled && !s.error);
-    const own = new Set(on.filter((s) => s.source === 'archadev').map((s) => s.name.toLowerCase()));
-    return on.filter((s) => s.source === 'archadev' || !own.has(s.name.toLowerCase()));
+  /** A readable skill by name or folder name, from any source (`LOOKUP` order). */
+  private lookup(name: string, docSkills?: string): Skill | null {
+    const want = name.replace(/^\//, '').toLowerCase();
+    return this.overview(docSkills).skills
+      .filter((s) => !s.error && (s.name.toLowerCase() === want || basename(s.dir).toLowerCase() === want))
+      .sort((a, b) => LOOKUP.indexOf(a.source) - LOOKUP.indexOf(b.source))[0] ?? null;
   }
 
-  private get(id: string): Skill {
-    const s = this.overview().skills.find((x) => x.id === id);
+  /**
+   * Skill folders for a chat run: the document's own, then enabled library and built-in ones. A skill
+   * replaces any same-named one further down that list (document > library > built-in).
+   */
+  forRun(docSkills?: string): string[] {
+    return this.forRunSkills(docSkills).map((s) => s.dir);
+  }
+
+  forRunSkills(docSkills?: string): Skill[] {
+    const rank: Partial<Record<SkillSource, number>> = { document: 0, archadev: 1, builtin: 2 };
+    const on = this.overview(docSkills).skills
+      .filter((s) => rank[s.source] !== undefined && s.enabled && !s.error)
+      .sort((a, b) => rank[a.source]! - rank[b.source]!);
+    const seen = new Set<string>();
+    return on.filter((s) => !seen.has(s.name.toLowerCase()) && !!seen.add(s.name.toLowerCase()));
+  }
+
+  private get(id: string, docSkills?: string): Skill {
+    const s = this.overview(docSkills).skills.find((x) => x.id === id);
     if (!s) throw new DocumentError('NOT_FOUND', `No skill ${id}`);
     return s;
   }
@@ -185,6 +241,21 @@ function listDirs(dir: string): string[] {
     return [];
   }
 }
+
+/** Files of a skill folder, relative with `/`, without dot folders and node_modules (at most 500). */
+function listFiles(dir: string, sub = '', out: string[] = []): string[] {
+  let entries: string[];
+  try { entries = readdirSync(join(dir, sub)).sort(); } catch { return out; }
+  for (const e of entries) {
+    if (e.startsWith('.') || e === 'node_modules' || out.length >= 500) continue;
+    const rel = sub ? `${sub}/${e}` : e;
+    if (isDir(join(dir, rel))) listFiles(dir, rel, out);
+    else out.push(rel);
+  }
+  return out;
+}
+
+const clip = (text: string) => (text.length > MAX_SKILL_FILE ? `${text.slice(0, MAX_SKILL_FILE)}\n… (cut at ${MAX_SKILL_FILE} characters)` : text);
 
 function isDir(p: string) {
   try { return statSync(p).isDirectory(); } catch { return false; }

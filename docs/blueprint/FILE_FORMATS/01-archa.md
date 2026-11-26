@@ -22,27 +22,31 @@
 - `manifest.json` is the first entry so it can be read without inflating the rest.
 - Pages load lazily: visible page first, others on demand.
 
-`formatVersion` 5 (current, `FORMAT_VERSION` in `packages/schema/src/document.ts`): `document.json` = `{ meta, variables, comments }`; v5 lets image sources (image nodes and image paints) be `asset:` references (below). Older files migrate on open (`packages/formats/src/migrations/archa/`, fixtures `test/fixtures/archa-v<N>/`). The `assets/` zip entry above is not built — images live in the asset folder instead.
+`formatVersion` 5 (current, `FORMAT_VERSION` in `packages/schema/src/document.ts`): `document.json` = `{ meta, variables, comments }`; v5 lets image sources (image nodes and image paints) be `asset:` references (below). Older files migrate on open (`packages/formats/src/migrations/archa/`, fixtures `test/fixtures/archa-v<N>/`). The `assets/` zip entry above is not built — images live in the data folder instead.
 
 ---
 
-## Asset Folder — `<name>-asset/` (built, v5)
+## Data Folder — `<name>-data/` (built, v5; `<name>-asset/` before 1.8)
 
 | Path | Content |
 |---|---|
 | `landing.archa` | The document — no base64 anywhere |
-| `landing-asset/images/<sha256-24>.<ext>` | Image files, content-addressed; nodes say `src: "asset:images/<file>"` |
-| `landing-asset/chats/<threadId>.json` | One conversation each → [AGENT_BRIDGE/03 → Chat History](../AGENT_BRIDGE/03-runs-steering.md) |
-| `landing-asset/chats/attachments/<threadId>/` | Images pasted into that conversation |
+| `landing-data/assets/<kind>/<sha256-24>.<ext>` | Asset files, content-addressed, by type: `images/`, `svg/`, `videos/`, `fonts/`, `files/` (`assetKind`). Nodes say `src: "asset:images/<file>"` — `asset:` resolves inside `assets/` |
+| `landing-data/chats/<threadId>.json` | One conversation each → [AGENT_BRIDGE/03 → Chat History](../AGENT_BRIDGE/03-runs-steering.md) |
+| `landing-data/chats/attachments/<threadId>/` | Images pasted into that conversation (`asset:chats/…`, resolved against the data folder) |
+| `landing-data/skills/<name>/SKILL.md` | The document's own skills → [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
+| `landing-data/memory/<slug>.md` | The document's agent memory → [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) |
+| `landing-data/reference/<file>-p<N>.json` | `reference` output → [MCP/05](../MCP/05-reference-compare.md) |
 
 | Rule | Detail |
 |---|---|
-| Arrival | Every transaction passes `DocumentSession.transformOps` (`core-host/assets.ts`): a data: URL, absolute image path or `file://` URL in an image node `src` or an image paint `src` is copied into `images/` first. Listeners, undo and the file only ever see `asset:` |
+| Arrival | Every transaction passes `DocumentSession.transformOps` (`core-host/assets.ts`): a data: URL, absolute image path or `file://` URL in an image node `src` or an image paint `src` is copied into `assets/images/` first. Listeners, undo and the file only ever see `asset:` |
 | Other sources | `http(s)` URLs stay as they are (loaded through the host proxy) |
 | Opening older files | Base64 images are written out on open; the document is marked dirty so the next save drops them |
-| Unsaved | Folder lives in `ARCHA_HOME/runtime/assets/<docId>/`; the first save moves it next to the file. Save As copies it to `<new name>-asset/` |
+| Unsaved | Folder lives in `ARCHA_HOME/runtime/data/<docId>/`; the first save moves it next to the file. Save As copies it to `<new name>-data/` |
+| Pre-1.8 folder | `migrateDataDir` on open and on save: `<name>-asset/` → `<name>-data/`, its `chats/` and `reference/` keep their place, everything else moves under `assets/`. References are unchanged (no format bump). A file already in the new place is never overwritten |
 | Exports, libraries | `inlineData` turns `asset:` back into data: URLs for HTML/SVG/PDF export and published library components (they must stand alone) |
-| Loading | Renderer resolves `asset:` with `DocSummary.assetDir` → `archa-asset://file/<path>`; web images → `archa-asset://remote/<url>`. Main serves only image files inside a `*-asset` folder or `ARCHA_HOME/runtime`, with CORS so canvases stay exportable |
+| Loading | Renderer resolves `asset:` with `DocSummary.assetDir` (chat thumbnails: `DocSummary.dataDir`) → `archa-asset://file/<path>`; web images → `archa-asset://remote/<url>`. Main serves only image files inside a `*-data` (or pre-1.8 `*-asset`) folder or `ARCHA_HOME/runtime`, with CORS so canvases stay exportable |
 | Cleanup | Files are never deleted automatically — an unreferenced image costs disk, a deleted one loses data |
 
 ---
@@ -88,7 +92,7 @@ Round-trip `pack ∘ unpack` and `unpack ∘ pack` are lossless — tested on ev
 
 ---
 
-**Linked from:** [REFERENCE](../REFERENCE.md)
+**Linked from:** [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) · [REFERENCE](../REFERENCE.md)
 
 **Code:** [`apps/desktop/src/core-host/assets.ts`](../../../apps/desktop/src/core-host/assets.ts) · [`apps/desktop/src/main/asset-paths.ts`](../../../apps/desktop/src/main/asset-paths.ts) · [`apps/desktop/src/main/assets-protocol.ts`](../../../apps/desktop/src/main/assets-protocol.ts) · [`apps/desktop/src/renderer/lib/asset-urls.ts`](../../../apps/desktop/src/renderer/lib/asset-urls.ts) · [`apps/desktop/test/assets.test.ts`](../../../apps/desktop/test/assets.test.ts) · [`packages/formats/src/archa.ts`](../../../packages/formats/src/archa.ts) · [`packages/formats/test/archa.test.ts`](../../../packages/formats/test/archa.test.ts) · [`packages/schema/src/document.ts`](../../../packages/schema/src/document.ts)
 <!-- backlinks:end -->

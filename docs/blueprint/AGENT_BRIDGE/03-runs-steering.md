@@ -96,7 +96,7 @@ No session id seen yet → new session with the original task + previous output.
 |---|---|
 | Process | An adapter with `warm` (Claude, agy) keeps **one CLI process per thread**, fed one NDJSON message per turn (`--input-format stream-json`). Codex stays one process per turn (`exec resume`) |
 | Turn end | Parser emits `{ kind: 'turn', ok, costUsd? }` (Claude `result`, agy `event: result`) → status `Done in N s · $x` |
-| Images | Pasted into the composer (max 6, long side ≤ 1568 px). Saved to the document's `<name>-asset/chats/attachments/<threadId>/`; Claude gets them as inline image blocks (no file tools), agy/codex get the paths (codex also `--image=`). History keeps 160 px thumbnails as attachment files (`asset:` references), never base64 |
+| Images | Pasted into the composer (max 6, long side ≤ 1568 px). Saved to the document's `<name>-data/chats/attachments/<threadId>/`; Claude gets them as inline image blocks (no file tools), agy/codex get the paths (codex also `--image=`). History keeps 160 px thumbnails as attachment files (`asset:` references), never base64 |
 | Pre-warm | `chat.warm` on composer focus spawns the process (no thread yet → a thread id is reserved and returned) |
 | Identity | `ARCHA_RUN_ID` = the process id, so its `archa mcp` keeps the thread's session name across turns |
 | Queue | A message to a working thread is queued (`queued: true`); `now: true` stops the turn first. The queue drains in order when a turn ends |
@@ -122,7 +122,7 @@ Failover: `rate_limited` event → offer next profile/agent (auto if setting on)
 | Rule | Detail |
 |---|---|
 | Thread | Every `chat.send` carries `threadId` (none = new thread, returned in the result). The CLI session resumes per `threadId:agent:login`, so New chat starts fresh |
-| Storage | One JSON file per conversation in the document's asset folder: `<name>-asset/chats/<threadId>.json` = `{ version, threadId, agent, persona, createdAt, updatedAt, messages }` (`core-host/chat-store.ts`). Never inside the `.archa`; opening a document loads its conversations from the folder. Session ids stay per machine in `ARCHA_HOME/chats/sessions.json`. Pre-0.4.1 `chats/<docId>.jsonl` is split into thread files on first load and renamed `.migrated` |
+| Storage | One JSON file per conversation in the document's data folder: `<name>-data/chats/<threadId>.json` = `{ version, threadId, agent, persona, createdAt, updatedAt, messages }` (`core-host/chat-store.ts`). Never inside the `.archa`; opening a document loads its conversations from the folder. Session ids stay per machine in `ARCHA_HOME/chats/sessions.json`. Pre-0.4.1 `chats/<docId>.jsonl` is split into thread files on first load and renamed `.migrated` |
 | Reopen | Activating a document reopens its most recent thread |
 | Delete | `chat.deleteThread` removes the thread's file and attachments; refused while that thread runs |
 

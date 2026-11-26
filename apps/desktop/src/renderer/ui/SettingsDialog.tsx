@@ -1,11 +1,12 @@
 import { useEffect, type ReactNode } from 'react';
-import { Blocks, Bot, Info, Lock, Plug, Sparkles, TerminalSquare, X } from 'lucide-react';
+import { Blocks, Bot, Brain, Info, Lock, Plug, Sparkles, TerminalSquare, X } from 'lucide-react';
 import { loadAccounts, loadMcpServers, loadSkills, useStore, type SettingsPage } from '../lib/store';
 import { cn } from './controls';
 import { BrandMark } from './settings/Logo';
 import { ProvidersPage } from './settings/ProvidersPage';
 import { SkillsPage } from './settings/SkillsPage';
 import { McpPage } from './settings/McpPage';
+import { MemoryPage } from './settings/MemoryPage';
 import { AboutPage, ConnectPage, GithubPage, IntegrationsPage } from './settings/OtherPages';
 
 /*
@@ -29,6 +30,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
         },
       },
       { id: 'skills', label: 'Skills', icon: <Sparkles size={15} />, badge: (s) => (s.skills ? <Count>{s.skills.skills.filter((k) => k.source === 'archadev' && k.enabled).length || null}</Count> : null) },
+      { id: 'memory', label: 'Memory', icon: <Brain size={15} /> },
       { id: 'mcp', label: 'MCP servers', icon: <Plug size={15} />, badge: (s) => (s.mcpServers?.length ? <Count>{s.mcpServers.filter((m) => m.enabled).length}</Count> : null) },
     ],
   },
@@ -96,6 +98,7 @@ export function SettingsDialog() {
           <div key={page} className="min-h-0 flex-1 overflow-y-auto px-8 pb-8 pt-6 pr-14">
             {page === 'providers' && <ProvidersPage />}
             {page === 'skills' && <SkillsPage />}
+            {page === 'memory' && <MemoryPage />}
             {page === 'mcp' && <McpPage />}
             {page === 'connect' && <ConnectPage />}
             {page === 'github' && <GithubPage onOpenMcp={() => go('mcp')} />}
