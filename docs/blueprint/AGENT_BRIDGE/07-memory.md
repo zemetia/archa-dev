@@ -2,7 +2,7 @@
 
 ← [AGENT_BRIDGE.md](../AGENT_BRIDGE.md) | [Blueprint INDEX](../INDEX.md) | [06 — Orchestrate mode](./06-orchestrate.md)
 
-**Built (1.8).** Code: `core-host/memory.ts` (`MemoryStore`), `core-host/agents.ts` (first-turn block), `apps/cli/src/mcp.ts` (`remember` / `forget` / `recall`), `renderer/ui/settings/MemoryPage.tsx`. Types: `packages/protocol/src/settings.ts`. Tests: `apps/desktop/test/memory.test.ts`.
+**Built (1.7.3).** Code: `core-host/memory.ts` (`MemoryStore`), `core-host/agents.ts` (first-turn block), `apps/cli/src/mcp.ts` (`remember` / `forget` / `recall`), `renderer/ui/settings/MemoryPage.tsx`. Types: `packages/protocol/src/settings.ts`. Tests: `apps/desktop/test/memory.test.ts`.
 
 ---
 

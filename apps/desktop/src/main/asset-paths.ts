@@ -7,7 +7,7 @@ export const ASSET_MIME: Record<string, string> = {
   pdf: 'application/pdf', // staged references (compare, reference) only
 };
 
-/** Only image files, and only inside a `*-data` (pre-1.8 `*-asset`) folder or ARCHA_HOME/runtime — never an arbitrary file. */
+/** Only image files, and only inside a `*-data` (pre-1.7.3 `*-asset`) folder or ARCHA_HOME/runtime — never an arbitrary file. */
 export function allowedAssetFile(path: string, home = archaHome()): boolean {
   if (!isAbsolute(path)) return false;
   const p = normalize(path);

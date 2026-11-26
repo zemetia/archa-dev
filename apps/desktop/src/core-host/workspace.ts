@@ -302,7 +302,7 @@ export class Workspace {
       if (existing) return { docId: existing.id };
       const data = decodeArcha(new Uint8Array(await readFile(path)));
       if (this.sessions.has(data.meta.id)) data.meta.id = newId();
-      // A pre-1.8 `<name>-asset/` folder moves into `<name>-data/`.
+      // A pre-1.7.3 `<name>-asset/` folder moves into `<name>-data/`.
       migrateDataDir(path, data.meta.id);
       // Older files carry images as base64: write them out to `<name>-data/assets/`; the next save drops the base64.
       const moved = externalizeData(assetDirFor(path, data.meta.id), data);
@@ -436,7 +436,7 @@ export class Workspace {
     'app.info': () => {
       const m = mcpCommand();
       return {
-        version: '1.7.0',
+        version: '1.7.3',
         user: userName(),
         cliPath: cliPath(),
         mcpCommand: [m.command, ...m.args],

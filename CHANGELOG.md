@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-11-26
+
+### Canvas
+- **Alt while resizing scales the contents too**: children, fonts, strokes, radii, gap, padding and shadows follow the box, like the Scale tool (K). **Alt+Shift** also keeps the ratio. Works for one layer and for a multi-selection (Alt no longer means "from the centre" there; rotate still uses Alt for the box-centre pivot).
+- **Smart guides while moving** (Canva / Figma style): a dragged layer snaps its left / centre / right and top / middle / bottom to nearby layers and to its frame, with red guide lines. Hold Ctrl / Cmd to move freely.
+
+### Chat
+- **Agent logos**: the agent picker and every agent cursor on the canvas show the Claude, Antigravity or Codex logo.
+- **How long the agent worked**: each turn ends with "Worked for 1m 05s" (plus cost when known) under the reply; a live timer ticks while it runs. Stopped and failed turns say "Stopped after …" / "Failed after …".
+- **Send now for queued messages**: a message sent while the agent works is pinned above the composer instead of landing in the chat early. **Send** stops the current turn and runs it next; **X** drops it. It joins the history when its turn starts.
+
+### Browser
+- The page no longer gets stuck in the wrong place when the Design or Layers panel opens or closes (it used to need a resize to catch up).
+- The browser pane opens at its minimum width (360 px) and can only be dragged wider.
+
 ### Data folder
 - **`<name>-asset/` is now `<name>-data/`**, one folder for everything that belongs to a design but not inside the `.archa`: `assets/` (by type: `images/`, `svg/`, `videos/`, `fonts/`), `chats/`, `skills/`, `memory/` and `reference/`. Older folders move into the new layout the first time the file is opened; image references keep working.
 

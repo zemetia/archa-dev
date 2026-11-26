@@ -47,7 +47,7 @@
 | `skills/`, `skills.json` | **Built:** ArchaDev-owned skills; enabled state → [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
 | `mcp.json` | **Built:** external MCP servers handed to runs (secrets stay here) |
 | `memory/<slug>.md` | **Built:** global agent memory, one fact per file → [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) |
-| `runtime/data/<docId>/` | Data folder of an unsaved document (`assets/`, `chats/`, …); moves next to the file as `<name>-data/` on first save. Pre-1.8 `runtime/assets/<docId>/` is migrated |
+| `runtime/data/<docId>/` | Data folder of an unsaved document (`assets/`, `chats/`, …); moves next to the file as `<name>-data/` on first save. Pre-1.7.3 `runtime/assets/<docId>/` is migrated |
 | `runtime/screenshots/` | Agent and browser screenshots, temporary (24 h / 300 files) |
 | `logs/` | Rotating logs per process |
 

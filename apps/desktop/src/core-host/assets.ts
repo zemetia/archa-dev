@@ -11,7 +11,7 @@ import { ASSET_SCHEME, type DocumentData, type Node, type Op } from '@archa/sche
  * `chats/`, `skills/`, `memory/` and `reference/`. Image nodes point into `assets/` with
  * `asset:images/<hash>.<ext>` — never base64. Any data: URL or local image path that reaches the core
  * (paste, import, agent, library) is copied there first. Unsaved documents keep their folder under
- * ARCHA_HOME/runtime/data/<docId> until the first save. Before 1.8 the folder was `<name>-asset/` with
+ * ARCHA_HOME/runtime/data/<docId> until the first save. Before 1.7.3 the folder was `<name>-asset/` with
  * images at its root; it is moved into the new layout when the document is opened.
  */
 
@@ -36,11 +36,11 @@ export const assetDirFor = (filePath: string | null, docId: string) => join(data
 
 export const isRuntimeDataDir = (dir: string) => !relative(join(archaHome(), 'runtime', 'data'), dir).startsWith('..');
 
-/** Folders of the data root that are not assets; anything else in a pre-1.8 `-asset/` folder was an asset. */
+/** Folders of the data root that are not assets; anything else in a pre-1.7.3 `-asset/` folder was an asset. */
 const DATA_DIRS = new Set(['assets', 'chats', 'skills', 'memory', 'reference']);
 
 /**
- * Pre-1.8 `<name>-asset/` (images at its root, chats/, reference/) → `<name>-data/` with images under
+ * Pre-1.7.3 `<name>-asset/` (images at its root, chats/, reference/) → `<name>-data/` with images under
  * `assets/`. `asset:` references keep working because they resolve inside `assets/`. Also moves an
  * unsaved document's old runtime folder. Never overwrites: a file already in the new place wins.
  */

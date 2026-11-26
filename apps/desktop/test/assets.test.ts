@@ -114,7 +114,7 @@ describe('data folder', () => {
     expect(storeBytes(dir, Buffer.from('x'), 'png')).toMatch(/^asset:images\//);
   });
 
-  it('opening a pre-1.8 file moves its <name>-asset folder into <name>-data with the same references', async () => {
+  it('opening a pre-1.7.3 file moves its <name>-asset folder into <name>-data with the same references', async () => {
     const s = new DocumentSession(ArchaDocument.create('Legacy'));
     const path = join(work, 'legacy.archa');
     const old = join(work, 'legacy-asset');

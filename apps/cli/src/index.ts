@@ -8,7 +8,7 @@ import { runMcp } from './mcp';
 
 const program = new Command('archa')
   .description('ArchaDev — design canvas for people and local agents')
-  .version('1.7.0');
+  .version('1.7.3');
 
 program
   .command('mcp')

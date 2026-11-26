@@ -26,7 +26,7 @@
 
 ---
 
-## Data Folder — `<name>-data/` (built, v5; `<name>-asset/` before 1.8)
+## Data Folder — `<name>-data/` (built, v5; `<name>-asset/` before 1.7.3)
 
 | Path | Content |
 |---|---|
@@ -44,9 +44,9 @@
 | Other sources | `http(s)` URLs stay as they are (loaded through the host proxy) |
 | Opening older files | Base64 images are written out on open; the document is marked dirty so the next save drops them |
 | Unsaved | Folder lives in `ARCHA_HOME/runtime/data/<docId>/`; the first save moves it next to the file. Save As copies it to `<new name>-data/` |
-| Pre-1.8 folder | `migrateDataDir` on open and on save: `<name>-asset/` → `<name>-data/`, its `chats/` and `reference/` keep their place, everything else moves under `assets/`. References are unchanged (no format bump). A file already in the new place is never overwritten |
+| Pre-1.7.3 folder | `migrateDataDir` on open and on save: `<name>-asset/` → `<name>-data/`, its `chats/` and `reference/` keep their place, everything else moves under `assets/`. References are unchanged (no format bump). A file already in the new place is never overwritten |
 | Exports, libraries | `inlineData` turns `asset:` back into data: URLs for HTML/SVG/PDF export and published library components (they must stand alone) |
-| Loading | Renderer resolves `asset:` with `DocSummary.assetDir` (chat thumbnails: `DocSummary.dataDir`) → `archa-asset://file/<path>`; web images → `archa-asset://remote/<url>`. Main serves only image files inside a `*-data` (or pre-1.8 `*-asset`) folder or `ARCHA_HOME/runtime`, with CORS so canvases stay exportable |
+| Loading | Renderer resolves `asset:` with `DocSummary.assetDir` (chat thumbnails: `DocSummary.dataDir`) → `archa-asset://file/<path>`; web images → `archa-asset://remote/<url>`. Main serves only image files inside a `*-data` (or pre-1.7.3 `*-asset`) folder or `ARCHA_HOME/runtime`, with CORS so canvases stay exportable |
 | Cleanup | Files are never deleted automatically — an unreferenced image costs disk, a deleted one loses data |
 
 ---
