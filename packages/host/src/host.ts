@@ -73,7 +73,7 @@ export class Host {
       ['skills', skillRoutes(ctx, this.skills)],
       ['memory', memoryRoutes(this.memory)],
       ['mcp-servers', mcpServerRoutes(this.mcpServers)],
-      ['app', appRoutes(ctx, { version: opts.version ?? '1.7.3', cliPath: opts.cliPath, mcpCommand: opts.mcpCommand })],
+      ['app', appRoutes(ctx, { version: opts.version ?? '1.8.0', cliPath: opts.cliPath, mcpCommand: opts.mcpCommand })],
     ]);
     this.handlers = Object.fromEntries(Object.keys(this.router.routes).map((m) => [m, (p: unknown, c: Connection) => this.router.call(m, p, c)])) as Invoke;
     if (!opts.windows) ctx.newDoc('Untitled');

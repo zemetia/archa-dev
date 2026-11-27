@@ -16,7 +16,7 @@ export type McpServerOptions = {
  * watches the agent work live (blueprint MCP/01). `archa mcp` serves it over stdio.
  */
 export function createMcpServer({ getCore, defaultDoc }: McpServerOptions): McpServer {
-  const server = new McpServer({ name: 'archadev', version: '1.7.3' });
+  const server = new McpServer({ name: 'archadev', version: '1.8.0' });
   // Every document tool also takes `doc`, which wins over the default (blueprint MCP/01 → Tool List).
   registerTools(server, getCore, (doc) => doc || defaultDoc);
   return server;

@@ -2,13 +2,25 @@
 
 All notable changes to this project are documented in this file, following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.8.0] - 2026-11-28
 
 ### Projects and files
 - **Open this folder with Archa**: right-click a folder (or inside one, or a drive) in Explorer. Also File → Open folder… (Ctrl+Shift+O). The folder becomes a project in its own window; an open project is focused instead of opened twice.
 - **`.design/` folder**: every project gets `<folder>/.design/` for any number of `.archa` files. New designs save there without asking for a path (`Untitled.archa`, `Untitled 2.archa` …). The project chip in the title bar lists them.
 - **Reopens what you had open** (like VS Code): each window — a project or the public window with no folder — remembers its open files in ArchaDev's own folder and opens them again next time. Unsaved untitled work outside a project comes back too.
 - **Auto-save**: open designs with changes are saved when an agent finishes and every 45 seconds. Settings → General turns it off or changes the interval. Quitting never loses unsaved work.
+
+### Agents
+- **`archa mcp --headless` (`-hl`)**: agents can design without the app open. With no app running it starts ArchaDev's core inside the CLI, which opens and saves `.archa` files. Plain `archa mcp` still needs the app.
+- Agent tools accept what they did before the rewrite: `save_document` without `doc`, `say` with an empty `nodeId`, long document names.
+- Pictures placed from a download keep their file name on Windows and macOS / Linux alike.
+
+### Look
+- New **Frost Indigo** logo mark.
+
+### Under the hood
+- The core host is now its own package (`@archa/host`), shared by the app and headless `archa mcp`. Every RPC method and agent tool is defined once in a registry, and every request is checked against it before it runs.
+- Lint (Biome) and CI (typecheck, lint, tests, docs check on Windows and Linux) on every push.
 
 ## [1.7.3] - 2026-11-26
 
