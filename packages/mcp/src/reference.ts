@@ -3,7 +3,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { deflateSync } from 'node:zlib';
-import { storeBytes, assetFile } from './assets';
+import { storeBytes, assetFile } from '@archa/protocol/node';
 
 /*
  * "Rebuild from a reference" (blueprint MCP/05 → Reference): read a PDF page the way a designer measures a

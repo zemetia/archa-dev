@@ -1,6 +1,6 @@
 import { readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { paths, ensureDir, safeSegment } from '@archa/protocol/node';
+import { paths, ensureDir, safeSegment } from './storage';
 
 /*
  * Agent screenshots are temporary files (blueprint RENDERING/03 → Screenshots for Agents): full size, no cap,

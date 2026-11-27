@@ -7,11 +7,10 @@ import { CUSTOM_SET, customIconNode, getIcon, ICON_SETS, iconNode, iconSetMeta, 
 import { importSvg, isSvgMarkup, type SvgImportMode } from '@archa/formats';
 import { paintColor, colorToHex, hexToColor, isContainer, newId, type Node, type NodeInput, type Op } from '@archa/schema';
 import type { ExecuteResult, TrailAction, TrailStep } from '@archa/protocol';
-import type { Connection, Workspace } from './workspace';
+import type { Caller, ToolHost } from './tool-host';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
-import { assetFile, externalizeSrc, imageSize } from './assets';
-import { INLINE_BUDGET } from './shots';
+import { assetFile, externalizeSrc, imageSize, INLINE_BUDGET } from '@archa/protocol/node';
 
 /*
  * `execute`: an agent's JS snippet runs in QuickJS against a copy of the document.
@@ -79,7 +78,7 @@ export class AgentExecutor {
   private blobs = new Map<string, string>();
   private state ={ working: null as ArchaDocument | null, ops: [] as Op[], created: [] as Array<{ name: string; id: string }>, changed: new Map<string, string>(), output: [] as string[], shots: [] as Array<{ id: string; scale: number }>, pageRoot: '', selection: [] as string[], steps: [] as TrailStep[], assetDir: '' };
 
-  constructor(private ws: Workspace, private conn: Connection) {}
+  constructor(private ws: ToolHost, private conn: Caller) {}
 
   private async context(): Promise<QuickJSContext> {
     if (this.ctx) return this.ctx;
@@ -694,7 +693,7 @@ function summarise(created: Array<{ name: string }>, changed: Map<string, string
 }
 
 /** `get_state` text, pre-injected into agent prompts (blueprint MCP/01). */
-export function describeState(ws: Workspace, s: DocumentSession): string {
+export function describeState(ws: ToolHost, s: DocumentSession): string {
   const doc = s.doc;
   const page = doc.pages[0]!;
   const top = doc.children(page.rootId);
@@ -769,7 +768,7 @@ function describeComponents(doc: ArchaDocument): string[] {
   ];
 }
 
-function describeLibrary(ws: Workspace): string[] {
+function describeLibrary(ws: ToolHost): string[] {
   const items = ws.library.list();
   if (!items.length) return [];
   return [

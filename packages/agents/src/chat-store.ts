@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import type { ChatMessage } from '@archa/protocol';
 import { paths, docPaths, readJson, readJsonl, writeJsonAtomic, listDir } from '@archa/protocol/node';
-import { assetFile, decodeDataUrl, storeBytes } from './assets';
+import { assetFile, decodeDataUrl, storeBytes } from '@archa/protocol/node';
 
 /*
  * Chat history (blueprint AGENT_BRIDGE/03 → Chat History). Every conversation is one JSON file in the

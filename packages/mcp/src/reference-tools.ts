@@ -3,11 +3,9 @@ import { basename, extname, isAbsolute, join, normalize } from 'node:path';
 import { z } from 'zod';
 import { DocumentError, type ArchaDocument } from '@archa/core';
 import type { CompareRegion, CompareResult } from '@archa/protocol';
-import { paths, docPaths, ensureDir } from '@archa/protocol/node';
-import { imageSize } from './assets';
+import { paths, docPaths, ensureDir, imageSize, fitBudget, INLINE_BUDGET, saveShot, SLICE_HEIGHT } from '@archa/protocol/node';
 import { fileKey, readPdfPage, summarizePage } from './reference';
-import { fitBudget, INLINE_BUDGET, saveShot, SLICE_HEIGHT } from './shots';
-import { resolveRef, type Connection, type Workspace } from './workspace';
+import { resolveRef, type Caller, type ToolHost } from './tool-host';
 
 /*
  * MCP `reference` and `compare` (blueprint MCP/05): read a mockup into numbers, then measure how far the
@@ -44,7 +42,7 @@ function stage(path: string): string {
 }
 const fileUrl = (abs: string) => `archa-asset://file/${encodeURIComponent(abs)}`;
 
-export async function readReference(ws: Workspace, p: z.infer<typeof referenceSchema>, conn: Connection) {
+export async function readReference(ws: ToolHost, p: z.infer<typeof referenceSchema>, conn: Caller) {
   const s = ws.session(p.docId);
   const assetDir = ws.assetDir(s);
   const path = referenceFile(p.path);
@@ -94,7 +92,7 @@ function nodesIn(doc: ArchaDocument, rootId: string, reg: CompareRegion): string
   return hits.sort((a, b) => b.score - a.score || b.depth - a.depth).filter((h) => !seen.has(h.name) && seen.add(h.name)).slice(0, 3).map((h) => h.name);
 }
 
-export async function compareReference(ws: Workspace, p: z.infer<typeof compareSchema>, conn: Connection): Promise<CompareResult> {
+export async function compareReference(ws: ToolHost, p: z.infer<typeof compareSchema>, conn: Caller): Promise<CompareResult> {
   const s = ws.session(p.docId);
   const id = resolveRef(s, p.node);
   const path = referenceFile(p.reference);

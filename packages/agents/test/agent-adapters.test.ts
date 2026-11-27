@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ADAPTERS, type AgentEvent } from '../src/core-host/agent-adapters';
+import { ADAPTERS, type AgentEvent } from '../src/agent-adapters';
 
 const adapter = (id: string) => ADAPTERS.find((a) => a.id === id)!;
 const mcp = { command: 'node', args: ['archa.cjs', 'mcp', '--doc', 'd1', '--agent', 'x'], env: {} };

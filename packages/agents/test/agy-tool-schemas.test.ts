@@ -2,8 +2,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { ADAPTERS } from '../src/core-host/agent-adapters';
-import { agyErrorHint, badAgyTools } from '../src/core-host/agy-tool-schemas';
+import { ADAPTERS } from '../src/agent-adapters';
+import { agyErrorHint, badAgyTools } from '../src/agy-tool-schemas';
 
 // A fake home holding agy's MCP schema copies, as agy writes them (<home>/.gemini/antigravity-cli/mcp/<server>/<tool>.json).
 const home = mkdtempSync(join(tmpdir(), 'archa-agy-'));

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { docPaths, writeFileAtomic, dataDirFor, legacyAssetDirFor, DATA_SUBDIRS } from '@archa/protocol/node';
+import { docPaths, writeFileAtomic, dataDirFor, legacyAssetDirFor, DATA_SUBDIRS } from './storage';
 import { ASSET_SCHEME, type DocumentData, type Node, type Op } from '@archa/schema';
 
 /*

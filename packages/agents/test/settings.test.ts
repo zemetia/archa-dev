@@ -2,8 +2,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SkillManager, parseFrontmatter, skillsDir } from '../src/core-host/skills';
-import { McpServerManager } from '../src/core-host/mcp-servers';
+import { SkillManager, parseFrontmatter, skillsDir } from '../src/skills';
+import { McpServerManager } from '../src/mcp-servers';
 
 let root: string;
 let changes: number;

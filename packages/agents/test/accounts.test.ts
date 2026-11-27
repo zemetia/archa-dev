@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { AccountManager, agyIdentity, claudeIdentity, codexIdentity, profilesDir } from '../src/core-host/accounts';
+import { AccountManager, agyIdentity, claudeIdentity, codexIdentity, profilesDir } from '../src/accounts';
 
 let home: string;
 let notified: Array<string | undefined>;
