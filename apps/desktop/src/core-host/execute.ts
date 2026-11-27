@@ -117,7 +117,7 @@ export class AgentExecutor {
 
   async run(session: DocumentSession, params: { code?: string; editId?: string; edits?: Array<{ find: string; replace: string }> }): Promise<ExecuteResult> {
     let code = params.code;
-    let editId = params.editId;
+    const editId = params.editId;
     if (editId) {
       const prev = this.failed.get(editId);
       if (!prev) return { ok: false, revision: session.revision, reason: `Unknown or expired editId "${editId}". Resend the full snippet.`, editId: newId(6) };

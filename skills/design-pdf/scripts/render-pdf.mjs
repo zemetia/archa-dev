@@ -26,7 +26,7 @@ execFileSync(browser, ['--headless=new', '--no-pdf-header-footer', '--virtual-ti
 console.log(out);
 
 if (preview) {
-  const prefix = out.replace(/\.pdf$/i, '') + '-page';
+  const prefix = `${out.replace(/\.pdf$/i, '')}-page`;
   try {
     execFileSync('pdftoppm', ['-png', '-r', dpi, out, prefix], { stdio: 'ignore' });
     const base = basename(prefix);

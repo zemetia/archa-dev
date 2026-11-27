@@ -55,7 +55,7 @@ const NEVER_COPIED = new Set(['id', 'parentId', 'children', 'meta']);
  * adds the properties it changes to that node's `meta.overrides`. Patches that set `meta` themselves
  * (sync, detach, undo) manage it and are left alone.
  */
-export function trackOverrides(doc: ArchaDocument, prev: Node, patch: Record<string, unknown>): Record<string, unknown> {
+export function trackOverrides(_doc: ArchaDocument, prev: Node, patch: Record<string, unknown>): Record<string, unknown> {
   if ('meta' in patch) return {};
   const root = instanceOf(prev) !== null;
   if (!root && sourceOf(prev) === null) return {};

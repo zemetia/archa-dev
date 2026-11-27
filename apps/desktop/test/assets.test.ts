@@ -251,7 +251,7 @@ describe('chat history in the asset folder', () => {
     rmSync(legacy, { recursive: true, force: true });
     const dir = join(work, 'p-asset');
     mkdirSync(legacy, { recursive: true });
-    writeFileSync(join(legacy, 'd1.jsonl'), [msg('t1', 'a', 1, { images: [DATA] }), msg('t2', 'b', 2)].map((m) => JSON.stringify(m)).join('\n') + '\n');
+    writeFileSync(join(legacy, 'd1.jsonl'), `${[msg('t1', 'a', 1, { images: [DATA] }), msg('t2', 'b', 2)].map((m) => JSON.stringify(m)).join('\n')}\n`);
     const store = new ChatStore(() => dir, () => legacy);
     const list = store.list('d1');
     expect(list.map((m) => m.text)).toEqual(['a', 'b']);

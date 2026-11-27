@@ -25,6 +25,7 @@ const CLIS: Array<{ id: AccountAgent; label: string; bin: string }> = [
 
 const AGY_CREDENTIAL = 'agy-credential.json';
 const LOGIN_URL = /https:\/\/\S+\/oauth\/authorize\S+/;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matches ANSI escape sequences on purpose
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
 const LOGIN_TIMEOUT = 15 * 60_000;
 

@@ -1,5 +1,5 @@
 import type { ArchaDocument } from '@archa/core';
-import { FrameBitmapCache, zoomBucket } from './cache';
+import { type FrameBitmapCache, zoomBucket } from './cache';
 import { drawNode, type AnimMap } from './draw';
 import { preloadImages } from './images';
 import { paintImageSources } from './paint';

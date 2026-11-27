@@ -218,7 +218,7 @@ function AccountRow({ account: a }: { account: AgentAccount }) {
 
   const signIn = () => startLogin(a.id, setStarting);
 
-  const useOnHost = () => call((v) => setBusy(v ? 'host' : null), async (c) => {
+  const setOnHost = () => call((v) => setBusy(v ? 'host' : null), async (c) => {
     await c.call('accounts.useOnHost', { id: a.id });
     toast(`agy on this computer now uses ${a.email || a.name}`);
   });
@@ -260,7 +260,7 @@ function AccountRow({ account: a }: { account: AgentAccount }) {
               <Button variant={a.signedIn ? 'ghost' : 'primary'} onClick={signIn}><LogIn size={13} />{a.signedIn ? 'Sign in again' : 'Sign in'}</Button>
             )}
             {a.agent === 'agy' && a.signedIn && (
-              <Button variant="ghost" disabled={busy === 'host'} onClick={useOnHost} title="Make this the login agy uses on this computer">
+              <Button variant="ghost" disabled={busy === 'host'} onClick={setOnHost} title="Make this the login agy uses on this computer">
                 {busy === 'host' ? <Loader2 size={13} className="animate-spin" /> : <MonitorCheck size={13} />}Use on this computer
               </Button>
             )}

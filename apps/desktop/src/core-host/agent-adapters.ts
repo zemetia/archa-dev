@@ -123,7 +123,7 @@ const clip = (t: string, n = 4000) => (t.length > n ? `${t.slice(0, n)}…` : t)
 function withState(prompt: string, limit: number) {
   if (prompt.length <= limit) return prompt;
   const cut = prompt.indexOf('\n\n---\nCurrent canvas state');
-  return (cut > 0 ? prompt.slice(0, cut) : prompt.slice(0, limit)) + '\n\n(Call get_state first to read the canvas.)';
+  return `${cut > 0 ? prompt.slice(0, cut) : prompt.slice(0, limit)}\n\n(Call get_state first to read the canvas.)`;
 }
 
 /* --------------------------------- models --------------------------------- */

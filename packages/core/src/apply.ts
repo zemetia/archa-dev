@@ -1,5 +1,5 @@
 import { commentSchema, isContainer, nodeSchema, variableSchema, type Node, type Op, type InsertOp } from '@archa/schema';
-import { ArchaDocument, DocumentError } from './document';
+import { type ArchaDocument, DocumentError } from './document';
 import { runLayout } from './layout';
 import { boundTo, brokenBindings, resolveBindings } from './bindings';
 import { remapSpans } from './text';

@@ -42,7 +42,8 @@ describe('Gemini tool schemas', () => {
   it('fixes empty and untyped items, nested deep', () => {
     const s = sanitizeGeminiSchema({ type: 'object', properties: { pages: { type: 'array', items: { type: 'object', properties: { tags: { type: 'array', items: {} } } } } } });
     expect(geminiSchemaIssues({ type: 'object', properties: { tags: { type: 'array', items: {} } } })).toEqual([{ path: 'properties[tags].items', problem: 'array items have no type' }]);
-    expect((s.properties as any).pages.items.properties.tags.items).toEqual({ type: 'string' });
+    const pages = (s.properties as { pages: { items: { properties: { tags: { items: unknown } } } } }).pages;
+    expect(pages.items.properties.tags.items).toEqual({ type: 'string' });
   });
 
   it('strips what zod / MCP SDK emit and Gemini refuses', () => {
