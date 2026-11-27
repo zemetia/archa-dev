@@ -2,7 +2,7 @@
 
 ← [MCP.md](../MCP.md) | [Blueprint INDEX](../INDEX.md) | [04 — Local skill ←](./04-local-skill.md)
 
-**Built (0.4.1).** Code: `apps/desktop/src/core-host/reference.ts` (PDF reading), `reference-tools.ts` (tools), `renderer/lib/reference.ts` (raster, colour sampling, diff). Guide: `read_guide("rebuild")`.
+**Built (0.4.1).** Code: `packages/mcp/src/reference.ts` (PDF reading), `reference-tools.ts` (tools), `renderer/lib/reference.ts` (raster, colour sampling, diff). Guide: `read_guide("rebuild")`.
 
 ---
 
@@ -52,5 +52,5 @@ References are staged into `ARCHA_HOME/runtime/reference/<hash>.<ext>` so `archa
 
 **Linked from:** [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) · [MCP/01](./01-transports-tools.md)
 
-**Code:** [`apps/desktop/src/core-host/reference-tools.ts`](../../../apps/desktop/src/core-host/reference-tools.ts) · [`apps/desktop/src/core-host/reference.ts`](../../../apps/desktop/src/core-host/reference.ts) · [`apps/desktop/src/renderer/lib/reference.ts`](../../../apps/desktop/src/renderer/lib/reference.ts) · [`apps/desktop/test/reference.test.ts`](../../../apps/desktop/test/reference.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
+**Code:** [`apps/desktop/src/renderer/lib/reference.ts`](../../../apps/desktop/src/renderer/lib/reference.ts) · [`packages/host/test/reference.test.ts`](../../../packages/host/test/reference.test.ts) · [`packages/mcp/src/reference-tools.ts`](../../../packages/mcp/src/reference-tools.ts) · [`packages/mcp/src/reference.ts`](../../../packages/mcp/src/reference.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
 <!-- backlinks:end -->

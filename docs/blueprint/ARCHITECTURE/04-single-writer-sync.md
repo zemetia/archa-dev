@@ -68,5 +68,5 @@ Ops are per-node, per-property last-writer-wins with fractional indexing for chi
 
 **Linked from:** [BEST_PRACTICE/04](../BEST_PRACTICE/04-antipatterns-perf.md) · [DOCUMENT_MODEL/02](../DOCUMENT_MODEL/02-ops-transactions-undo.md) · [FILE_FORMATS/02](../FILE_FORMATS/02-archadev-project.md) · [REFERENCE](../REFERENCE.md)
 
-**Code:** [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`packages/core/src/session.ts`](../../../packages/core/src/session.ts)
+**Code:** [`packages/core/src/session.ts`](../../../packages/core/src/session.ts) · [`packages/host/src/context.ts`](../../../packages/host/src/context.ts) · [`packages/host/src/domains/documents.ts`](../../../packages/host/src/domains/documents.ts)
 <!-- backlinks:end -->

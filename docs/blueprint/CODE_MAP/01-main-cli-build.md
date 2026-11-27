@@ -35,9 +35,10 @@ Each row: file → what it does → the blueprint docs that govern it. Links are
 | File | Does | Governed by |
 |---|---|---|
 | [`cli/src/index.ts`](../../../apps/cli/src/index.ts) | commander root: `mcp`, `status`, `browser`, `open` (full list → [05](./05-interfaces.md)) | [CLI/01](../CLI/01-commands.md), [CLI/02](../CLI/02-parity-exit-codes.md) |
-| [`cli/src/connect.ts`](../../../apps/cli/src/connect.ts) | `connectCore`: reads `runtime/core.json`, connects to the core socket with the token; `CoreUnavailable` when the app is not running (no headless core yet) | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [CLI/01](../CLI/01-commands.md) |
-| [`cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) | `archa mcp`: stdio MCP server; each tool relays to an `agent.*` RPC on the running core; `--agent agy` lists tools inside Gemini's schema subset | [MCP/01](../MCP/01-transports-tools.md), [MCP/03](../MCP/03-response-contract-lint.md) |
-| [`cli/tsup.config.ts`](../../../apps/cli/tsup.config.ts) | Bundles the CLI (workspace sources included) into one file the app spawns | [STRUCTURE/01](../STRUCTURE/01-root-apps.md) |
+| [`cli/src/connect.ts`](../../../apps/cli/src/connect.ts) | `connectCore`: reads `runtime/core.json`, connects to the core socket with the token; `CoreUnavailable` when no live core answers | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [CLI/01](../CLI/01-commands.md) |
+| [`cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) | `archa mcp`: `createMcpServer` from `@archa/mcp` over stdio; core = the running app, else a headless host; reads `ARCHA_RUN_ID` / `ARCHA_DOC_ID`; `--agent agy` → Gemini-safe tool list | [MCP/01](../MCP/01-transports-tools.md), [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md) |
+| [`cli/src/headless.ts`](../../../apps/cli/src/headless.ts) | `startHeadless`: `createHost` in this process, `listen('headless')` (runtime file `kind: 'headless'`), built-in skills dir, exits when stdin closes; no core.lock / handover yet | [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md), [CLI/01](../CLI/01-commands.md) |
+| [`cli/tsup.config.ts`](../../../apps/cli/tsup.config.ts) | Bundles the CLI (workspace sources and the headless host included) into one file the app spawns; QuickJS's CJS build aliased in, its wasm copied next to `archa.cjs`; pdf.js external | [STRUCTURE/01](../STRUCTURE/01-root-apps.md) |
 
 ---
 
@@ -45,8 +46,8 @@ Each row: file → what it does → the blueprint docs that govern it. Links are
 
 | File | Does | Governed by |
 |---|---|---|
-| [`desktop/electron.vite.config.ts`](../../../apps/desktop/electron.vite.config.ts) | main / preload / renderer / core-host builds; workspace packages bundled from TS source | [STRUCTURE/01](../STRUCTURE/01-root-apps.md) |
-| [`desktop/electron-builder.yml`](../../../apps/desktop/electron-builder.yml) | Installer, `.archa` association, bundled CLI | [ENTRY_POINTS/02](../ENTRY_POINTS/02-os-integration.md), [BEST_PRACTICE/03](../BEST_PRACTICE/03-git-changelog-release.md) |
+| [`desktop/electron.vite.config.ts`](../../../apps/desktop/electron.vite.config.ts) | main / preload / renderer / core-host builds; workspace packages (incl. agents, mcp, host) bundled from TS source | [STRUCTURE/01](../STRUCTURE/01-root-apps.md) |
+| [`desktop/electron-builder.yml`](../../../apps/desktop/electron-builder.yml) | Installer, `.archa` association, bundled CLI + its QuickJS wasm | [ENTRY_POINTS/02](../ENTRY_POINTS/02-os-integration.md), [BEST_PRACTICE/03](../BEST_PRACTICE/03-git-changelog-release.md) |
 | [`package.json`](../../../package.json) | Root scripts: `dev`, `build`, `typecheck`, `lint`, `test`, `cli`, `dist`, `docs:*` | [CODE_MAP](../CODE_MAP.md) → Commands |
 | [`biome.json`](../../../biome.json) | Biome lint config: recommended preset minus listed rules; `packages/core` may not import electron / react | [BEST_PRACTICE/01](../BEST_PRACTICE/01-typescript-eslint.md) |
 | [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) | CI on push / PR: frozen install, typecheck, lint, test, docs:check (ubuntu + windows) | [BEST_PRACTICE/02](../BEST_PRACTICE/02-testing.md) |

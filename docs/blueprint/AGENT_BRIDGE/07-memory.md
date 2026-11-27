@@ -2,7 +2,7 @@
 
 ← [AGENT_BRIDGE.md](../AGENT_BRIDGE.md) | [Blueprint INDEX](../INDEX.md) | [06 — Orchestrate mode](./06-orchestrate.md)
 
-**Built (1.7.3).** Code: `core-host/memory.ts` (`MemoryStore`), `core-host/agents.ts` (first-turn block), `apps/cli/src/mcp.ts` (`remember` / `forget` / `recall`), `renderer/ui/settings/MemoryPage.tsx`. Types: `packages/protocol/src/settings.ts`. Tests: `apps/desktop/test/memory.test.ts`.
+**Built (1.7.3).** Code: `agents/src/memory.ts` (`MemoryStore`), `agents/src/agents.ts` (first-turn block), `apps/cli/src/mcp.ts` (`remember` / `forget` / `recall`), `renderer/ui/settings/MemoryPage.tsx`. Types: `packages/protocol/src/settings.ts`. Tests: `packages/host/test/memory.test.ts`.
 
 ---
 
@@ -62,5 +62,5 @@ Settings → Memory (`MemoryPage.tsx`): two groups, Global and This document, ea
 
 **Linked from:** [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) · [MCP/01](../MCP/01-transports-tools.md) · [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md)
 
-**Code:** [`apps/cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) · [`apps/desktop/src/core-host/agents.ts`](../../../apps/desktop/src/core-host/agents.ts) · [`apps/desktop/src/core-host/memory.ts`](../../../apps/desktop/src/core-host/memory.ts) · [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`apps/desktop/src/renderer/ui/settings/MemoryPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/MemoryPage.tsx) · [`apps/desktop/test/memory.test.ts`](../../../apps/desktop/test/memory.test.ts) · [`packages/protocol/src/settings.ts`](../../../packages/protocol/src/settings.ts)
+**Code:** [`apps/desktop/src/renderer/ui/settings/MemoryPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/MemoryPage.tsx) · [`packages/agents/src/agents.ts`](../../../packages/agents/src/agents.ts) · [`packages/agents/src/memory.ts`](../../../packages/agents/src/memory.ts) · [`packages/host/src/domains/settings.ts`](../../../packages/host/src/domains/settings.ts) · [`packages/host/src/host.ts`](../../../packages/host/src/host.ts) · [`packages/host/test/memory.test.ts`](../../../packages/host/test/memory.test.ts) · [`packages/mcp/src/server.ts`](../../../packages/mcp/src/server.ts) · [`packages/protocol/src/settings.ts`](../../../packages/protocol/src/settings.ts)
 <!-- backlinks:end -->

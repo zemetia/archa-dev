@@ -2,49 +2,40 @@
 
 ← [CODE_MAP.md](../CODE_MAP.md) | [Blueprint INDEX](../INDEX.md) | [← 01](./01-main-cli-build.md) | [03 — Renderer →](./03-renderer.md)
 
-`apps/desktop/src/core-host/` is the Electron `utilityProcess` that **owns every open document** (the single writer). Today it also holds what the target puts in `@archa/mcp` and `@archa/agents`. No Electron UI, no DOM here.
+The core host **owns every open document** (the single writer). It is `@archa/host` (`packages/host/src/`, no Electron), started by the desktop app's `utilityProcess` (`apps/desktop/src/core-host/`, only Electron glue) or in-process by headless `archa mcp` ([01](./01-main-cli-build.md)). Agent tools and chat runs it wires up live in [07](./07-agents-mcp.md).
 
 ---
 
-## Process and documents
+## Desktop adapter — `apps/desktop/src/core-host/`
 
 | File | Does | Governed by |
 |---|---|---|
-| [`core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) | Boot: one `Workspace`, random token, `MessagePort` channel per window, local socket server (`socketPath()`), writes `runtime/core.json`, cleanup on exit | [ARCHITECTURE/01](../ARCHITECTURE/01-processes.md), [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md) |
-| [`core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) | `Workspace`: open `DocumentSession`s (`session` throws, `findSession` / `activeDataDir` return null — given doc → last-used doc → none), connected clients (app / CLI / agent), **every RPC handler** with zod param schemas, activity log, `agent.trail` events, screenshot via `render.request` to a renderer, `cliPath()` / `mcpCommand()` | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [ARCHITECTURE/04](../ARCHITECTURE/04-single-writer-sync.md), [MCP/01](../MCP/01-transports-tools.md) |
+| [`core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) | Electron glue only: `createHost({ browser: callBrowser, cliPath, mcpCommand })`, a `MessagePort` channel per window from `parentPort`, `listen('app')`, cleanup on `shutdown` / SIGTERM; `ARCHA_CLI` override of the CLI path | [ARCHITECTURE/01](../ARCHITECTURE/01-processes.md), [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md) |
 | [`core-host/main-bridge.ts`](../../../apps/desktop/src/core-host/main-bridge.ts) | `callBrowser`: forwards agent `browser` calls to main over `parentPort` and awaits the reply | [BROWSER](../BROWSER.md), [ARCHITECTURE/01](../ARCHITECTURE/01-processes.md) |
 
-## Agent tools (target `@archa/mcp`)
+## `@archa/host` — `packages/host/src/`
 
 | File | Does | Governed by |
 |---|---|---|
-| [`core-host/execute.ts`](../../../apps/desktop/src/core-host/execute.ts) | `AgentExecutor`: runs an agent snippet in **QuickJS** against a copy of the doc as one transaction; sandbox globals (`insert`, `update`, `align`, `icon`, `find` …), `normaliseInput`, auto-fix, auto-screenshot, patch retry (`editId` + `edits`), lint in the reply; `describeState` = `get_state` text | [MCP/02](../MCP/02-execute-api.md), [MCP/03](../MCP/03-response-contract-lint.md), [MCP/01](../MCP/01-transports-tools.md) |
-| [`core-host/assets.ts`](../../../apps/desktop/src/core-host/assets.ts) | Document data folder contents (paths come from `@archa/protocol/node` storage): `migrateDataDir` (pre-1.7.3 `-asset` → `-data`), `assetKind` (images / svg / videos / fonts / files), data: URL / local file → content-addressed file → `asset:` (`externalizeOps` on every transaction, `externalizeData` on open, image nodes and image paints), `inlineData` for exports and libraries, `moveDataDir` on Save As, `imageSize` from file headers | [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) |
-| [`core-host/chat-store.ts`](../../../apps/desktop/src/core-host/chat-store.ts) | `ChatStore`: one JSON file per conversation in `<name>-data/chats/`, attachments beside it, upsert by message id, migration of the old per-document `.jsonl` | [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md) |
-| [`core-host/shots.ts`](../../../apps/desktop/src/core-host/shots.ts) | Agent screenshots as temporary files (`runtime/screenshots`, swept), canvas ceiling, slicing thresholds, `INLINE_BUDGET` / `fitBudget` (MCP replies under 10 MB) | [RENDERING/03](../RENDERING/03-export.md) |
-| [`core-host/reference.ts`](../../../apps/desktop/src/core-host/reference.ts) | `readPdfPage`: a PDF page through pdf.js (legacy, in-process worker) → text lines, rect / rounded-rect / ellipse / path shapes, placed images (PNG into the asset folder); `summarizePage` | [MCP/05](../MCP/05-reference-compare.md) |
-| [`core-host/reference-tools.ts`](../../../apps/desktop/src/core-host/reference-tools.ts) | RPC `agent.reference` / `agent.compare`: stage the file, ask the window for colours / the diff, write `<name>-asset/reference/*.json`, name the nodes under each differing region | [MCP/05](../MCP/05-reference-compare.md) |
-
-## Chat agents (target `@archa/agents`)
-
-| File | Does | Governed by |
-|---|---|---|
-| [`core-host/agent-adapters.ts`](../../../apps/desktop/src/core-host/agent-adapters.ts) | `ADAPTERS` for Claude Code, agy, Codex: argv (prompt as one argv element or stdin), stream parsers → `AgentEvent`, warm mode, model listing, `MCP_TOOLS` allow-list, `CLAUDE_DESIGN_SYSTEM` prompt | [AGENT_BRIDGE/01](../AGENT_BRIDGE/01-adapter-interface.md), [AGENT_BRIDGE/02](../AGENT_BRIDGE/02-roster-profiles.md) |
-| [`core-host/agents.ts`](../../../apps/desktop/src/core-host/agents.ts) | `ChatRunner`: one run per thread, parallel threads per doc, warm processes (`MAX_WARM` 6, idle 10 min), queue / send-now / stop, chat history `chats/<docId>.jsonl` + `chats/sessions.json`, per-thread dir `runtime/threads/<id>/` (MCP config, mirrored skills, pasted images) | [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md), [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
-| [`core-host/personas.ts`](../../../apps/desktop/src/core-host/personas.ts) | `randomPersona`: two-word session name per thread (cursor tag, activity, undo author) | [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md) |
-| [`core-host/agy-tool-schemas.ts`](../../../apps/desktop/src/core-host/agy-tool-schemas.ts) | `badAgyTools` (MCP tools agy loaded whose schema Gemini refuses, from agy's schema copies), `agyErrorHint` (names the server/tool behind agy's 400, appended by the agy parser) | [AGENT_BRIDGE/02](../AGENT_BRIDGE/02-roster-profiles.md) |
-| [`core-host/accounts.ts`](../../../apps/desktop/src/core-host/accounts.ts) | `AccountManager`: login profiles under `profiles/`, identity from each CLI's config, CLI-owned OAuth sign-in, use-on-host / capture-host, `resolveCli` | [AGENT_BRIDGE/02](../AGENT_BRIDGE/02-roster-profiles.md) |
-| [`core-host/keyring.ts`](../../../apps/desktop/src/core-host/keyring.ts) | agy's single Google login in the OS keyring (`gemini:antigravity`) — read / write / delete; secrets via env/stdin, never argv | [AGENT_BRIDGE/02](../AGENT_BRIDGE/02-roster-profiles.md) |
-
-## Settings data
-
-| File | Does | Governed by |
-|---|---|---|
-| [`core-host/skills.ts`](../../../apps/desktop/src/core-host/skills.ts) | `SkillManager`: skill folders (`SKILL.md` frontmatter): editable ones in `ARCHA_HOME/skills`, read-only ones from `~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills`; enable state in `skills.json`; the document's own skills from `<name>-data/skills/` (`forRunSkills(docSkills)`) | [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md) |
-| [`core-host/memory.ts`](../../../apps/desktop/src/core-host/memory.ts) | `MemoryStore`: agent memory, one Markdown file per fact in `ARCHA_HOME/memory/` (global) and `<name>-data/memory/` (document); `remember` / `forget` / `list`, the capped first-turn block `forPrompt` | [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) |
-| [`core-host/mcp-servers.ts`](../../../apps/desktop/src/core-host/mcp-servers.ts) | `McpServerManager`: external MCP servers in `mcp.json` (stdio / http / sse), test, import from other agents' configs; `archadev` name reserved; secrets never sent to clients | [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md), [MCP/01](../MCP/01-transports-tools.md) |
-| [`core-host/icons.ts`](../../../apps/desktop/src/core-host/icons.ts) | `IconStore`: uploaded icons in `ARCHA_HOME/icons/custom.json` (`icons.custom.*`) | [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md), [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md) |
-| [`core-host/library.ts`](../../../apps/desktop/src/core-host/library.ts) | `LibraryStore`: global component libraries `ARCHA_HOME/libraries/<name>/` (`library.json`, `components/<id>.json` + thumbnail) | [DESIGN_SYSTEM/02](../DESIGN_SYSTEM/02-components-libraries.md), [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md) |
+| [`host/src/create.ts`](../../../packages/host/src/create.ts) | `createHost(opts)` → `{ host, attach, detach, connect, listen, close }`; `connect(client)` = in-process `RpcClient` (headless CLI, tests) | [ARCHITECTURE/01](../ARCHITECTURE/01-processes.md), [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md) |
+| [`host/src/host.ts`](../../../packages/host/src/host.ts) | `Host`: composition root — `HostContext`, agent stores (accounts, skills, memory, MCP servers), `ChatRunner(ctx, stores, mcpCommand)`, one `AgentExecutor` per connection, the router; `attach` (zod client info, session name per agent), `detach`, request → `router.call` → `res`; `handlers` (every method callable directly) | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md) |
+| [`host/src/context.ts`](../../../packages/host/src/context.ts) | `HostContext` (implements `ToolHost` + `ChatHost`): sessions (`session` throws, `findSession` / `activeDataDir` return null — given doc → last-used doc → none), connections, selection, activity log, `broadcast`, `agent.trail`, `askRenderer` / `requestRender` / `resolveRender`, `describe` (= `get_state`), library + icon stores | [ARCHITECTURE/04](../ARCHITECTURE/04-single-writer-sync.md), [MCP/01](../MCP/01-transports-tools.md) |
+| [`host/src/router.ts`](../../../packages/host/src/router.ts) | `createRouter(modules)`: merges domain `Routes`, **throws at startup on a duplicate method**; `validated(schema, run)` routes are zod-parsed (`parse` → `VALIDATION`) before the handler | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md) |
+| [`host/src/domains/documents.ts`](../../../packages/host/src/domains/documents.ts) | `workspace.list`, `doc.*` (open / save with the data folder, apply as ops, undo / redo), `selection.set` | [ARCHITECTURE/04](../ARCHITECTURE/04-single-writer-sync.md), [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) |
+| [`host/src/domains/export.ts`](../../../packages/host/src/domains/export.ts) | `export.save` / `export.page` / `export.code` (assets inlined) | [RENDERING/03](../RENDERING/03-export.md) |
+| [`host/src/domains/agent-tools.ts`](../../../packages/host/src/domains/agent-tools.ts) | `agent.state` / `execute` / `screenshot` / `reference` / `compare` / `exportSvg` / `outline` / `readSkill` / `say` / `done` | [MCP/01](../MCP/01-transports-tools.md), [MCP/03](../MCP/03-response-contract-lint.md) |
+| [`host/src/domains/browser.ts`](../../../packages/host/src/domains/browser.ts) | `BrowserBridge` type; `agent.browser`, `agent.placeImage` (headless: no bridge → clear error) | [BROWSER](../BROWSER.md) |
+| [`host/src/domains/chat.ts`](../../../packages/host/src/domains/chat.ts) | `chat.*`, `orchestra.*`, `agents.models` with their zod schemas | [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md), [AGENT_BRIDGE/06](../AGENT_BRIDGE/06-orchestrate.md) |
+| [`host/src/domains/library.ts`](../../../packages/host/src/domains/library.ts) | `library.*`, `icons.custom.*` | [DESIGN_SYSTEM/02](../DESIGN_SYSTEM/02-components-libraries.md) |
+| [`host/src/domains/settings.ts`](../../../packages/host/src/domains/settings.ts) | `accounts.*`, `skills.*`, `memory.*`, `mcp.*` (each store validates its own params) | [AGENT_BRIDGE/05](../AGENT_BRIDGE/05-skills-mcp.md), [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) |
+| [`host/src/domains/app.ts`](../../../packages/host/src/domains/app.ts) | `app.info` (version, user, CLI path, mcp command, agent availability), `agents.list`, `activity.list`, `render.respond` | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md) |
+| [`host/src/screenshot.ts`](../../../packages/host/src/screenshot.ts) | Full-size screenshot through a window, unchanged-hash skip, slices for tall pages, inline preview under the vision / reply budget | [RENDERING/03](../RENDERING/03-export.md), [MCP/03](../MCP/03-response-contract-lint.md) |
+| [`host/src/socket.ts`](../../../packages/host/src/socket.ts) | `listenLocal(host, kind)`: token-checked socket (`socketPath()`), writes `runtime/core.json` `{ …, kind: 'app' | 'headless' }`, removes only its own file on close | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md) |
+| [`host/src/in-process.ts`](../../../packages/host/src/in-process.ts) | `channelPair()`: two `Channel`s in one process (structured clone, async delivery) | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md) |
+| [`host/src/mcp-command.ts`](../../../packages/host/src/mcp-command.ts) | `nodeMcpCommand(cliPath)`: how launched agents start `archa mcp` (node, else Electron as node) | [AGENT_BRIDGE/03](../AGENT_BRIDGE/03-runs-steering.md) |
+| [`host/src/index.ts`](../../../packages/host/src/index.ts) | Public API re-exports | [STRUCTURE/02](../STRUCTURE/02-packages.md) |
+| [`host/src/stores/icons.ts`](../../../packages/host/src/stores/icons.ts) | `IconStore`: uploaded icons in `ARCHA_HOME/icons/custom.json` (`icons.custom.*`) | [DESIGN_SYSTEM/05](../DESIGN_SYSTEM/05-icons-assets.md), [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md) |
+| [`host/src/stores/library.ts`](../../../packages/host/src/stores/library.ts) | `LibraryStore`: global component libraries `ARCHA_HOME/libraries/<name>/` (`library.json`, `components/<id>.json` + thumbnail) | [DESIGN_SYSTEM/02](../DESIGN_SYSTEM/02-components-libraries.md), [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md) |
 
 ---
 
@@ -52,14 +43,15 @@
 
 | Question | Path |
 |---|---|
-| Where is an RPC method handled? | `workspace.ts` → `readonly handlers` object (one entry per method, zod-parsed params); types in `packages/protocol/src/index.ts` `CoreMethods` |
-| What happens on an agent `execute`? | `cli/src/mcp.ts` → RPC `agent.execute` → `workspace.ts` → `execute.ts` `AgentExecutor.run` → `DocumentSession.apply` → `doc.applied` + `agent.trail` events |
-| How does a chat message reach an agent? | renderer `chat.send` → `workspace.ts` → `agents.ts` `ChatRunner.send` → adapter argv / warm stdin → parser events → `chat.delta` / `chat.message` / `chat.run` |
-| Where do browser actions run? | `agent.browser` → `main-bridge.ts` → main `browser.ts` (CDP) |
+| Where is an RPC method handled? | `host/src/domains/*.ts` (one `Routes` object per domain, merged and validated by `router.ts`); types in `packages/protocol/src/index.ts` `CoreMethods` |
+| What happens on an agent `execute`? | `mcp/src/server.ts` → RPC `agent.execute` → `domains/agent-tools.ts` → `mcp/src/execute.ts` `AgentExecutor.run` → `DocumentSession.apply` → `doc.applied` + `agent.trail` events |
+| How does a chat message reach an agent? | renderer `chat.send` → `domains/chat.ts` → `agents/src/agents.ts` `ChatRunner.send` → adapter argv / warm stdin → parser events → `chat.delta` / `chat.message` / `chat.run` |
+| Who is the core when no app runs? | `archa mcp` → `cli/src/connect.ts` fails → `cli/src/headless.ts` `createHost` in-process + `listen('headless')` |
+| Where do browser actions run? | `agent.browser` → `domains/browser.ts` → `BrowserBridge` = `core-host/main-bridge.ts` → main `browser.ts` (CDP) |
 
 <!-- backlinks:start — generated by `node scripts/gen-backlinks.mjs`; do not edit by hand -->
 
 ---
 
-**Linked from:** [AGENT_BRIDGE](../AGENT_BRIDGE.md)
+**Linked from:** — (only its hub and the indexes)
 <!-- backlinks:end -->

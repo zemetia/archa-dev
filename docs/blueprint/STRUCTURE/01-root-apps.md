@@ -39,7 +39,7 @@
 | `src/main/plugin-host.ts` | Spawns plugin hosts |
 | `src/main/menu.ts`, `src/main/protocol.ts` | Native menus; `archadev://` handler |
 | `src/main/os-integration/` | Registry verbs (Windows), Finder Quick Action, `.desktop` — install/uninstall |
-| `src/core-host/index.ts` | Entry of the core host process: boots `@archa/core`, RPC server, local socket, MCP relay |
+| `src/core-host/index.ts` | Entry of the core host process: `createHost` from `@archa/host` + Electron glue (parentPort, window ports, browser bridge) |
 | `src/preload/index.ts` | Exposes a typed `archa` bridge (port handshake only) via `contextBridge` |
 | `src/renderer/` | React app → [APP_UI](../APP_UI.md) |
 | `src/renderer/canvas/` | Canvas view, input → ops, render worker bootstrap |

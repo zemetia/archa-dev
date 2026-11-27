@@ -2,7 +2,7 @@
 
 ← [AGENT_BRIDGE.md](../AGENT_BRIDGE.md) | [Blueprint INDEX](../INDEX.md) | [05 — Skills and MCP servers](./05-skills-mcp.md)
 
-**Built (0.5.0).** Code: `core-host/agents.ts` (ChatRunner → orchestrate), `apps/cli/src/mcp.ts` (team tools), `protocol/agent-docs.ts` (briefs), `renderer/ui/OrchestraView.tsx`.
+**Built (0.5.0).** Code: `agents/src/agents.ts` (ChatRunner → orchestrate), `apps/cli/src/mcp.ts` (team tools), `protocol/agent-docs.ts` (briefs), `renderer/ui/OrchestraView.tsx`.
 
 ---
 
@@ -77,5 +77,5 @@ Long calls: Claude runs get `MCP_TOOL_TIMEOUT` = 11 min; codex gets `mcp_servers
 
 **Linked from:** [APP_UI/01](../APP_UI/01-shell-tools-panels.md) · [MCP/01](../MCP/01-transports-tools.md)
 
-**Code:** [`apps/cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) · [`apps/desktop/src/core-host/agents.ts`](../../../apps/desktop/src/core-host/agents.ts) · [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`apps/desktop/src/renderer/ui/ChatPanel.tsx`](../../../apps/desktop/src/renderer/ui/ChatPanel.tsx) · [`apps/desktop/src/renderer/ui/OrchestraView.tsx`](../../../apps/desktop/src/renderer/ui/OrchestraView.tsx) · [`apps/desktop/test/orchestra.test.ts`](../../../apps/desktop/test/orchestra.test.ts) · [`packages/protocol/src/agent-docs.ts`](../../../packages/protocol/src/agent-docs.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
+**Code:** [`apps/desktop/src/renderer/ui/ChatPanel.tsx`](../../../apps/desktop/src/renderer/ui/ChatPanel.tsx) · [`apps/desktop/src/renderer/ui/OrchestraView.tsx`](../../../apps/desktop/src/renderer/ui/OrchestraView.tsx) · [`packages/agents/src/agents.ts`](../../../packages/agents/src/agents.ts) · [`packages/host/src/domains/chat.ts`](../../../packages/host/src/domains/chat.ts) · [`packages/host/test/orchestra.test.ts`](../../../packages/host/test/orchestra.test.ts) · [`packages/mcp/src/server.ts`](../../../packages/mcp/src/server.ts) · [`packages/protocol/src/agent-docs.ts`](../../../packages/protocol/src/agent-docs.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
 <!-- backlinks:end -->

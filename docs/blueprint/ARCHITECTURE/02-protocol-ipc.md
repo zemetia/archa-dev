@@ -52,7 +52,7 @@ Handler lives in `packages/core/src/rpc/document.ts`. A method without a handler
 |---|---|---|---|
 | `MessagePort` | Renderer, plugin host | Structured clone | Implicit (port given by main) |
 | Named pipe `\\.\pipe\archadev-<user>-<hash>` / unix socket `~/.archadev/runtime/core.sock` | CLI, `archa mcp` | JSON lines | Token from `runtime/core.json` sent in the first frame |
-| In-process | Headless CLI, tests | Direct call | — |
+| In-process | Headless CLI, tests | `channelPair()` in `@archa/host` (structured clone, async) | — |
 
 The socket only accepts local connections. `core.json` is written with mode `0600` and deleted on clean shutdown.
 
@@ -82,5 +82,5 @@ Subscriptions are per document (`document.subscribe(docId)`) so a window only re
 
 **Linked from:** [ARCHITECTURE/01](./01-processes.md)
 
-**Code:** [`apps/cli/src/connect.ts`](../../../apps/cli/src/connect.ts) · [`apps/desktop/src/core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) · [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`apps/desktop/src/preload/index.ts`](../../../apps/desktop/src/preload/index.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts) · [`packages/protocol/src/storage.ts`](../../../packages/protocol/src/storage.ts)
+**Code:** [`apps/cli/src/connect.ts`](../../../apps/cli/src/connect.ts) · [`apps/desktop/src/core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) · [`apps/desktop/src/preload/index.ts`](../../../apps/desktop/src/preload/index.ts) · [`packages/host/src/domains/app.ts`](../../../packages/host/src/domains/app.ts) · [`packages/host/src/host.ts`](../../../packages/host/src/host.ts) · [`packages/host/src/in-process.ts`](../../../packages/host/src/in-process.ts) · [`packages/host/src/router.ts`](../../../packages/host/src/router.ts) · [`packages/host/src/socket.ts`](../../../packages/host/src/socket.ts) · [`packages/host/test/in-process.test.ts`](../../../packages/host/test/in-process.test.ts) · [`packages/host/test/router.test.ts`](../../../packages/host/test/router.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts) · [`packages/protocol/src/storage.ts`](../../../packages/protocol/src/storage.ts)
 <!-- backlinks:end -->

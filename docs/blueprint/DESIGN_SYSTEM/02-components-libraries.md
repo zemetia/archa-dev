@@ -19,7 +19,7 @@ Linked copies with no `.archa` format change. Code: `packages/core/src/component
 | Props / variants (v2) | `props`: text (a text layer's text) or boolean (a layer's visibility), set per instance in `meta.props`. Mains sharing `set` are variants (`variant: { size: 'lg' }`); `setPropsOps` swaps to the matching main |
 | Library link | A main inserted from a library carries `meta.libraryRef = "<library>:<id>"`; later inserts become instances of it |
 | Agents | `describeState` lists components (name, id, size, instances, description) and library items; `execute` adds `components()`, `makeComponent(frame, desc, { props, set, variant })`, `instance(…, { props })`, `setProps`, `syncInstances`, `resetInstance`, `fromLibrary`; DESIGNER_PROMPT step 7 says reuse before building |
-| Storage | Libraries: `ARCHA_HOME/libraries/<name>/{library.json, components/<id>.json, components/<id>.png}` (`core-host/library.ts`, zod at the RPC boundary) |
+| Storage | Libraries: `ARCHA_HOME/libraries/<name>/{library.json, components/<id>.json, components/<id>.png}` (`host/src/stores/library.ts`, zod at the RPC boundary) |
 
 The table below is the Phase 7 target (instance nodes + per-property overrides). Moving to it needs `formatVersion` 2 + a migration from v1 `meta` markers.
 
@@ -85,5 +85,5 @@ Built-in icon set (open-licence, e.g. Lucide) as a global library; `icon` lookup
 
 **Linked from:** [APP_UI/04](../APP_UI/04-design-panel.md)
 
-**Code:** [`apps/desktop/src/core-host/library.ts`](../../../apps/desktop/src/core-host/library.ts) · [`apps/desktop/src/renderer/ui/ComponentsPanel.tsx`](../../../apps/desktop/src/renderer/ui/ComponentsPanel.tsx) · [`apps/desktop/src/renderer/ui/LibraryPanel.tsx`](../../../apps/desktop/src/renderer/ui/LibraryPanel.tsx) · [`apps/desktop/test/library.test.ts`](../../../apps/desktop/test/library.test.ts) · [`packages/core/src/components.ts`](../../../packages/core/src/components.ts) · [`packages/core/test/components.test.ts`](../../../packages/core/test/components.test.ts) · [`packages/core/test/fidelity.test.ts`](../../../packages/core/test/fidelity.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
+**Code:** [`apps/desktop/src/renderer/ui/ComponentsPanel.tsx`](../../../apps/desktop/src/renderer/ui/ComponentsPanel.tsx) · [`apps/desktop/src/renderer/ui/LibraryPanel.tsx`](../../../apps/desktop/src/renderer/ui/LibraryPanel.tsx) · [`packages/core/src/components.ts`](../../../packages/core/src/components.ts) · [`packages/core/test/components.test.ts`](../../../packages/core/test/components.test.ts) · [`packages/core/test/fidelity.test.ts`](../../../packages/core/test/fidelity.test.ts) · [`packages/host/src/domains/library.ts`](../../../packages/host/src/domains/library.ts) · [`packages/host/src/stores/library.ts`](../../../packages/host/src/stores/library.ts) · [`packages/host/test/library.test.ts`](../../../packages/host/test/library.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts)
 <!-- backlinks:end -->

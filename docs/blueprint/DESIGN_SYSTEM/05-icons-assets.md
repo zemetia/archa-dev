@@ -2,7 +2,7 @@
 
 ← [DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md) | [Blueprint INDEX](../INDEX.md) | [← 04 — Code export](./04-code-export.md)
 
-**Built.** Code: `packages/icons/` (data + lookup), `apps/desktop/src/renderer/ui/AssetsPanel.tsx`, `apps/desktop/src/renderer/lib/assets.ts`, `apps/desktop/src/core-host/icons.ts`.
+**Built.** Code: `packages/icons/` (data + lookup), `apps/desktop/src/renderer/ui/AssetsPanel.tsx`, `apps/desktop/src/renderer/lib/assets.ts`, `packages/host/src/stores/icons.ts`.
 
 ---
 
@@ -73,5 +73,5 @@ Choices (collection, style, query, size, colour) persist while the window is ope
 
 **Linked from:** [APP_UI/01](../APP_UI/01-shell-tools-panels.md) · [MCP/02](../MCP/02-execute-api.md) · [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md)
 
-**Code:** [`apps/desktop/src/core-host/icons.ts`](../../../apps/desktop/src/core-host/icons.ts) · [`apps/desktop/src/renderer/lib/assets.ts`](../../../apps/desktop/src/renderer/lib/assets.ts) · [`apps/desktop/src/renderer/ui/AssetsPanel.tsx`](../../../apps/desktop/src/renderer/ui/AssetsPanel.tsx) · [`packages/icons/src/index.ts`](../../../packages/icons/src/index.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`scripts/gen-icon-sets.mjs`](../../../scripts/gen-icon-sets.mjs)
+**Code:** [`apps/desktop/src/renderer/lib/assets.ts`](../../../apps/desktop/src/renderer/lib/assets.ts) · [`apps/desktop/src/renderer/ui/AssetsPanel.tsx`](../../../apps/desktop/src/renderer/ui/AssetsPanel.tsx) · [`packages/host/src/stores/icons.ts`](../../../packages/host/src/stores/icons.ts) · [`packages/icons/src/index.ts`](../../../packages/icons/src/index.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`scripts/gen-icon-sets.mjs`](../../../scripts/gen-icon-sets.mjs)
 <!-- backlinks:end -->

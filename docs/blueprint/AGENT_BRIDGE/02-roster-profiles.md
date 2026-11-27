@@ -44,7 +44,7 @@ Runs with the same agy profile may run in parallel (shared lease); different agy
 
 ### MVP implementation (2026-11-18)
 
-Code: `apps/desktop/src/core-host/accounts.ts` (+ `keyring.ts`); moves to `packages/agents/src/profiles/` with the adapters.
+Code: `packages/agents/src/accounts.ts` (+ `keyring.ts`), next to the adapters in `@archa/agents`.
 
 | Item | Contract |
 |---|---|
@@ -59,7 +59,7 @@ Code: `apps/desktop/src/core-host/accounts.ts` (+ `keyring.ts`); moves to `packa
 
 ### Launch adapters — MVP (2026-11-19)
 
-Code: `apps/desktop/src/core-host/agent-adapters.ts` (argv, parsers, models) + `agents.ts` (`ChatRunner`). Tests: `apps/desktop/test/agent-adapters.test.ts`; live `agents-live.test.ts` behind `ARCHA_AGENT_IT=1`.
+Code: `packages/agents/src/agent-adapters.ts` (argv, parsers, models) + `agents.ts` (`ChatRunner`). Tests: `packages/agents/test/agent-adapters.test.ts`; live `agents-live.test.ts` behind `ARCHA_AGENT_IT=1`.
 
 | Agent | Invocation | MCP | Models |
 |---|---|---|---|
@@ -108,5 +108,5 @@ Opened from the title bar gear, `Ctrl+,`, or "Accounts" under the chat composer.
 
 **Linked from:** [AGENT_BRIDGE/05](./05-skills-mcp.md) · [AGENT_BRIDGE/07](./07-memory.md) · [APP_UI/03](../APP_UI/03-state.md) · [MCP/01](../MCP/01-transports-tools.md)
 
-**Code:** [`apps/desktop/src/core-host/accounts.ts`](../../../apps/desktop/src/core-host/accounts.ts) · [`apps/desktop/src/core-host/agent-adapters.ts`](../../../apps/desktop/src/core-host/agent-adapters.ts) · [`apps/desktop/src/core-host/agents.ts`](../../../apps/desktop/src/core-host/agents.ts) · [`apps/desktop/src/core-host/agy-tool-schemas.ts`](../../../apps/desktop/src/core-host/agy-tool-schemas.ts) · [`apps/desktop/src/core-host/keyring.ts`](../../../apps/desktop/src/core-host/keyring.ts) · [`apps/desktop/src/renderer/ui/settings/ProvidersPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/ProvidersPage.tsx) · [`apps/desktop/test/accounts.test.ts`](../../../apps/desktop/test/accounts.test.ts) · [`apps/desktop/test/agent-adapters.test.ts`](../../../apps/desktop/test/agent-adapters.test.ts) · [`apps/desktop/test/agy-tool-schemas.test.ts`](../../../apps/desktop/test/agy-tool-schemas.test.ts) · [`packages/protocol/src/gemini-schema.ts`](../../../packages/protocol/src/gemini-schema.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/test/gemini-schema.test.ts`](../../../packages/protocol/test/gemini-schema.test.ts)
+**Code:** [`apps/desktop/src/renderer/ui/settings/ProvidersPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/ProvidersPage.tsx) · [`packages/agents/src/accounts.ts`](../../../packages/agents/src/accounts.ts) · [`packages/agents/src/agent-adapters.ts`](../../../packages/agents/src/agent-adapters.ts) · [`packages/agents/src/agents.ts`](../../../packages/agents/src/agents.ts) · [`packages/agents/src/agy-tool-schemas.ts`](../../../packages/agents/src/agy-tool-schemas.ts) · [`packages/agents/src/keyring.ts`](../../../packages/agents/src/keyring.ts) · [`packages/agents/test/accounts.test.ts`](../../../packages/agents/test/accounts.test.ts) · [`packages/agents/test/agent-adapters.test.ts`](../../../packages/agents/test/agent-adapters.test.ts) · [`packages/agents/test/agy-tool-schemas.test.ts`](../../../packages/agents/test/agy-tool-schemas.test.ts) · [`packages/host/src/domains/settings.ts`](../../../packages/host/src/domains/settings.ts) · [`packages/protocol/src/gemini-schema.ts`](../../../packages/protocol/src/gemini-schema.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/test/gemini-schema.test.ts`](../../../packages/protocol/test/gemini-schema.test.ts)
 <!-- backlinks:end -->

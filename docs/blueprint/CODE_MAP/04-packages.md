@@ -2,7 +2,7 @@
 
 ← [CODE_MAP.md](../CODE_MAP.md) | [Blueprint INDEX](../INDEX.md) | [← 03](./03-renderer.md) | [05 — Interfaces →](./05-interfaces.md)
 
-Five packages exist today; dependency direction `schema ← protocol ← core ← render / formats ← apps` ([STRUCTURE/02](../STRUCTURE/02-packages.md)). Public API = each `src/index.ts`.
+Eight packages exist today; dependency direction `schema ← protocol ← core ← render / formats ← agents / mcp ← host ← apps`. `@archa/host` → [02](./02-core-host.md), `@archa/agents` / `@archa/mcp` → [07](./07-agents-mcp.md) ([STRUCTURE/02](../STRUCTURE/02-packages.md)). Public API = each `src/index.ts`.
 
 ---
 
@@ -23,7 +23,9 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 |---|---|---|
 | [`index.ts`](../../../packages/protocol/src/index.ts) | `CoreMethods` (every RPC), `CoreEvents`, message framing (`req` / `res` / `evt`), `RpcClient`, `jsonLines`, shared types (`AgentTrail`, `ExecuteResult`, chat, accounts) | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [CODE_MAP/05](./05-interfaces.md) |
 | [`storage.ts`](../../../packages/protocol/src/storage.ts) | Node-only, **every path**: `paths.*` (ARCHA_HOME: runtime, threads, runtime data, screenshots, libraries, icons, memory, skills, mcp.json, chat sessions, profiles, accounts, downloads, models), `dataDirFor` / `assetDirFor` / `legacyAssetDirFor` / `isRuntimeDataDir`, `docPaths(dataDir).*` (assets, chats, attachments, skills, memory, reference), `hostToolPaths.*` (~/.claude, ~/.codex, ~/.gemini, ~/.agents, ~/.cursor); file primitives `readJson` (zod + fallback, optional quarantine), `writeJsonAtomic` / `writeFileAtomic`, `appendJsonl` / `readJsonl`, `ensureDir`, `listDir` | [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md) |
-| [`node.ts`](../../../packages/protocol/src/node.ts) | `@archa/protocol/node` entry: re-exports `storage.ts`; `runtimeFile()`, `socketPath()` (custom `ARCHA_HOME` → own pipe) | [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md), [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md) |
+| [`node.ts`](../../../packages/protocol/src/node.ts) | `@archa/protocol/node` entry: re-exports `storage.ts`, `assets.ts`, `shots.ts`; `RuntimeInfo` (`kind: 'app' | 'headless'`); `runtimeFile()`, `socketPath()` (custom `ARCHA_HOME` → own pipe) | [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md), [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md) |
+| [`assets.ts`](../../../packages/protocol/src/assets.ts) | Document data folder contents (paths come from `@archa/protocol/node` storage): `migrateDataDir` (pre-1.7.3 `-asset` → `-data`), `assetKind` (images / svg / videos / fonts / files), data: URL / local file → content-addressed file → `asset:` (`externalizeOps` on every transaction, `externalizeData` on open, image nodes and image paints), `inlineData` for exports and libraries, `moveDataDir` on Save As, `imageSize` from file headers | [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) |
+| [`shots.ts`](../../../packages/protocol/src/shots.ts) | Agent screenshots as temporary files (`runtime/screenshots`, swept), canvas ceiling, slicing thresholds, `INLINE_BUDGET` / `fitBudget` (MCP replies under 10 MB) | [RENDERING/03](../RENDERING/03-export.md) |
 | [`agent-docs.ts`](../../../packages/protocol/src/agent-docs.ts) | `EXECUTE_API_DOC` (tool description) and `DESIGNER_PROMPT` (chat-run system prompt) — our own text | [MCP/02](../MCP/02-execute-api.md), [MCP/04](../MCP/04-local-skill.md) |
 | [`design-guides.ts`](../../../packages/protocol/src/design-guides.ts) | Compiled-in design guides for `read_guide`; `guidesFor(request)` picks guides for a chat turn | [MCP/04](../MCP/04-local-skill.md), [MCP/01](../MCP/01-transports-tools.md) |
 | [`fonts.ts`](../../../packages/protocol/src/fonts.ts) | Generated `BUNDLED_FONTS` list (agent docs, font picker) | [RENDERING/01](../RENDERING/01-canvaskit-pipeline.md) |

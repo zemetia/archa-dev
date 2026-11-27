@@ -74,5 +74,5 @@
 
 **Linked from:** [FILE_FORMATS/02](../FILE_FORMATS/02-archadev-project.md)
 
-**Code:** [`apps/desktop/src/core-host/icons.ts`](../../../apps/desktop/src/core-host/icons.ts) · [`apps/desktop/src/core-host/library.ts`](../../../apps/desktop/src/core-host/library.ts) · [`apps/desktop/test/active-data-dir.test.ts`](../../../apps/desktop/test/active-data-dir.test.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts) · [`packages/protocol/src/storage.ts`](../../../packages/protocol/src/storage.ts) · [`packages/protocol/test/storage.test.ts`](../../../packages/protocol/test/storage.test.ts)
+**Code:** [`packages/host/src/stores/icons.ts`](../../../packages/host/src/stores/icons.ts) · [`packages/host/src/stores/library.ts`](../../../packages/host/src/stores/library.ts) · [`packages/host/test/active-data-dir.test.ts`](../../../packages/host/test/active-data-dir.test.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts) · [`packages/protocol/src/storage.ts`](../../../packages/protocol/src/storage.ts) · [`packages/protocol/test/storage.test.ts`](../../../packages/protocol/test/storage.test.ts)
 <!-- backlinks:end -->

@@ -81,5 +81,5 @@ export const exportCommand = new Command('export')
 
 **Linked from:** — (only its hub and the indexes)
 
-**Code:** [`apps/cli/src/connect.ts`](../../../apps/cli/src/connect.ts) · [`apps/cli/src/index.ts`](../../../apps/cli/src/index.ts)
+**Code:** [`apps/cli/src/connect.ts`](../../../apps/cli/src/connect.ts) · [`apps/cli/src/headless.ts`](../../../apps/cli/src/headless.ts) · [`apps/cli/src/index.ts`](../../../apps/cli/src/index.ts)
 <!-- backlinks:end -->
