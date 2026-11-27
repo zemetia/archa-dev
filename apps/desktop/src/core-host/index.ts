@@ -1,16 +1,18 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { createServer } from 'node:net';
-import { randomBytes } from 'node:crypto';
+import { resolve } from 'node:path';
 import type { MessagePortMain } from 'electron';
-import { jsonLines, type Channel, type Message } from '@archa/protocol';
-import { runtimeFile, socketPath, type RuntimeInfo } from '@archa/protocol/node';
-import { Workspace } from './workspace';
+import type { Channel, Message } from '@archa/protocol';
+import { createHost, nodeMcpCommand } from '@archa/host';
+import { callBrowser } from './main-bridge';
 
-/* Core host: utilityProcess that owns every document (blueprint ARCHITECTURE/01). */
+/*
+ * Core host: the utilityProcess that owns every document (blueprint ARCHITECTURE/01). The host
+ * itself is @archa/host; this file only wires it to Electron's parentPort, window MessagePorts
+ * and the main-process browser.
+ */
 
-const ws = new Workspace();
-const token = randomBytes(24).toString('hex');
+/** The `archa` CLI bundle: ARCHA_CLI override, else the monorepo build next to the desktop app (dev). */
+const cliPath = process.env.ARCHA_CLI ?? resolve(__dirname, '../../../cli/dist/archa.cjs');
+const core = createHost({ browser: callBrowser, cliPath, mcpCommand: nodeMcpCommand(cliPath) });
 
 function portChannel(port: MessagePortMain): Channel {
   const subs: Array<(m: Message) => void> = [];
@@ -23,52 +25,19 @@ process.parentPort.on('message', (e) => {
   const msg = e.data as { type: string; windowId?: number };
   if (msg.type === 'connect' && e.ports[0]) {
     const port = e.ports[0];
-    const conn = ws.attach(portChannel(port), { kind: 'renderer', name: `window-${msg.windowId}` });
-    port.on('close', () => ws.detach(conn));
+    const conn = core.attach(portChannel(port), { kind: 'renderer', name: `window-${msg.windowId}` });
+    port.on('close', () => core.detach(conn));
   } else if (msg.type === 'shutdown') {
     cleanup();
   }
 });
 
-/* Local socket for `archa` CLI and `archa mcp` (blueprint ARCHITECTURE/02). */
-const path = socketPath();
-if (process.platform !== 'win32') rmSync(path, { force: true });
-const server = createServer((socket) => {
-  socket.setEncoding('utf8');
-  let authed = false;
-  const subs: Array<(m: Message) => void> = [];
-  const channel = jsonLines((s) => socket.write(s), (cb) => socket.on('data', cb));
-  const proxied: Channel = { send: channel.send, onMessage: (cb) => subs.push(cb) };
-  let conn: ReturnType<typeof ws.attach> | null = null;
-  channel.onMessage((m) => {
-    if (!authed) {
-      if (m.t === 'hello' && m.token === token) {
-        try {
-          conn = ws.attach(proxied, m.client);
-          authed = true;
-        } catch {
-          socket.destroy(); // malformed client info
-        }
-      } else socket.destroy();
-      return;
-    }
-    for (const s of subs) s(m);
-  });
-  socket.on('close', () => { if (conn) ws.detach(conn); });
-  socket.on('error', () => socket.destroy());
-});
-server.listen(path, () => {
-  mkdirSync(dirname(runtimeFile()), { recursive: true });
-  const info: RuntimeInfo = { pid: process.pid, socket: path, token, startedAt: Date.now() };
-  writeFileSync(runtimeFile(), JSON.stringify(info, null, 2), { mode: 0o600 });
-});
-server.on('error', (e) => console.error('[core] socket error', e));
+// Local socket for `archa` CLI and `archa mcp` (blueprint ARCHITECTURE/02).
+core.listen('app').catch((e) => console.error('[core] socket error', e));
 
 function cleanup() {
-  ws.accounts.shutdown();
-  void ws.chat.shutdown();
-  try { rmSync(runtimeFile(), { force: true }); } catch { /* already gone */ }
-  server.close();
+  // Its synchronous part removes the runtime file, closes the socket and stops agent processes.
+  void core.close();
   process.exit(0);
 }
 process.on('SIGTERM', cleanup);

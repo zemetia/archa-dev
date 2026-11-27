@@ -11,7 +11,7 @@
 | Process | Runtime | Entry | Owns | Must not |
 |---|---|---|---|---|
 | Main | Electron main (Node) | `apps/desktop/src/main/index.ts` | Windows, menus, single-instance, argv, file associations, `archadev://`, auto-update, spawning hosts | Hold document state; do heavy work |
-| Core host | `utilityProcess` (Node) | `apps/desktop/src/core-host/index.ts` | Open documents, ops, revisions, undo, cache, autosave, journal, watcher, local socket, MCP relay, agent runs | Touch UI or Electron window APIs |
+| Core host | `utilityProcess` (Node) running `@archa/host`; headless: in-process in `archa` | `packages/host/src/create.ts` (`createHost`); Electron glue `apps/desktop/src/core-host/index.ts`; headless `apps/cli/src/headless.ts` | Open documents, ops, revisions, undo, cache, autosave, journal, watcher, local socket, MCP relay, agent runs | Touch UI or Electron window APIs; import `electron` (only the glue file does) |
 | Renderer | Chromium | `apps/desktop/src/renderer/main.tsx` | Shell, panels, canvas view, view state (zoom, scroll, hover), input → ops | Write files; mutate a document without the core |
 | Render worker | Web Worker + OffscreenCanvas | `packages/render/src/worker.ts` | Tile rasterisation | Hold authoritative state |
 | Plugin host | `utilityProcess` per trust group | `packages/plugin-host/src/host.ts` | Plugin code under capability checks | Reach fs/network/spawn directly |
@@ -59,5 +59,5 @@ contextBridge.exposeInMainWorld('archa', {
 
 **Linked from:** — (only its hub and the indexes)
 
-**Code:** [`apps/desktop/src/core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) · [`apps/desktop/src/core-host/main-bridge.ts`](../../../apps/desktop/src/core-host/main-bridge.ts) · [`apps/desktop/src/main/index.ts`](../../../apps/desktop/src/main/index.ts)
+**Code:** [`apps/desktop/src/core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) · [`apps/desktop/src/core-host/main-bridge.ts`](../../../apps/desktop/src/core-host/main-bridge.ts) · [`apps/desktop/src/main/index.ts`](../../../apps/desktop/src/main/index.ts) · [`packages/host/src/create.ts`](../../../packages/host/src/create.ts) · [`packages/host/src/host.ts`](../../../packages/host/src/host.ts)
 <!-- backlinks:end -->

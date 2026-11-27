@@ -161,10 +161,10 @@ describe('document patches', () => {
     const before = ids.map((id) => nodeCorners(s.doc, id));
     commit(s, groupPatches(start, t, ids, false));
     // Every corner of every layer moved exactly by the group turn.
-    ids.forEach((id, i) => nodeCorners(s.doc, id).forEach((p, k) => {
+    ids.forEach((id, i) => { nodeCorners(s.doc, id).forEach((p, k) => {
       const q = before[i]![k]!;
       close(p, { x: t[0] * q.x + t[2] * q.y + t[4], y: t[1] * q.x + t[3] * q.y + t[5] }, 1);
-    }));
+    }); });
     expect(s.doc.require(ids[0]!).rotation).toBeCloseTo(30);
     expect(s.doc.require(ids[1]!).rotation).toBeCloseTo(40);
   });

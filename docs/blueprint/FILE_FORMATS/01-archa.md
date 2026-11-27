@@ -40,7 +40,7 @@
 
 | Rule | Detail |
 |---|---|
-| Arrival | Every transaction passes `DocumentSession.transformOps` (`core-host/assets.ts`): a data: URL, absolute image path or `file://` URL in an image node `src` or an image paint `src` is copied into `assets/images/` first. Listeners, undo and the file only ever see `asset:` |
+| Arrival | Every transaction passes `DocumentSession.transformOps` (`protocol/src/assets.ts`): a data: URL, absolute image path or `file://` URL in an image node `src` or an image paint `src` is copied into `assets/images/` first. Listeners, undo and the file only ever see `asset:` |
 | Other sources | `http(s)` URLs stay as they are (loaded through the host proxy) |
 | Opening older files | Base64 images are written out on open; the document is marked dirty so the next save drops them |
 | Unsaved | Folder lives in `ARCHA_HOME/runtime/data/<docId>/`; the first save moves it next to the file. Save As copies it to `<new name>-data/` |
@@ -94,5 +94,5 @@ Round-trip `pack ∘ unpack` and `unpack ∘ pack` are lossless — tested on ev
 
 **Linked from:** [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) · [REFERENCE](../REFERENCE.md)
 
-**Code:** [`apps/desktop/src/core-host/assets.ts`](../../../apps/desktop/src/core-host/assets.ts) · [`apps/desktop/src/main/asset-paths.ts`](../../../apps/desktop/src/main/asset-paths.ts) · [`apps/desktop/src/main/assets-protocol.ts`](../../../apps/desktop/src/main/assets-protocol.ts) · [`apps/desktop/src/renderer/lib/asset-urls.ts`](../../../apps/desktop/src/renderer/lib/asset-urls.ts) · [`apps/desktop/test/assets.test.ts`](../../../apps/desktop/test/assets.test.ts) · [`packages/formats/src/archa.ts`](../../../packages/formats/src/archa.ts) · [`packages/formats/test/archa.test.ts`](../../../packages/formats/test/archa.test.ts) · [`packages/schema/src/document.ts`](../../../packages/schema/src/document.ts)
+**Code:** [`apps/desktop/src/main/asset-paths.ts`](../../../apps/desktop/src/main/asset-paths.ts) · [`apps/desktop/src/main/assets-protocol.ts`](../../../apps/desktop/src/main/assets-protocol.ts) · [`apps/desktop/src/renderer/lib/asset-urls.ts`](../../../apps/desktop/src/renderer/lib/asset-urls.ts) · [`apps/desktop/test/assets.test.ts`](../../../apps/desktop/test/assets.test.ts) · [`packages/formats/src/archa.ts`](../../../packages/formats/src/archa.ts) · [`packages/formats/test/archa.test.ts`](../../../packages/formats/test/archa.test.ts) · [`packages/host/src/domains/documents.ts`](../../../packages/host/src/domains/documents.ts) · [`packages/protocol/src/assets.ts`](../../../packages/protocol/src/assets.ts) · [`packages/schema/src/document.ts`](../../../packages/schema/src/document.ts)
 <!-- backlinks:end -->

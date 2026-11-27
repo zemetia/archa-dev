@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown, Circle, Copy, Droplet, Frame, Globe, Group, Hash, Image, MoreHorizontal, PenTool, Plus, Search, Square, StickyNote, Trash2, Triangle, Type, Workflow, X,
 } from 'lucide-react';

@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 import tailwind from '@tailwindcss/vite';
 
 // Workspace packages ship TypeScript sources, so they are bundled instead of externalised.
-const workspace = ['@archa/core', '@archa/schema', '@archa/formats', '@archa/protocol', '@archa/render', '@archa/icons'];
+const workspace = ['@archa/core', '@archa/schema', '@archa/formats', '@archa/protocol', '@archa/render', '@archa/icons', '@archa/agents', '@archa/mcp', '@archa/host'];
 
 export default defineConfig({
   main: {

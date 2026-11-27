@@ -83,5 +83,5 @@ Detail fields clipped to 4000 chars; one-line summaries to 160.
 
 **Linked from:** [ARCHITECTURE/01](../ARCHITECTURE/01-processes.md) · [MCP/04](../MCP/04-local-skill.md) · [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md)
 
-**Code:** [`apps/desktop/src/core-host/agent-adapters.ts`](../../../apps/desktop/src/core-host/agent-adapters.ts) · [`apps/desktop/test/agent-adapters.test.ts`](../../../apps/desktop/test/agent-adapters.test.ts) · [`apps/desktop/test/agents-live.test.ts`](../../../apps/desktop/test/agents-live.test.ts)
+**Code:** [`packages/agents/src/agent-adapters.ts`](../../../packages/agents/src/agent-adapters.ts) · [`packages/agents/test/agent-adapters.test.ts`](../../../packages/agents/test/agent-adapters.test.ts) · [`packages/host/test/agents-live.test.ts`](../../../packages/host/test/agents-live.test.ts)
 <!-- backlinks:end -->

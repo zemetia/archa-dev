@@ -40,10 +40,10 @@ type ClientInfo = { kind: 'renderer' | 'cli' | 'mcp' | 'plugin' | 'agent-run'; n
 ```
 
 - `CoreMethods` / `Params<M>` / `Result<M>` are derived from it (`z.input` of the schema = what a client sends). Results are TS types only.
-- The core host's handler map (`Workspace.handlers`) is typed `{ [M in MethodName]: Handler<M> }`: a missing or extra handler is a type error. A handler gets `ParsedParams<M>` (`z.output`: trimmed, defaults filled).
-- `Workspace.dispatch` (the one path for MessagePort and socket clients) runs `parseParams` before the handler. Invalid → `{ code: 'INVALID_PARAMS', message: 'Invalid params for <method> — <path>: <issue>; …' }`, handler never called. Unknown method (own keys only) → `NOT_FOUND`. A missing params object is read as `{}`.
+- Handlers live in the domain modules of `@archa/host` (`packages/host/src/domains/*.ts`, each a `Routes` object typed against the registry). `host/test/router.test.ts` keeps a typed `Record<MethodName, true>`, so a method without a handler is a type error, and the router refuses a method defined by two modules at startup. A handler gets `ParsedParams<M>` (`z.output`: trimmed, defaults filled).
+- `router.call` in [`packages/host/src/router.ts`](../../../packages/host/src/router.ts) (the one path for MessagePort, socket and in-process clients) runs `parseParams` before the handler. Invalid → `{ code: 'INVALID_PARAMS', message: 'Invalid params for <method> — <path>: <issue>; …' }`, handler never called. Unknown method (own keys only) → `NOT_FOUND`. A missing params object is read as `{}`.
 - Schemas accept everything real clients send: a document ref resolved by `session()` is a plain string (`''` = active document); ops are only shape-checked here — `doc.apply` still runs `opSchema` and keeps the raw ops (the schema fills defaults).
-- `apps/desktop/test/rpc-registry.test.ts`: handler keys = registry keys; invalid params never reach a handler.
+- `packages/host/test/rpc-registry.test.ts`: route keys = registry keys; invalid params never reach a handler.
 
 Agent tools: [MCP/01 → Adding a tool](../MCP/01-transports-tools.md#adding-a-tool).
 
@@ -55,7 +55,7 @@ Agent tools: [MCP/01 → Adding a tool](../MCP/01-transports-tools.md#adding-a-t
 |---|---|---|---|
 | `MessagePort` | Renderer, plugin host | Structured clone | Implicit (port given by main) |
 | Named pipe `\\.\pipe\archadev-<user>-<hash>` / unix socket `~/.archadev/runtime/core.sock` | CLI, `archa mcp` | JSON lines | Token from `runtime/core.json` sent in the first frame |
-| In-process | Headless CLI, tests | Direct call | — |
+| In-process | Headless CLI, tests | `channelPair()` in `@archa/host` (structured clone, async) | — |
 
 The socket only accepts local connections. `core.json` is written with mode `0600` and deleted on clean shutdown.
 
@@ -85,5 +85,5 @@ Subscriptions are per document (`document.subscribe(docId)`) so a window only re
 
 **Linked from:** [ARCHITECTURE/01](./01-processes.md)
 
-**Code:** [`apps/cli/src/connect.ts`](../../../apps/cli/src/connect.ts) · [`apps/desktop/src/core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) · [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`apps/desktop/src/preload/index.ts`](../../../apps/desktop/src/preload/index.ts) · [`apps/desktop/test/rpc-registry.test.ts`](../../../apps/desktop/test/rpc-registry.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts) · [`packages/protocol/src/rpc.ts`](../../../packages/protocol/src/rpc.ts)
+**Code:** [`apps/cli/src/connect.ts`](../../../apps/cli/src/connect.ts) · [`apps/desktop/src/core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) · [`apps/desktop/src/preload/index.ts`](../../../apps/desktop/src/preload/index.ts) · [`packages/host/src/domains/app.ts`](../../../packages/host/src/domains/app.ts) · [`packages/host/src/host.ts`](../../../packages/host/src/host.ts) · [`packages/host/src/in-process.ts`](../../../packages/host/src/in-process.ts) · [`packages/host/src/router.ts`](../../../packages/host/src/router.ts) · [`packages/host/src/socket.ts`](../../../packages/host/src/socket.ts) · [`packages/host/test/in-process.test.ts`](../../../packages/host/test/in-process.test.ts) · [`packages/host/test/parity-scenario.test.ts`](../../../packages/host/test/parity-scenario.test.ts) · [`packages/host/test/router.test.ts`](../../../packages/host/test/router.test.ts) · [`packages/host/test/rpc-registry.test.ts`](../../../packages/host/test/rpc-registry.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts) · [`packages/protocol/src/rpc.ts`](../../../packages/protocol/src/rpc.ts) · [`packages/protocol/src/storage.ts`](../../../packages/protocol/src/storage.ts)
 <!-- backlinks:end -->

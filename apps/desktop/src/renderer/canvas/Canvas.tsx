@@ -602,7 +602,7 @@ export function Canvas() {
       const ops: Op[] = [];
       if (g.reorder) {
         const { parentId, index } = g.reorder;
-        g.ids.forEach((id, i) => ops.push({ op: 'move', id, parentId, index: index + i }));
+        g.ids.forEach((id, i) => { ops.push({ op: 'move', id, parentId, index: index + i }); });
         await commit('Reorder', ops);
         return;
       }

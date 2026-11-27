@@ -40,8 +40,8 @@ export type Pending = {
 const live = new Map<string, Live>();
 let ghosts: Ghost[] = [];
 
-const easeOut = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
-const easeIn = (t: number) => Math.pow(Math.min(1, Math.max(0, t)), 2);
+const easeOut = (t: number) => 1 - (1 - Math.min(1, Math.max(0, t))) ** 3;
+const easeIn = (t: number) => Math.min(1, Math.max(0, t)) ** 2;
 /** Settles with a small overshoot, like something set down. */
 const easeBack = (t: number) => { const x = Math.min(1, Math.max(0, t)) - 1; return 1 + 2.2 * x * x * x + 1.2 * x * x; };
 

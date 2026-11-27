@@ -75,5 +75,5 @@ Rules live in `packages/mcp/src/lint/rules/<id>.ts`, each with a fixture test. P
 
 **Linked from:** [BROWSER](../BROWSER.md) · [DOCUMENT_MODEL/03](../DOCUMENT_MODEL/03-layout.md) · [INDEX](../INDEX.md) · [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md)
 
-**Code:** [`apps/cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) · [`apps/desktop/src/core-host/execute.ts`](../../../apps/desktop/src/core-host/execute.ts) · [`packages/core/src/lint.ts`](../../../packages/core/src/lint.ts) · [`packages/core/test/core.test.ts`](../../../packages/core/test/core.test.ts)
+**Code:** [`packages/core/src/lint.ts`](../../../packages/core/src/lint.ts) · [`packages/core/test/core.test.ts`](../../../packages/core/test/core.test.ts) · [`packages/host/src/domains/agent-tools.ts`](../../../packages/host/src/domains/agent-tools.ts) · [`packages/host/src/screenshot.ts`](../../../packages/host/src/screenshot.ts) · [`packages/mcp/src/execute.ts`](../../../packages/mcp/src/execute.ts) · [`packages/mcp/src/server.ts`](../../../packages/mcp/src/server.ts)
 <!-- backlinks:end -->

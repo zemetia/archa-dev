@@ -330,5 +330,5 @@ function tag(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, 
 
 function polyline(ctx: CanvasRenderingContext2D, pts: Array<{ x: number; y: number }>) {
   ctx.beginPath();
-  pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+  pts.forEach((p, i) => { if (i) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); });
 }
