@@ -13,7 +13,7 @@
 | stdio | `archa mcp [--project <dir> \| --file <path>] [--run <runId>]` | Spawned by the agent; cwd project by default |
 | Streamable HTTP | App setting or `ARCHA_MCP_HTTP_PORT`; binds `127.0.0.1` only; bearer token from `runtime/core.json` | Off by default |
 
-`archa mcp` is a relay: running app → forwards to its core (the person sees the agent live); no app → headless core in-process → [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md).
+`archa mcp` is a relay: running app → forwards to its core (the person sees the agent live); no app → fails, or with `--headless` (`-hl`) a headless core in-process → [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md).
 
 ---
 

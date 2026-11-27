@@ -28,7 +28,7 @@ Code: `apps/cli/src/commands/<command>.ts` — one file per top-level command.
 
 | Command | Behaviour |
 |---|---|
-| `archa mcp [--project <dir> \| --file <path>] [--run <id>]` | MCP server on stdio → [MCP/01](../MCP/01-transports-tools.md) |
+| `archa mcp [--project <dir> \| --file <path>] [--run <id>] [--headless \| -hl]` | MCP server on stdio; `--headless`/`-hl` starts a core in-process when no app runs → [MCP/01](../MCP/01-transports-tools.md) |
 | `archa skill install\|uninstall [--agent claude\|agy\|codex\|hermes\|all] [--scope project\|user]` | → [MCP/04](../MCP/04-local-skill.md) |
 | `archa agents [--json]` | Detected CLIs, versions, profiles, default models |
 | `archa status [agent]` | Deep check app ↔ core ↔ MCP ↔ agent |

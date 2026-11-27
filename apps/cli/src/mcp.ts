@@ -5,15 +5,18 @@ import { startHeadless } from './headless';
 
 /**
  * `archa mcp`: stdio MCP server relaying to the running app's core host, so the person watches the
- * agent work live (blueprint MCP/01). With no app running it starts a headless host in this process.
+ * agent work live (blueprint MCP/01). With no app running it fails, unless `--headless` (`-hl`) asks for a
+ * headless host in this process — opt-in until core.lock/handover exist, so an app opened later never
+ * becomes a second writer behind an agent's back (blueprint ARCHITECTURE/03).
  */
-export async function runMcp(opts: { doc?: string; agent?: string }) {
+export async function runMcp(opts: { doc?: string; agent?: string; headless?: boolean }) {
   const agentName = opts.agent ?? 'mcp-agent';
   const client: ClientInfo = { kind: 'mcp', name: agentName, agentId: agentName, runId: process.env.ARCHA_RUN_ID || undefined };
-  // A running app always wins; headless only when no live core answers (blueprint ARCHITECTURE/03).
+  // A running app always wins; headless only when asked for and no live core answers (blueprint ARCHITECTURE/03).
   const connect = () => connectCore(client).catch((e: unknown) => {
-    if (e instanceof CoreUnavailable) return startHeadless(client);
-    throw e;
+    if (!(e instanceof CoreUnavailable)) throw e;
+    if (opts.headless) return startHeadless(client);
+    throw new CoreUnavailable(`${e.message} Or run \`archa mcp --headless\` (-hl) to work without the app.`);
   });
   // One connection for every tool call, even when the first calls arrive together.
   let pending: Promise<RpcClient> | null = null;

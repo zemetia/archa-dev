@@ -28,7 +28,7 @@ Target: first paint < 1.5 s cold for a 20k-node file → [CACHE/03](../CACHE/03-
 3. Boot `@archa/core` in-process with the in-process transport.
 4. `archa mcp` headless writes `core.lock` so a later app launch connects to it instead of opening a second writer… **unless** the app starts later: the app asks the headless core to hand over (`core.handover`) — it flushes, releases the lock and its clients reconnect to the app.
 
-**Built (1.7.3, `apps/cli/src/headless.ts`):** steps 1 and 3 — `archa mcp` connects to a live core first and only then boots `@archa/host` in-process; it also listens on the local socket and writes `runtime/core.json` with `kind: 'headless'` (removed on exit), so other `archa` clients share that one writer. **Not built:** `core.lock` (step 2) and `core.handover` (step 4) — an app started while a headless core runs cannot take over its socket; quit the agent's `archa mcp` first. `archa export` does not exist yet.
+**Built (1.7.3, `apps/cli/src/headless.ts`):** steps 1 and 3, opt-in — `archa mcp --headless` (`-hl`) connects to a live core first and only then boots `@archa/host` in-process (plain `archa mcp` fails with a hint instead, so no second writer appears until handover exists); it also listens on the local socket and writes `runtime/core.json` with `kind: 'headless'` (removed on exit), so other `archa` clients share that one writer. **Not built:** `core.lock` (step 2) and `core.handover` (step 4) — an app started while a headless core runs cannot take over its socket; quit the agent's `archa mcp` first. `archa export` does not exist yet.
 
 ---
 
