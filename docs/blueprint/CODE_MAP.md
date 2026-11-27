@@ -35,20 +35,23 @@ The rest of the blueprint describes the **target** (packages like `@archa/mcp`, 
 
 ## Commands That Exist Today
 
-Root scripts call bare `pnpm`; on this machine run them as `corepack pnpm@9.15.0 <cmd>` ([THIS.md](../knowledge/THIS.md)).
+On this machine run every script as `corepack pnpm@9.15.0 <cmd>` ([THIS.md](../knowledge/THIS.md)). Root scripts that fan out go through `scripts/pnpm.mjs`, which re-runs the pnpm that started them, so they work without a global `pnpm` and fail with the real exit code.
 
 | Command | Does |
 |---|---|
 | `corepack pnpm@9.15.0 install` then `node node_modules/electron/install.js` | Install workspace + fetch the Electron binary |
 | `corepack pnpm@9.15.0 --filter @archa/desktop dev` | Run the app in dev (isolate it: temp `ARCHA_HOME` + `--user-data-dir`) |
-| `corepack pnpm@9.15.0 -r typecheck` | Typecheck every package |
+| `corepack pnpm@9.15.0 typecheck` | Typecheck every package (`-r typecheck`) |
+| `corepack pnpm@9.15.0 lint` | Biome lint (`biome.json`), zero warnings; formatter off |
 | `corepack pnpm@9.15.0 test` | `vitest run` (root `vitest.config.ts`) |
 | `corepack pnpm@9.15.0 cli` | Build `apps/cli` (tsup bundle the app spawns as `archa mcp`) |
 | `corepack pnpm@9.15.0 dist` | CLI build + electron-builder installer |
 | `node scripts/gen-icon-sets.mjs` | Regenerate `packages/icons/data/` from the icon packages |
 | `node scripts/gen-backlinks.mjs [--check]` | Regenerate / verify blueprint backlinks, code-map coverage, broken links, 150-line limit |
 
-Not wired yet (target in [BEST_PRACTICE](./BEST_PRACTICE.md)): `pnpm lint`, `pnpm bench`, `pnpm gen:api-docs`, Turborepo, ESLint config, CI workflows.
+CI: `.github/workflows/ci.yml` runs install → typecheck → lint → test → docs:check on ubuntu + windows for every push and PR.
+
+Not wired yet (target in [BEST_PRACTICE](./BEST_PRACTICE.md)): `pnpm bench`, `pnpm gen:api-docs`, Turborepo, e2e / release workflows.
 
 ---
 

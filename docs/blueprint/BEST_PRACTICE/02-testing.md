@@ -50,6 +50,8 @@ A guard in `test/setup.ts` throws if `ARCHA_HOME` resolves to the real home.
 
 ## CI Matrix
 
+Today: `.github/workflows/ci.yml`, one `check` job on ubuntu + windows — frozen install (`ELECTRON_SKIP_BINARY_DOWNLOAD=1`: no test needs the Electron binary; `ONNXRUNTIME_NODE_INSTALL=skip`: no CUDA download), typecheck → lint → test → docs:check. The table is the target.
+
 | Job | OS | Steps |
 |---|---|---|
 | check | ubuntu | install → lint → typecheck |
@@ -72,5 +74,5 @@ A guard in `test/setup.ts` throws if `ARCHA_HOME` resolves to the real home.
 
 **Linked from:** — (only its hub and the indexes)
 
-**Code:** [`apps/desktop/test/agents-live.test.ts`](../../../apps/desktop/test/agents-live.test.ts) · [`vitest.config.ts`](../../../vitest.config.ts)
+**Code:** [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) · [`apps/desktop/test/agents-live.test.ts`](../../../apps/desktop/test/agents-live.test.ts) · [`vitest.config.ts`](../../../vitest.config.ts)
 <!-- backlinks:end -->
