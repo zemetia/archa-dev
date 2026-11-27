@@ -55,6 +55,23 @@
   },
   "overrides": [
     {
+      "includes": ["packages/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "electron": "Only apps/desktop imports Electron; packages run headless in the CLI (blueprint STRUCTURE/02 rule 4)."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/core/**"],
       "linter": {
         "rules": {

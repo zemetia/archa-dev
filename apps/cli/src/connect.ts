@@ -11,7 +11,7 @@ export async function connectCore(client: ClientInfo): Promise<RpcClient> {
   try {
     info = JSON.parse(readFileSync(runtimeFile(), 'utf8')) as RuntimeInfo;
   } catch {
-    throw new CoreUnavailable('ArchaDev is not running. Open the app first (headless mode is not built yet).');
+    throw new CoreUnavailable('ArchaDev is not running. Open the app first.');
   }
   return new Promise((resolve, reject) => {
     const socket = netConnect(info.socket);
