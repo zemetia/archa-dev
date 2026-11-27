@@ -8,7 +8,7 @@ import type { NodeInput } from '@archa/schema';
 import type { AgentTrail, Channel, Message } from '@archa/protocol';
 import { hitPath, nodeCorners, nodeHandlePoint, normalizeAngle, resizedBox, resizeFrame, rotateHandlePoint, turnedCursor, visualBounds } from '../src/renderer/lib/geometry';
 import { cursorAlive, markDone, pushTrail } from '../src/renderer/canvas/cursors';
-import { Workspace } from '../src/core-host/workspace';
+import { newHost } from './host-helper';
 
 /* Rotation, Canva-like text handles, and done() putting the agent cursor away. */
 
@@ -84,15 +84,15 @@ describe('done()', () => {
   afterEach(() => { delete process.env.ARCHA_HOME; rmSync(home, { recursive: true, force: true }); });
 
   it('broadcasts agent.done and logs it', async () => {
-    const ws = new Workspace();
+    const ws = newHost();
     const events: Array<{ event: string; data: unknown }> = [];
     const ui: Channel = { send: (m: Message) => { if (m.t === 'evt') events.push({ event: m.event, data: m.data }); }, onMessage: () => {} };
     ws.attach(ui, { kind: 'renderer', name: 'window' });
     const agent = ws.attach({ send: () => {}, onMessage: () => {} }, { kind: 'mcp', name: 'claude', agentId: 'claude' });
-    const docId = ws.summaries()[0]!.id;
+    const docId = ws.ctx.summaries()[0]!.id;
     await ws.handlers['agent.done']({ docId, summary: 'Built the hero' }, agent);
     expect(events.find((e) => e.event === 'agent.done')?.data).toMatchObject({ docId, author: { id: agent.author.id } });
-    expect(ws.activity.at(-1)).toMatchObject({ tool: 'done', text: 'Built the hero' });
+    expect(ws.ctx.activity.at(-1)).toMatchObject({ tool: 'done', text: 'Built the hero' });
   });
 
   it('lets a cursor fade while its agent process is still up, until the next turn', () => {

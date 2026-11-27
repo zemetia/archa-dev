@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Channel, ChatMessage, ChatRunEvent, Message } from '@archa/protocol';
-import { Workspace } from '../src/core-host/workspace';
-import { ADAPTERS, type Adapter, type AgentEvent } from '../src/core-host/agent-adapters';
+import { newHost } from './helpers';
+import { ADAPTERS, type Adapter, type AgentEvent } from '@archa/agents';
 
 /* Chat tool rows (input + paired result) and `/skill` mentions (blueprint AGENT_BRIDGE/03, /05). */
 
@@ -36,7 +36,7 @@ const fake = (events: AgentEvent[]) => ({
   models: async () => ({ models: [], source: '' }),
 }) as unknown as Adapter;
 
-async function runOnce(ws: Workspace, ui: ReturnType<typeof fakeChannel>, docId: string, prompt: string) {
+async function runOnce(ws: ReturnType<typeof newHost>, ui: ReturnType<typeof fakeChannel>, docId: string, prompt: string) {
   const r = ws.chat.send(docId, 'fake', prompt);
   await new Promise<void>((resolve) => {
     const check = setInterval(() => {
@@ -58,10 +58,10 @@ describe('chat tool rows', () => {
       { kind: 'result', callId: 'c2', text: 'Reason: nope', failed: true },
     ]);
     ADAPTERS.push(adapter);
-    const ws = new Workspace();
+    const ws = newHost();
     const ui = fakeChannel();
     ws.attach(ui.channel, { kind: 'renderer', name: 'window' });
-    const docId = ws.summaries()[0]!.id;
+    const docId = ws.ctx.summaries()[0]!.id;
     await runOnce(ws, ui, docId, 'build a hero');
 
     const tools = ws.chat.list(docId).filter((m) => m.role === 'tool');
@@ -74,7 +74,7 @@ describe('chat tool rows', () => {
     expect(sent).toEqual([tools[0]!.id, tools[0]!.id, tools[1]!.id, tools[1]!.id]);
 
     // History on disk has each row twice; reading it back keeps one row per id, with the result.
-    const reread = new Workspace();
+    const reread = newHost();
     const back = reread.chat.list(docId).filter((m) => m.role === 'tool');
     expect(back.map((m) => [m.id, m.result])).toEqual([[tools[0]!.id, 'OK (revision 2).'], [tools[1]!.id, 'Reason: nope']]);
   }, 20_000);
@@ -85,10 +85,10 @@ describe('chat tool rows', () => {
     const dir = join(home, 'skills', 'brand-voice');
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'SKILL.md'), '---\nname: brand-voice\ndescription: Our tone of voice\n---\n\nAlways write in a calm, plain voice.\n');
-    const ws = new Workspace();
+    const ws = newHost();
     const ui = fakeChannel();
     ws.attach(ui.channel, { kind: 'renderer', name: 'window' });
-    const docId = ws.summaries()[0]!.id;
+    const docId = ws.ctx.summaries()[0]!.id;
     await runOnce(ws, ui, docId, 'a hero for a bakery /brand-voice, see /landing. Not a skill: /nope or a/path');
 
     expect(lastPrompt).toContain('Skills the person asked for with /name');

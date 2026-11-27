@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Channel, ChatRunEvent, Message } from '@archa/protocol';
-import { Workspace } from '../src/core-host/workspace';
-import { ADAPTERS, type Adapter } from '../src/core-host/agent-adapters';
+import { newHost } from './helpers';
+import { ADAPTERS, type Adapter } from '@archa/agents';
 
 /* Orchestrate mode (blueprint AGENT_BRIDGE/06): a lead thread delegates to worker threads and collects their reports. */
 
@@ -34,10 +34,10 @@ const fake = {
 } as unknown as Adapter;
 
 function setup() {
-  const ws = new Workspace();
+  const ws = newHost();
   const ui = fakeChannel();
   ws.attach(ui.channel, { kind: 'renderer', name: 'window' });
-  const docId = ws.summaries()[0]!.id;
+  const docId = ws.ctx.summaries()[0]!.id;
   const ended = (threadId: string) => new Promise<void>((resolve) => {
     const check = setInterval(() => {
       if (!ws.chat.active().some((r) => r.threadId === threadId)) { clearInterval(check); resolve(); }
@@ -62,7 +62,7 @@ describe('orchestrate mode', () => {
     const { ws, docId, ended } = setup();
     const lead = ws.chat.send(docId, 'fake', 'Build a landing page with a team', undefined, undefined, undefined, { mode: 'orchestrate' });
     const conn = ws.attach(fakeChannel().channel, { kind: 'mcp', name: 'fake', agentId: 'fake', runId: lead.runId });
-    ws.requestRender = async () => ({ png: 'AAAA' });
+    ws.ctx.requestRender = async () => ({ png: 'AAAA' });
     const made = await ws.handlers['agent.execute']({ docId, code: `insert(null, { type: 'frame', name: 'Hero', width: 400, height: 200 })` }, conn);
     expect(made.ok).toBe(true);
     const hero = made.ok ? made.created[0]!.id : '';

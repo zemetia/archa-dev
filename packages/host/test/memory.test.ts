@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Workspace } from '../src/core-host/workspace';
-import { globalMemoryDir, MemoryStore } from '../src/core-host/memory';
-import { SkillManager } from '../src/core-host/skills';
+import { newHost } from './helpers';
+import { globalMemoryDir, MemoryStore } from '@archa/agents';
+import { SkillManager } from '@archa/agents';
 
 /* Agent memory and document skills (blueprint AGENT_BRIDGE/07, AGENT_BRIDGE/05). */
 
@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 const conn = { author: { kind: 'user', id: 'u' } } as never;
-const call = <T>(ws: Workspace, method: string, params: unknown): Promise<T> =>
+const call = <T>(ws: ReturnType<typeof newHost>, method: string, params: unknown): Promise<T> =>
   Promise.resolve((ws.handlers as unknown as Record<string, (p: unknown, c: unknown) => T>)[method]!(params, conn));
 
 describe('memory', () => {
@@ -68,8 +68,8 @@ describe('memory', () => {
   });
 
   it('is reachable over RPC for the open document', async () => {
-    const ws = new Workspace();
-    const docId = ws.summaries()[0]!.id;
+    const ws = newHost();
+    const docId = ws.ctx.summaries()[0]!.id;
     await call(ws, 'doc.save', { docId, path: join(work, 'site.archa') });
     const m = await call<{ id: string; file: string }>(ws, 'memory.remember', { docId, scope: 'document', text: 'Hero photo is always full-bleed.' });
     expect(m.file.startsWith(join(work, 'site-data', 'memory'))).toBe(true);
@@ -120,8 +120,8 @@ describe('document skills', () => {
   });
 
   it('read_skill is reachable over RPC for the open document', async () => {
-    const ws = new Workspace();
-    const docId = ws.summaries()[0]!.id;
+    const ws = newHost();
+    const docId = ws.ctx.summaries()[0]!.id;
     await call(ws, 'doc.save', { docId, path: join(work, 'shop.archa') });
     skill(join(work, 'shop-data', 'skills'), 'shop-rules', 'rules for the shop');
     const r = await call<{ text: string }>(ws, 'agent.readSkill', { docId, name: 'shop-rules' });

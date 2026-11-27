@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ExecuteResult } from '@archa/protocol';
-import { readPdfPage, summarizePage } from '../src/core-host/reference';
-import { assetFile } from '../src/core-host/assets';
-import { Workspace } from '../src/core-host/workspace';
+import { readPdfPage, summarizePage } from '@archa/mcp';
+import { assetFile } from '@archa/protocol/node';
+import { newHost } from './helpers';
 
 /* Rebuild from a reference (blueprint MCP/05) and the execute helpers that go with it. */
 
@@ -69,10 +69,10 @@ describe('reference', () => {
 
 describe('execute helpers', () => {
   const conn = { id: 'c1', author: { kind: 'agent' as const, id: 'a', name: 'Test' }, client: { kind: 'mcp' as const, name: 't' } };
-  const run = (ws: Workspace, code: string) => (ws.handlers['agent.execute'] as unknown as (p: unknown, c: unknown) => Promise<ExecuteResult>)({ code }, conn);
+  const run = (ws: ReturnType<typeof newHost>, code: string) => (ws.handlers['agent.execute'] as unknown as (p: unknown, c: unknown) => Promise<ExecuteResult>)({ code }, conn);
 
   it('image() copies a file into the asset folder at its natural size', async () => {
-    const ws = new Workspace();
+    const ws = newHost();
     const png = join(work, 'photo.png');
     // 3×2 PNG header is enough for the size; the bytes are copied as they are.
     const head = Buffer.alloc(33);
@@ -84,16 +84,16 @@ describe('execute helpers', () => {
     const node = JSON.parse(r.output.find((o) => o.startsWith('{'))!);
     expect(node).toMatchObject({ type: 'image', name: 'photo', width: 150, height: 100 });
     expect(node.src).toMatch(/^asset:images\//);
-    expect(readFileSync(assetFile(ws.assetDir(ws.session()), node.src)!).length).toBe(33);
+    expect(readFileSync(assetFile(ws.ctx.assetDir(ws.ctx.session()), node.src)!).length).toBe(33);
     const bad = await run(ws, `image("C:/nope/missing.png", null)`);
     expect(bad.ok).toBe(false);
   }, 60_000);
 
   it('bind() links a node to variables by name; setVariable re-themes it', async () => {
-    const ws = new Workspace();
+    const ws = newHost();
     const r = await run(ws, `setVariable("color/accent", "#e13044"); b = insert(null, { type: "rect", name: "B", fills: ["#000000"] }); bind(b, { fill: "color/accent" }); setVariable("color/accent", "#0b74de"); print(JSON.stringify(get(b).bind))`);
     if (!r.ok) throw new Error(r.reason);
-    const s = ws.session();
+    const s = ws.ctx.session();
     const b = [...s.doc.nodes.values()].find((n) => n.name === 'B')!;
     expect(b.type === 'rect' && b.fills[0]!.type === 'solid' && b.fills[0]!.color.h).toBeGreaterThan(200);
     const bad = await run(ws, `bind("B", { fill: "color/none" })`);

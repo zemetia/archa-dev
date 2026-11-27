@@ -41,6 +41,12 @@ importers:
 
   apps/cli:
     dependencies:
+      '@archa/host':
+        specifier: workspace:*
+        version: link:../../packages/host
+      '@archa/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@archa/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -63,15 +69,24 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@archa/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@archa/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@archa/formats':
         specifier: workspace:*
         version: link:../../packages/formats
+      '@archa/host':
+        specifier: workspace:*
+        version: link:../../packages/host
       '@archa/icons':
         specifier: workspace:*
         version: link:../../packages/icons
+      '@archa/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@archa/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -188,6 +203,24 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@types/react@19.3.0)(react@19.3.1)
 
+  packages/agents:
+    dependencies:
+      '@archa/core':
+        specifier: workspace:*
+        version: link:../core
+      '@archa/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@archa/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.2
+        version: 1.32.2(zod@4.6.7)
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
   packages/core:
     dependencies:
       '@archa/schema':
@@ -206,11 +239,68 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
 
+  packages/host:
+    dependencies:
+      '@archa/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@archa/core':
+        specifier: workspace:*
+        version: link:../core
+      '@archa/formats':
+        specifier: workspace:*
+        version: link:../formats
+      '@archa/icons':
+        specifier: workspace:*
+        version: link:../icons
+      '@archa/mcp':
+        specifier: workspace:*
+        version: link:../mcp
+      '@archa/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@archa/schema':
+        specifier: workspace:*
+        version: link:../schema
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
   packages/icons:
     dependencies:
       '@archa/schema':
         specifier: workspace:*
         version: link:../schema
+
+  packages/mcp:
+    dependencies:
+      '@archa/core':
+        specifier: workspace:*
+        version: link:../core
+      '@archa/formats':
+        specifier: workspace:*
+        version: link:../formats
+      '@archa/icons':
+        specifier: workspace:*
+        version: link:../icons
+      '@archa/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@archa/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.2
+        version: 1.32.2(zod@4.6.7)
+      pdfjs-dist:
+        specifier: 6.5.438
+        version: 6.5.438
+      quickjs-emscripten:
+        specifier: ^0.32.0
+        version: 0.32.0
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   packages/protocol:
     dependencies:

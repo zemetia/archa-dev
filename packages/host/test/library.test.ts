@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ArchaDocument, DocumentSession, insertOpsFor, libraryInsertOps, makeComponentOps } from '@archa/core';
-import { LibraryStore, libraryPublishSchema } from '../src/core-host/library';
+import { LibraryStore, libraryPublishSchema } from '../src/stores/library';
 
 let home: string;
 beforeEach(() => {

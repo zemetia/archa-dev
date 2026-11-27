@@ -5,7 +5,7 @@ import type { BrowserCommand, BrowserReply, BrowserState } from '@archa/protocol
 import { fetchImage, prepareImage, saveImage, type Fetched } from './browser-image';
 import { PAGE_LIB } from './browser-page';
 import { addressToUrl, normalizeUrl, searchUrl } from './browser-url';
-import { INLINE_BUDGET, INLINE_MAX_SIDE, saveShot } from '../core-host/shots';
+import { INLINE_BUDGET, INLINE_MAX_SIDE, saveShot } from '@archa/protocol/node';
 
 /*
  * In-app browser the agent drives (blueprint BROWSER). Pages live in WebContentsViews on the

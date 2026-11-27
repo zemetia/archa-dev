@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Channel, ChatMessage, ChatRunEvent, ExecuteResult, Message } from '@archa/protocol';
 import { guidesFor, guideText } from '@archa/protocol';
 import { getIcon, loadIconSet, searchIcons } from '@archa/icons';
-import { colorToHex } from '@archa/schema';
-import { Workspace } from '../src/core-host/workspace';
-import { ADAPTERS, type Adapter } from '../src/core-host/agent-adapters';
+import { colorToHex, type Color } from '@archa/schema';
+import { newHost } from './helpers';
+import { ADAPTERS, type Adapter } from '@archa/agents';
 
 /* Warm chat sessions, the internal design guides and the new execute helpers (plan CHAT_AGENT). */
 
@@ -62,10 +62,10 @@ describe('warm chat sessions', () => {
   afterEach(() => { ADAPTERS.splice(ADAPTERS.indexOf(fakeWarm), 1); });
 
   it('keeps one process per thread across turns, queues follow-ups and survives an interrupt', async () => {
-    const ws = new Workspace();
+    const ws = newHost();
     const ui = fakeChannel();
     ws.attach(ui.channel, { kind: 'renderer', name: 'window' });
-    const docId = ws.summaries()[0]!.id;
+    const docId = ws.ctx.summaries()[0]!.id;
     const ended = (runId: string) => new Promise<string>((resolve) => {
       const check = setInterval(() => {
         const e = ui.events.find((x) => x.event === 'chat.run' && (x.data as ChatRunEvent).runId === runId && (x.data as ChatRunEvent).status !== 'running');
@@ -115,8 +115,8 @@ describe('warm chat sessions', () => {
   }, 20_000);
 
   it("gives the warm process's `archa mcp` the thread's session name", async () => {
-    const ws = new Workspace();
-    const docId = ws.summaries()[0]!.id;
+    const ws = newHost();
+    const docId = ws.ctx.summaries()[0]!.id;
     const { threadId } = await ws.chat.warmUp(docId, 'fakewarm');
     const run = ws.chat.send(docId, 'fakewarm', 'one', undefined, undefined, threadId);
     // The MCP client of a warm process identifies with the process id (ARCHA_RUN_ID), not the turn id.
@@ -146,11 +146,11 @@ describe('execute helpers', () => {
   it('icon() inserts a lucide vector, suggests names, and text without fill is auto-fixed with a screenshot', async () => {
     expect(getIcon(await loadIconSet('lucide'), 'arrow-right')).toBeTruthy();
     expect(searchIcons('arrow', { sets: ['lucide'] })).toContain('arrow-right');
-    const ws = new Workspace();
+    const ws = newHost();
     ws.attach(fakeChannel().channel, { kind: 'renderer', name: 'window' });
-    ws.requestRender = async () => ({ png: 'AAAA' });
+    ws.ctx.requestRender = async () => ({ png: 'AAAA' });
     const agent = ws.attach(fakeChannel().channel, { kind: 'mcp', name: 'claude', agentId: 'claude' });
-    const docId = ws.summaries()[0]!.id;
+    const docId = ws.ctx.summaries()[0]!.id;
     const r = await ws.handlers['agent.execute']({ docId, code: `
       card = insert(null, { type: 'frame', name: 'Card', width: 320, height: 200, fills: ['#0b0b0e'], layout: 'row', gap: 8, padding: 16 });
       icon('search', card, { size: 20 });
@@ -158,7 +158,7 @@ describe('execute helpers', () => {
     ` }, agent) as ExecuteResult;
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const doc = ws.session(docId).doc;
+    const doc = ws.ctx.session(docId).doc;
     const ic = doc.findByName('Icon search')[0]!;
     expect(ic.type).toBe('path');
     expect(ic).toMatchObject({ width: 20, height: 20 });
@@ -175,11 +175,11 @@ describe('execute helpers', () => {
   });
 
   it('svg() places AI-written markup as vectors or as an image, and SVG text becomes a drawing', async () => {
-    const ws = new Workspace();
+    const ws = newHost();
     ws.attach(fakeChannel().channel, { kind: 'renderer', name: 'window' });
-    ws.requestRender = async () => ({ png: 'AAAA' });
+    ws.ctx.requestRender = async () => ({ png: 'AAAA' });
     const agent = ws.attach(fakeChannel().channel, { kind: 'mcp', name: 'claude', agentId: 'claude' });
-    const docId = ws.summaries()[0]!.id;
+    const docId = ws.ctx.summaries()[0]!.id;
     const r = await ws.handlers['agent.execute']({ docId, code: `
       card = insert(null, { type: 'frame', name: 'Card', width: 320, height: 200, fills: ['#ffffff'] });
       svg(\`<svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>\`, card, { width: 96, x: 16, y: 16, name: 'Badge' });
@@ -188,7 +188,7 @@ describe('execute helpers', () => {
     ` }, agent) as ExecuteResult;
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const doc = ws.session(docId).doc;
+    const doc = ws.ctx.session(docId).doc;
     const badge = doc.findByName('Badge')[0]!;
     expect(badge).toMatchObject({ type: 'frame', width: 96, height: 96, x: 16, y: 16 });
     expect(doc.children(badge.id).map((n) => n.type)).toEqual(['path', 'path']);
@@ -205,12 +205,12 @@ describe('execute helpers', () => {
   });
 
   it('icon() reaches every set, brand logos keep their colour, and uploaded icons work as my:<name>', async () => {
-    const ws = new Workspace();
+    const ws = newHost();
     ws.attach(fakeChannel().channel, { kind: 'renderer', name: 'window' });
-    ws.requestRender = async () => ({ png: 'AAAA' });
+    ws.ctx.requestRender = async () => ({ png: 'AAAA' });
     const agent = ws.attach(fakeChannel().channel, { kind: 'mcp', name: 'claude', agentId: 'claude' });
-    const docId = ws.summaries()[0]!.id;
-    ws.icons.add([{ name: 'Brand mark', width: 48, height: 24, node: { type: 'path', name: 'x', d: 'M0 0h48v24H0Z', viewBox: { x: 0, y: 0, width: 48, height: 24 }, width: 48, height: 24, fills: ['#ff0000'] } as never }]);
+    const docId = ws.ctx.summaries()[0]!.id;
+    ws.ctx.icons.add([{ name: 'Brand mark', width: 48, height: 24, node: { type: 'path', name: 'x', d: 'M0 0h48v24H0Z', viewBox: { x: 0, y: 0, width: 48, height: 24 }, width: 48, height: 24, fills: ['#ff0000'] } as never }]);
     const r = await ws.handlers['agent.execute']({ docId, code: `
       icon('tabler:home', null, { size: 24, name: 'T' });
       icon('ph-fill:house', null, { size: 32, name: 'P' });
@@ -222,14 +222,14 @@ describe('execute helpers', () => {
     ` }, agent) as ExecuteResult;
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const doc = ws.session(docId).doc;
+    const doc = ws.ctx.session(docId).doc;
     expect(doc.findByName('T')[0]).toMatchObject({ type: 'path', viewBox: { width: 24 }, fills: [] });
     expect(doc.findByName('P')[0]).toMatchObject({ type: 'path', width: 32, viewBox: { width: 256 }, strokes: [] });
     const logo = doc.findByName('GitHub')[0]!;
-    expect(logo.type === 'path' && colorToHex(logo.fills[0]!.color)).toBe('#181717');
+    expect(logo.type === 'path' && colorToHex((logo.fills[0] as { color: Color }).color)).toBe('#181717');
     const mine = doc.findByName('Brand mark')[0]!;
     expect(mine).toMatchObject({ width: 96, height: 48 });
-    expect(mine.type === 'path' && colorToHex(mine.fills[0]!.color)).toBe('#00ff00');
+    expect(mine.type === 'path' && colorToHex((mine.fills[0] as { color: Color }).color)).toBe('#00ff00');
     expect(r.output[0]).toContain('logos:github');
     expect(r.output[1]).toMatch(/^ph:house/);
     const unknown = await ws.handlers['agent.execute']({ docId, code: `icon('nope:x')` }, agent) as ExecuteResult;
@@ -239,18 +239,18 @@ describe('execute helpers', () => {
 
 describe('forgiving execute input', () => {
   it('maps CSS/Figma spellings and lets agents re-declare names between calls', async () => {
-    const ws = new Workspace();
+    const ws = newHost();
     ws.attach(fakeChannel().channel, { kind: 'renderer', name: 'window' });
-    ws.requestRender = async () => ({ png: 'AAAA' });
+    ws.ctx.requestRender = async () => ({ png: 'AAAA' });
     const agent = ws.attach(fakeChannel().channel, { kind: 'mcp', name: 'claude', agentId: 'claude' });
-    const docId = ws.summaries()[0]!.id;
+    const docId = ws.ctx.summaries()[0]!.id;
     const run = (code: string) => ws.handlers['agent.execute']({ docId, code }, agent) as Promise<ExecuteResult>;
     const a = await run(`const page = insert(null, { type: 'frame', name: 'Box', layout: 'vertical', align: 'stretch', justify: 'between', padding: [8, 16], width: 300, height: 200,
       children: [{ type: 'text', name: 'T', content: 'Hello', fontWeight: 'bold', sizing: { horizontal: 'stretch', vertical: 'auto' } }] });`);
     expect(a.ok).toBe(true);
     const b = await run(`const page = get('Box'); print(page.name)`);
     expect(b.ok && b.output).toEqual(['Box']);
-    const doc = ws.session(docId).doc;
+    const doc = ws.ctx.session(docId).doc;
     expect(doc.findByName('Box')[0]).toMatchObject({ layout: 'column', align: 'start', justify: 'space-between', padding: { top: 8, right: 16, bottom: 8, left: 16 } });
     expect(doc.findByName('T')[0]).toMatchObject({ text: 'Hello', fontWeight: 700, sizing: { horizontal: 'fill', vertical: 'hug' } });
     const t = await run(`insert('Box', { type: 'text', name: 'U', text: 'x', textSizing: 'auto', sizing: { vertical: 'auto-height' } })`);

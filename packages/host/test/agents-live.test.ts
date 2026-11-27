@@ -26,17 +26,17 @@ afterAll(() => {
 describe.skipIf(!enabled)('live agent runs', () => {
   for (const agent of agents) {
     it(`${agent}: streams a reply and calls the archadev MCP`, async () => {
-      const { Workspace } = await import('../src/core-host/workspace');
-      const ws = new Workspace();
+      const { newHost } = await import('./helpers');
+      const ws = newHost();
       const events: Array<{ event: string; data: unknown }> = [];
       const done = new Promise<string>((resolve) => {
-        ws.broadcast = ((event: string, data: unknown) => {
+        ws.ctx.broadcast = ((event: string, data: unknown) => {
           events.push({ event, data });
           const d = data as { status?: string };
           if (event === 'chat.run' && d.status && d.status !== 'running') resolve(d.status);
-        }) as typeof ws.broadcast;
+        }) as typeof ws.ctx.broadcast;
       });
-      const docId = [...ws.sessions.keys()][0]!;
+      const docId = [...ws.ctx.sessions.keys()][0]!;
       ws.chat.send(docId, agent, 'Call the archadev get_state tool once. Change nothing. Then reply with one short sentence.', MODELS[agent], 'host');
       const status = await done;
       const msgs = events.filter((e) => e.event === 'chat.message').map((e) => e.data as ChatMessage);
