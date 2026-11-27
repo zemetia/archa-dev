@@ -82,5 +82,5 @@ Subscriptions are per document (`document.subscribe(docId)`) so a window only re
 
 **Linked from:** [ARCHITECTURE/01](./01-processes.md)
 
-**Code:** [`apps/cli/src/connect.ts`](../../../apps/cli/src/connect.ts) · [`apps/desktop/src/core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) · [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`apps/desktop/src/preload/index.ts`](../../../apps/desktop/src/preload/index.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts)
+**Code:** [`apps/cli/src/connect.ts`](../../../apps/cli/src/connect.ts) · [`apps/desktop/src/core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) · [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`apps/desktop/src/preload/index.ts`](../../../apps/desktop/src/preload/index.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts) · [`packages/protocol/src/storage.ts`](../../../packages/protocol/src/storage.ts)
 <!-- backlinks:end -->

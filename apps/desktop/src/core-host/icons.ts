@@ -1,16 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import type { CustomIcon } from '@archa/icons';
 import type { NodeInput } from '@archa/schema';
-import { archaHome } from '@archa/protocol/node';
+import { paths, readJson, writeJsonAtomic } from '@archa/protocol/node';
 
 /*
  * Icons the person uploaded (blueprint DESIGN_SYSTEM/05 → My icons): one file per machine,
  * ARCHA_HOME/icons/custom.json, shared by every document and by agents as `icon("my:<name>")`.
  */
 
-const file = () => join(archaHome(), 'icons', 'custom.json');
+const file = paths.customIcons;
 
 const iconSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -31,13 +29,9 @@ export class IconStore {
 
   list(): CustomIcon[] {
     if (this.cache) return this.cache;
-    try {
-      this.cache = existsSync(file()) ? fileSchema.parse(JSON.parse(readFileSync(file(), 'utf8'))).icons.map((i) => ({ ...i, node: i.node as NodeInput })) : [];
-    } catch {
-      // A broken file is kept aside rather than overwritten, so nothing is lost.
-      renameSync(file(), `${file()}.broken-${Date.now()}`);
-      this.cache = [];
-    }
+    // A broken file is kept aside (quarantine) rather than overwritten, so nothing is lost.
+    const stored = readJson(file(), fileSchema, { format: 'archa-icons', icons: [] }, { quarantine: true });
+    this.cache = stored.icons.map((i) => ({ ...i, node: i.node as NodeInput }));
     return this.cache;
   }
 
@@ -67,10 +61,7 @@ export class IconStore {
   }
 
   private save(list: CustomIcon[]) {
-    mkdirSync(dirname(file()), { recursive: true });
-    const tmp = `${file()}.tmp`;
-    writeFileSync(tmp, JSON.stringify({ format: 'archa-icons', icons: list }));
-    renameSync(tmp, file());
+    writeJsonAtomic(file(), { format: 'archa-icons', icons: list }, { indent: 0 });
     this.cache = list;
   }
 }

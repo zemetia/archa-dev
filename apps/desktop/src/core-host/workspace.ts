@@ -17,7 +17,7 @@ import { McpServerManager } from './mcp-servers';
 import { callBrowser } from './main-bridge';
 import { randomPersona } from './personas';
 import { MemoryStore, memoryParams } from './memory';
-import { assetDirFor, dataDirFor, externalizeData, externalizeOps, inlineData, isRuntimeDataDir, migrateDataDir, moveDataDir } from './assets';
+import { externalizeData, externalizeOps, inlineData, migrateDataDir, moveDataDir } from './assets';
 import { compareReference, compareSchema, readReference, referenceSchema } from './reference-tools';
 import { canvasFit, fitBudget, INLINE_BUDGET, INLINE_MAX_SIDE, MAX_SLICES, saveShot, SLICE_HEIGHT, SLICE_MIN_HEIGHT, SLICE_RATIO, sweepShots } from './shots';
 
@@ -61,6 +61,7 @@ const orchestraTellSchema = z.object({ worker: z.string().min(1).max(100), messa
 const chatThreadSchema = z.object({ docId: z.string().min(1), threadId: z.string().min(1).max(64) });
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { docPaths, dataDirFor, assetDirFor, isRuntimeDataDir } from '@archa/protocol/node';
 
 /** The `archa` CLI bundle: ARCHA_CLI override, else the monorepo build next to the desktop app (dev). */
 export function cliPath(): string {
@@ -93,7 +94,7 @@ export class Workspace {
   readonly accounts = new AccountManager((accountId) => this.broadcast('accounts.changed', accountId ? { accountId } : {}));
   readonly skills = new SkillManager(() => this.broadcast('skills.changed', {}));
   /** Agent memory: global plus the document's own (blueprint AGENT_BRIDGE/07). */
-  readonly memory = new MemoryStore((docId) => { try { return this.dataDir(docId ?? ''); } catch { return null; } }, () => this.broadcast('memory.changed', {}));
+  readonly memory = new MemoryStore((docId) => this.activeDataDir(docId), () => this.broadcast('memory.changed', {}));
   readonly mcpServers = new McpServerManager(() => this.broadcast('mcp.changed', {}));
   readonly chat = new ChatRunner(this, mcpCommand);
   readonly library = new LibraryStore();
@@ -164,9 +165,19 @@ export class Workspace {
     return dataDirFor(session.filePath, session.id);
   }
 
+  /**
+   * The data folder agents and stores should use: the given document's, or without `docId` the one the
+   * person used last. Null when that document is not open (or none is).
+   */
+  activeDataDir(docId?: string): string | null {
+    const s = this.findSession(docId);
+    return s ? this.dataDir(s) : null;
+  }
+
   /** `<name>-data/skills/`: the document's own skills; undefined when no document is open. */
   skillsDir(docId?: string): string | undefined {
-    try { return join(this.dataDir(docId ?? ''), 'skills'); } catch { return undefined; }
+    const dir = this.activeDataDir(docId);
+    return dir ? docPaths(dir).skills() : undefined;
   }
 
   /** `<name>-data/assets/`: where the document's `asset:` references resolve. */
@@ -194,11 +205,21 @@ export class Workspace {
    * Agents pass `doc` on any MCP tool to work on a document that is not the active one.
    */
   session(ref?: string): DocumentSession {
+    const found = this.findSession(ref);
+    if (found) return found;
+    if (!ref) throw new DocumentError('NOT_FOUND', 'No document is open in ArchaDev');
+    const all = [...this.sessions.values()];
+    const byName = all.filter((s) => s.doc.meta.name === ref);
+    const open = all.map((s) => `${s.doc.meta.name} (${s.id})`).join(', ');
+    if (byName.length > 1) throw new DocumentError('VALIDATION', `${byName.length} open documents are named "${ref}" — pass the id. Open: ${open}`);
+    throw new DocumentError('NOT_FOUND', `Document "${ref}" is not open. Open: ${open || 'none'}`);
+  }
+
+  /** Like `session`, but null instead of an error when nothing (or more than one document) matches. */
+  findSession(ref?: string): DocumentSession | null {
     if (!ref) {
       const id = this.lastDocId ?? [...this.sessions.keys()][0];
-      const s = id ? this.sessions.get(id) : undefined;
-      if (!s) throw new DocumentError('NOT_FOUND', 'No document is open in ArchaDev');
-      return s;
+      return (id && this.sessions.get(id)) || null;
     }
     const byId = this.sessions.get(ref);
     if (byId) return byId;
@@ -207,10 +228,7 @@ export class Workspace {
     const byPath = /[\\/]|\.archa$/i.test(ref) ? all.find((s) => s.filePath && key(s.filePath) === key(ref)) : undefined;
     if (byPath) return byPath;
     const byName = all.filter((s) => s.doc.meta.name === ref);
-    if (byName.length === 1) return byName[0]!;
-    const open = all.map((s) => `${s.doc.meta.name} (${s.id})`).join(', ');
-    if (byName.length > 1) throw new DocumentError('VALIDATION', `${byName.length} open documents are named "${ref}" — pass the id. Open: ${open}`);
-    throw new DocumentError('NOT_FOUND', `Document "${ref}" is not open. Open: ${open || 'none'}`);
+    return byName.length === 1 ? byName[0]! : null;
   }
 
   log(docId: string, author: Author, tool: string, text: string, nodeIds: string[] = [], runId?: string) {

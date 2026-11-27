@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { archaHome } from '@archa/protocol/node';
+import { docPaths, writeFileAtomic, dataDirFor, legacyAssetDirFor, DATA_SUBDIRS } from '@archa/protocol/node';
 import { ASSET_SCHEME, type DocumentData, type Node, type Op } from '@archa/schema';
 
 /*
@@ -21,23 +21,8 @@ const MIME_EXT: Record<string, string> = {
 };
 const EXT_MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml', avif: 'image/avif' };
 
-const safe = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80) || 'doc';
-
-const stem = (filePath: string) => basename(filePath).replace(/\.archa$/i, '');
-
-/** `D:/x/landing.archa` → `D:/x/landing-data`; an unsaved document → its runtime folder. */
-export function dataDirFor(filePath: string | null, docId: string): string {
-  if (filePath) return join(dirname(filePath), `${stem(filePath)}-data`);
-  return join(archaHome(), 'runtime', 'data', safe(docId));
-}
-
-/** Where `asset:` references resolve: the data folder's `assets/`. */
-export const assetDirFor = (filePath: string | null, docId: string) => join(dataDirFor(filePath, docId), 'assets');
-
-export const isRuntimeDataDir = (dir: string) => !relative(join(archaHome(), 'runtime', 'data'), dir).startsWith('..');
-
 /** Folders of the data root that are not assets; anything else in a pre-1.7.3 `-asset/` folder was an asset. */
-const DATA_DIRS = new Set(['assets', 'chats', 'skills', 'memory', 'reference']);
+const DATA_DIRS = new Set<string>(DATA_SUBDIRS);
 
 /**
  * Pre-1.7.3 `<name>-asset/` (images at its root, chats/, reference/) → `<name>-data/` with images under
@@ -46,11 +31,11 @@ const DATA_DIRS = new Set(['assets', 'chats', 'skills', 'memory', 'reference']);
  */
 export function migrateDataDir(filePath: string | null, docId: string): void {
   const to = dataDirFor(filePath, docId);
-  const from = filePath ? join(dirname(filePath), `${stem(filePath)}-asset`) : join(archaHome(), 'runtime', 'assets', safe(docId));
+  const from = legacyAssetDirFor(filePath, docId);
   if (!existsSync(from)) return;
-  mkdirSync(join(to, 'assets'), { recursive: true });
+  mkdirSync(docPaths(to).assets(), { recursive: true });
   for (const entry of readdirSync(from)) {
-    const dest = DATA_DIRS.has(entry) ? join(to, entry) : join(to, 'assets', entry);
+    const dest = DATA_DIRS.has(entry) ? join(to, entry) : join(docPaths(to).assets(), entry);
     cpSync(join(from, entry), dest, { recursive: true, force: false, errorOnExist: false });
   }
   rmSync(from, { recursive: true, force: true });
@@ -81,11 +66,7 @@ export function storeBytes(assetDir: string, bytes: Buffer, ext: string, sub = a
   const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 24);
   const rel = `${sub}/${hash}.${ext}`;
   const file = join(assetDir, ...rel.split('/'));
-  if (!existsSync(file)) {
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(`${file}.tmp`, bytes);
-    renameSync(`${file}.tmp`, file);
-  }
+  if (!existsSync(file)) writeFileAtomic(file, bytes);
   return `${ASSET_SCHEME}${rel}`;
 }
 

@@ -3,7 +3,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { nativeImage, WebContentsView, type NativeImage, type Session } from 'electron';
-import { archaHome } from '@archa/protocol/node';
+import { paths } from '@archa/protocol/node';
 import type { BrowserImage } from '@archa/protocol';
 
 /*
@@ -99,7 +99,7 @@ function checked(buf: Buffer, declared: string, source: string): Fetched {
 export async function saveImage(f: Fetched, dest?: string): Promise<string> {
   if (dest && !isAbsolute(dest)) throw new Error('download path must be absolute.');
   const asFile = !!dest && /\.[a-z0-9]{2,5}$/i.test(dest);
-  const dir = asFile ? dirname(dest!) : dest ?? join(archaHome(), 'downloads');
+  const dir = asFile ? dirname(dest!) : dest ?? paths.downloads();
   await mkdir(dir, { recursive: true });
   const wanted = asFile ? basename(dest!) : f.name;
   const stem = wanted.replace(/\.[^.]+$/, '');

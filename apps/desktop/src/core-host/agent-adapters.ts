@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { CORE_GUIDES, DESIGNER_PROMPT, EXECUTE_API_DOC, GUIDE_INDEX, type ModelOption } from '@archa/protocol';
 import { agyErrorHint } from './agy-tool-schemas';
+import { hostToolPaths, anyObject, readJson as readJsonFile } from '@archa/protocol/node';
 
 /*
  * Launch-mode adapters (blueprint AGENT_BRIDGE/01-02), ported from Gungnir's remediate/ package.
@@ -114,9 +114,7 @@ function runQuiet(bin: string, args: string[], timeoutMs: number, env: Record<st
   });
 }
 
-const readJson = (p: string): Record<string, unknown> | null => {
-  try { return JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>; } catch { return null; }
-};
+const readJson = (p: string) => readJsonFile(p, anyObject, null);
 const clip = (t: string, n = 4000) => (t.length > n ? `${t.slice(0, n)}…` : t);
 
 /** The canvas state is a convenience; past the argv limit the agent fetches it with get_state. */
@@ -138,7 +136,7 @@ const CLAUDE_ALIASES: ModelOption[] = [
 /** Claude Code aliases plus the models the CLI cached for this account. */
 async function claudeModels(_bin: string | null, env: Record<string, string>) {
   const models = [...CLAUDE_ALIASES];
-  const dir = env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
+  const dir = env.CLAUDE_CONFIG_DIR || hostToolPaths.claude();
   const files = env.CLAUDE_CONFIG_DIR ? [join(dir, '.claude.json')] : [join(dirname(dir), '.claude.json'), join(dir, '.claude.json')];
   for (const f of files) {
     const extra = readJson(f)?.additionalModelOptionsCache;
@@ -168,7 +166,7 @@ async function agyModels(bin: string | null) {
 }
 
 async function codexModels(_bin: string | null, env: Record<string, string>) {
-  const home = env.CODEX_HOME || join(homedir(), '.codex');
+  const home = env.CODEX_HOME || hostToolPaths.codex();
   const doc = readJson(join(home, 'models_cache.json'));
   const list = Array.isArray(doc?.models) ? (doc.models as Array<Record<string, unknown>>) : [];
   const models: ModelOption[] = [];

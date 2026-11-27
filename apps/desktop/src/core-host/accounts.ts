@@ -1,12 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, rmSync, } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { DocumentError } from '@archa/core';
 import { newId } from '@archa/schema';
 import type { AccountAgent, AccountsOverview, AgentAccount, AgentCli, HostLogin, LoginState } from '@archa/protocol';
-import { archaHome } from '@archa/protocol/node';
+import { paths, hostToolPaths, anyObject, writeFileAtomic, readJson as readJsonFile } from '@archa/protocol/node';
 import { findBin } from './agent-adapters';
 import { keyringRead, keyringWrite } from './keyring';
 
@@ -29,7 +28,7 @@ const LOGIN_URL = /https:\/\/\S+\/oauth\/authorize\S+/;
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
 const LOGIN_TIMEOUT = 15 * 60_000;
 
-export const profilesDir = () => join(archaHome(), 'profiles');
+export const profilesDir = paths.profiles;
 
 type Stored = { id: string; agent: AccountAgent; name: string; dir: string; managed: boolean; enabled: boolean; createdAt: number };
 type StoreFile = { version: 1; accounts: Stored[]; defaults: Partial<Record<AccountAgent, string>> };
@@ -57,15 +56,13 @@ export function parse<T>(schema: z.ZodType<T>, params: unknown): T {
 
 /* ----------------------------- login identity ----------------------------- */
 
-function readJson(path: string): Record<string, unknown> | null {
-  try { return JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>; } catch { return null; }
-}
+const readJson = (path: string) => readJsonFile(path, anyObject, null);
 const obj = (v: unknown) => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 
 // The host login is always the CLI's own default; an inherited CLAUDE_CONFIG_DIR / CODEX_HOME belongs to whoever launched us.
-export const claudeHostDir = () => join(homedir(), '.claude');
-export const codexHostDir = () => join(homedir(), '.codex');
+export const claudeHostDir = hostToolPaths.claude;
+export const codexHostDir = hostToolPaths.codex;
 
 /** Which account a Claude config folder is signed in to. Tokens are read for presence only. */
 export function claudeIdentity(dir: string): Identity {
@@ -112,10 +109,7 @@ function readAgyProfile(dir: string): Buffer | null {
 }
 
 function writePrivate(path: string, data: string | Buffer) {
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, data, { mode: 0o600 });
-  renameSync(tmp, path);
+  writeFileAtomic(path, data, { mode: 0o600, dirMode: 0o700 });
 }
 
 /* ------------------------------ CLI discovery ----------------------------- */
@@ -174,7 +168,7 @@ export class AccountManager {
     this.data = this.load();
   }
 
-  private get file() { return join(profilesDir(), 'accounts.json'); }
+  private get file() { return paths.accounts(); }
 
   private load(): StoreFile {
     const raw = readJson(this.file) as Partial<StoreFile> | null;
@@ -270,7 +264,7 @@ export class AccountManager {
     if (p.agent === 'agy') throw new DocumentError('VALIDATION', 'agy accounts are saved from this computer\'s agy login — use "Save current agy login"');
     const accountId = newId();
     // ArchaDev always owns the folder; accounts linked to an outside folder by older versions keep working.
-    const dir = join(profilesDir(), p.agent, accountId);
+    const dir = paths.profile(p.agent, accountId);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     if (p.apiKey) {
       if (p.agent !== 'codex') throw new DocumentError('VALIDATION', 'An API key can only be saved for Codex');
@@ -321,7 +315,7 @@ export class AccountManager {
     let a = this.data.accounts.find((x) => x.agent === 'agy' && agyIdentity(readAgyProfile(x.dir)).email.toLowerCase() === ident.email.toLowerCase());
     if (!a) {
       const accountId = newId();
-      a = { id: accountId, agent: 'agy', name: ident.email, dir: join(profilesDir(), 'agy', accountId), managed: true, enabled: true, createdAt: Date.now() };
+      a = { id: accountId, agent: 'agy', name: ident.email, dir: paths.profile('agy', accountId), managed: true, enabled: true, createdAt: Date.now() };
       this.data.accounts.push(a);
       this.save();
     }

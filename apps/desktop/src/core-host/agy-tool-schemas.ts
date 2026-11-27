@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { geminiSchemaIssues } from '@archa/protocol';
+import { hostToolPaths } from '@archa/protocol/node';
 
 /*
  * agy loads EVERY server in its own global MCP config (~/.gemini/config/mcp_config.json) into each run —
@@ -12,7 +12,7 @@ import { geminiSchemaIssues } from '@archa/protocol';
  * Blueprint AGENT_BRIDGE/02.
  */
 
-export const agyToolSchemaDir = () => join(homedir(), '.gemini', 'antigravity-cli', 'mcp');
+export const agyToolSchemaDir = hostToolPaths.agyToolSchemas;
 
 export type BadAgyTool = { server: string; tool: string; path: string; problem: string };
 

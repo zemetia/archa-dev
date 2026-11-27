@@ -1,11 +1,10 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { z } from 'zod';
 import { DocumentError } from '@archa/core';
 import type { Skill, SkillSource, SkillsOverview } from '@archa/protocol';
-import { archaHome } from '@archa/protocol/node';
-import { claudeHostDir, codexHostDir, parse } from './accounts';
+import { paths, hostToolPaths, anyObject, readJson, writeJsonAtomic, listDir } from '@archa/protocol/node';
+import { parse } from './accounts';
 
 /*
  * Settings → Skills (blueprint AGENT_BRIDGE/05). A skill is a folder with a SKILL.md
@@ -16,18 +15,18 @@ import { claudeHostDir, codexHostDir, parse } from './accounts';
  * `<name>-data/skills/`: they are always on for that document's chats and win over a same-named one.
  */
 
-export const skillsDir = () => join(archaHome(), 'skills');
+export const skillsDir = paths.skills;
 /** Built-in skills: resources/skills in the installed app, the repo's skills/ in dev (set by main). */
 export const builtinSkillsDir = () => process.env.ARCHA_BUILTIN_SKILLS ?? '';
-const stateFile = () => join(archaHome(), 'skills.json');
+const stateFile = paths.skillsState;
 
 const SOURCES: Array<{ source: SkillSource; label: string; dir: () => string }> = [
   { source: 'archadev', label: 'ArchaDev library', dir: skillsDir },
   { source: 'builtin', label: 'ArchaDev built-in', dir: builtinSkillsDir },
-  { source: 'claude', label: 'Claude Code', dir: () => join(claudeHostDir(), 'skills') },
-  { source: 'codex', label: 'Codex', dir: () => join(codexHostDir(), 'skills') },
-  { source: 'gemini', label: 'Antigravity / Gemini', dir: () => join(homedir(), '.gemini', 'skills') },
-  { source: 'agents', label: 'Shared (~/.agents)', dir: () => join(homedir(), '.agents', 'skills') },
+  { source: 'claude', label: 'Claude Code', dir: () => join(hostToolPaths.claude(), 'skills') },
+  { source: 'codex', label: 'Codex', dir: () => join(hostToolPaths.codex(), 'skills') },
+  { source: 'gemini', label: 'Antigravity / Gemini', dir: hostToolPaths.geminiSkills },
+  { source: 'agents', label: 'Shared (~/.agents)', dir: hostToolPaths.agentsSkills },
 ];
 
 const slug = z.string().trim().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letters, digits and dashes');
@@ -220,26 +219,17 @@ export class SkillManager {
   }
 
   private state(): State {
-    try {
-      const j = JSON.parse(readFileSync(stateFile(), 'utf8')) as Partial<State>;
-      return { version: 1, disabled: Array.isArray(j.disabled) ? j.disabled.filter((d): d is string => typeof d === 'string') : [] };
-    } catch {
-      return { version: 1, disabled: [] };
-    }
+    const j = readJson(stateFile(), anyObject, null);
+    return { version: 1, disabled: Array.isArray(j?.disabled) ? j.disabled.filter((d): d is string => typeof d === 'string') : [] };
   }
 
   private save(st: State) {
-    mkdirSync(archaHome(), { recursive: true });
-    writeFileSync(stateFile(), JSON.stringify(st, null, 2));
+    writeJsonAtomic(stateFile(), st);
   }
 }
 
 function listDirs(dir: string): string[] {
-  try {
-    return readdirSync(dir).filter((f) => !f.startsWith('.') && isDir(join(dir, f))).sort();
-  } catch {
-    return [];
-  }
+  return listDir(dir, (f) => !f.startsWith('.') && isDir(join(dir, f))).sort();
 }
 
 /** Files of a skill folder, relative with `/`, without dot folders and node_modules (at most 500). */

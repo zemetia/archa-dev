@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { componentMeta, DocumentError, libraryRef, subtreeInput, type ArchaDocument, type LibraryComponent } from '@archa/core';
 import type { LibraryItem } from '@archa/protocol';
-import { archaHome } from '@archa/protocol/node';
+import { paths, readJson, writeJsonAtomic, listDir } from '@archa/protocol/node';
 
 /*
  * Global libraries (blueprint DESIGN_SYSTEM/02): ARCHA_HOME/libraries/<name>/
@@ -37,20 +37,15 @@ const storedSchema = z.object({
   publishedAt: z.number().default(0),
 });
 
-const root = () => join(archaHome(), 'libraries');
-const dirOf = (library: string) => join(root(), library);
+const dirOf = paths.library;
 const safeId = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
 
 export class LibraryStore {
   list(): LibraryItem[] {
-    if (!existsSync(root())) return [];
     const out: LibraryItem[] = [];
-    for (const library of readdirSync(root())) {
-      if (!nameRe.test(library)) continue;
+    for (const library of listDir(paths.libraries(), (n) => nameRe.test(n))) {
       const comps = join(dirOf(library), 'components');
-      if (!existsSync(comps)) continue;
-      for (const f of readdirSync(comps)) {
-        if (!f.endsWith('.json')) continue;
+      for (const f of listDir(comps, (n) => n.endsWith('.json'))) {
         const item = this.read(library, f.slice(0, -5));
         if (!item) continue;
         const png = join(comps, `${item.id}.png`);
@@ -66,11 +61,7 @@ export class LibraryStore {
 
   read(library: string, id: string): (LibraryComponent & { publishedAt: number }) | null {
     const file = join(dirOf(library), 'components', `${safeId(id)}.json`);
-    if (!existsSync(file)) return null;
-    try {
-      const parsed = storedSchema.safeParse(JSON.parse(readFileSync(file, 'utf8')));
-      return parsed.success ? (parsed.data as LibraryComponent & { publishedAt: number }) : null;
-    } catch { return null; }
+    return readJson(file, storedSchema, null) as (LibraryComponent & { publishedAt: number }) | null;
   }
 
   /** Publish a component (or any frame) from an open document. Re-publishing the same main overwrites it. */
@@ -82,8 +73,7 @@ export class LibraryStore {
     const id = safeId(fromRef?.startsWith(`${library}:`) ? fromRef.slice(library.length + 1) : n.id);
     const item = { id, name: n.name, description: componentMeta(n)?.description ?? '', width: n.width, height: n.height, node: subtreeInput(doc, nodeId), publishedAt: Date.now() };
     const comps = join(dirOf(library), 'components');
-    mkdirSync(comps, { recursive: true });
-    writeFileSync(join(comps, `${id}.json`), JSON.stringify(item));
+    writeJsonAtomic(join(comps, `${id}.json`), item, { indent: 0 });
     const pngFile = join(comps, `${id}.png`);
     if (png) writeFileSync(pngFile, Buffer.from(png.replace(/^data:image\/png;base64,/, ''), 'base64'));
     this.writeManifest(library);
@@ -98,7 +88,7 @@ export class LibraryStore {
 
   private writeManifest(library: string) {
     const comps = join(dirOf(library), 'components');
-    const ids = existsSync(comps) ? readdirSync(comps).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)) : [];
-    writeFileSync(join(dirOf(library), 'library.json'), JSON.stringify({ format: 'archa-library', name: library, version: '1.0.0', exports: { components: ids } }, null, 2));
+    const ids = listDir(comps, (f) => f.endsWith('.json')).map((f) => f.slice(0, -5));
+    writeJsonAtomic(join(dirOf(library), 'library.json'), { format: 'archa-library', name: library, version: '1.0.0', exports: { components: ids } });
   }
 }

@@ -1,6 +1,6 @@
-import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { archaHome } from '@archa/protocol/node';
+import { paths, ensureDir, safeSegment } from '@archa/protocol/node';
 
 /*
  * Agent screenshots are temporary files (blueprint RENDERING/03 → Screenshots for Agents): full size, no cap,
@@ -39,13 +39,13 @@ export function fitBudget<T extends { data: string }>(slices: T[], budget = INLI
 export const CANVAS_MAX_SIDE = 32000;
 export const CANVAS_MAX_AREA = 200_000_000;
 
-export const shotsDir = () => join(archaHome(), 'runtime', 'screenshots');
+export const shotsDir = paths.screenshots;
 
-const safe = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40) || 'node';
+const safe = (s: string) => safeSegment(s, 'node', 40);
 
 export function saveShot(pngBase64: string, docId: string, nodeId: string): string {
   const dir = shotsDir();
-  mkdirSync(dir, { recursive: true });
+  ensureDir(dir);
   const path = join(dir, `${safe(docId)}-${safe(nodeId)}-${Date.now().toString(36)}.png`);
   writeFileSync(path, Buffer.from(pngBase64, 'base64'));
   return path;

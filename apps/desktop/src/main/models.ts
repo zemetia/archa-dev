@@ -2,7 +2,7 @@ import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync 
 import { join } from 'node:path';
 import { net, utilityProcess, type UtilityProcess, type WebContents } from 'electron';
 import { z } from 'zod';
-import { archaHome } from '@archa/protocol/node';
+import { paths } from '@archa/protocol/node';
 
 /*
  * On-device background removal (blueprint RENDERING/04). The model is BiRefNet lite (MIT licence,
@@ -18,7 +18,7 @@ const IDLE_MS = 3 * 60_000;
 
 export const segmentArgs = z.object({ rgb: z.instanceof(Uint8Array).refine((b) => b.length === SIZE * SIZE * 3, 'Expected 1024×1024 RGB') });
 
-const modelsDir = () => join(archaHome(), 'cache', 'models');
+const modelsDir = paths.models;
 let downloading: Promise<string> | null = null;
 
 /** Path of the model, downloading it first when missing. Progress goes to `sender` as `model:progress`. */

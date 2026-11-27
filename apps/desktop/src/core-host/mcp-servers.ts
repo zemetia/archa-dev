@@ -1,6 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -10,7 +8,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { DocumentError } from '@archa/core';
 import { newId } from '@archa/schema';
 import type { McpImportCandidate, McpImportSource, McpServer, McpTestResult, McpTransport, SecretEntry } from '@archa/protocol';
-import { archaHome } from '@archa/protocol/node';
+import { paths, hostToolPaths, anyObject, readJson, writeJsonAtomic } from '@archa/protocol/node';
 import { parse } from './accounts';
 
 /*
@@ -19,7 +17,7 @@ import { parse } from './accounts';
  * host — the protocol only carries their keys.
  */
 
-const file = () => join(archaHome(), 'mcp.json');
+const file = paths.mcpServers;
 const TEST_TIMEOUT = 20_000;
 export const RESERVED = 'archadev';
 
@@ -167,17 +165,12 @@ export class McpServerManager {
   }
 
   private load(): StoreFile {
-    try {
-      const j = JSON.parse(readFileSync(file(), 'utf8')) as Partial<StoreFile>;
-      return { version: 1, servers: Array.isArray(j.servers) ? j.servers : [] };
-    } catch {
-      return { version: 1, servers: [] };
-    }
+    const j = readJson(file(), anyObject, null);
+    return { version: 1, servers: Array.isArray(j?.servers) ? (j.servers as Stored[]) : [] };
   }
 
   private write(st: StoreFile) {
-    mkdirSync(archaHome(), { recursive: true });
-    writeFileSync(file(), JSON.stringify(st, null, 2), { mode: 0o600 });
+    writeJsonAtomic(file(), st, { mode: 0o600 });
   }
 }
 
@@ -202,12 +195,10 @@ type Foreign = Omit<Stored, 'id' | 'name' | 'enabled' | 'createdAt'>;
 /** User-level servers from another client's config. Missing or malformed files give nothing. */
 function foreignServers(source: McpImportSource): Record<string, Foreign> {
   // Same host login as accounts.ts: ~/.claude.json, never an inherited CLAUDE_CONFIG_DIR.
-  const path = source === 'claude' ? join(homedir(), '.claude.json')
-    : source === 'antigravity' ? join(homedir(), '.gemini', 'antigravity', 'mcp_config.json')
-    : join(homedir(), '.cursor', 'mcp.json');
-  if (!existsSync(path)) return {};
-  let raw: unknown;
-  try { raw = (JSON.parse(readFileSync(path, 'utf8')) as { mcpServers?: unknown }).mcpServers; } catch { return {}; }
+  const path = source === 'claude' ? hostToolPaths.claudeJson()
+    : source === 'antigravity' ? hostToolPaths.agyMcpConfig()
+    : hostToolPaths.cursorMcp();
+  const raw = readJson(path, anyObject, null)?.mcpServers;
   const out: Record<string, Foreign> = {};
   for (const [name, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
     const o = (v ?? {}) as Record<string, unknown>;

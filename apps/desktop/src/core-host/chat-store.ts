@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { z } from 'zod';
 import type { ChatMessage } from '@archa/protocol';
-import { archaHome } from '@archa/protocol/node';
+import { paths, docPaths, readJson, readJsonl, writeJsonAtomic, listDir } from '@archa/protocol/node';
 import { assetFile, decodeDataUrl, storeBytes } from './assets';
 
 /*
@@ -23,6 +24,8 @@ export type ChatThreadFile = {
 };
 
 const safeName = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80) || 'thread';
+/** On read only `messages` matters; a file without a message list is skipped. */
+const threadFileSchema = z.object({ messages: z.array(z.custom<ChatMessage>()) });
 export const threadOfMessage = (m: ChatMessage) => m.threadId ?? m.runId;
 const IMAGE_EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
 
@@ -30,10 +33,10 @@ export class ChatStore {
   private cache = new Map<string, ChatMessage[]>();
 
   /** dataDirOf: the document's data folder — resolved on every write, so a Save As moves future writes along. */
-  constructor(private dataDirOf: (docId: string) => string, private legacyDir = () => join(archaHome(), 'chats')) {}
+  constructor(private dataDirOf: (docId: string) => string, private legacyDir = paths.legacyChatsDir) {}
 
   chatsDir(docId: string): string {
-    return join(this.dataDirOf(docId), 'chats');
+    return docPaths(this.dataDirOf(docId)).chats();
   }
 
   /** Every message of the document's conversations, oldest first. */
@@ -43,15 +46,10 @@ export class ChatStore {
     this.migrateLegacy(docId);
     list = [];
     const dir = this.chatsDir(docId);
-    if (existsSync(dir)) {
-      for (const f of readdirSync(dir)) {
-        if (!f.endsWith('.json')) continue;
-        try {
-          const t = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Partial<ChatThreadFile>;
-          // A thread file belongs to this folder, whatever document id wrote it.
-          if (Array.isArray(t.messages)) list.push(...t.messages.map((m) => ({ ...m, docId })));
-        } catch { /* a torn file loses one conversation, never the rest */ }
-      }
+    for (const f of listDir(dir, (n) => n.endsWith('.json'))) {
+      // A torn file loses one conversation, never the rest. A thread file belongs to this folder, whatever document id wrote it.
+      const t = readJson(join(dir, f), threadFileSchema, null);
+      if (t) list.push(...t.messages.map((m) => ({ ...m, docId })));
     }
     list.sort((a, b) => a.ts - b.ts);
     this.cache.set(docId, list);
@@ -69,9 +67,9 @@ export class ChatStore {
   deleteThread(docId: string, threadId: string): void {
     const kept = this.list(docId).filter((m) => threadOfMessage(m) !== threadId);
     this.cache.set(docId, kept);
-    const dir = this.chatsDir(docId);
-    rmSync(join(dir, `${safeName(threadId)}.json`), { force: true });
-    rmSync(join(dir, 'attachments', safeName(threadId)), { recursive: true, force: true });
+    const d = docPaths(this.dataDirOf(docId));
+    rmSync(d.chatThread(threadId), { force: true });
+    rmSync(d.attachments(threadId), { recursive: true, force: true });
   }
 
   /** Forget the cached messages (a document closed, or its folder changed underneath). */
@@ -85,7 +83,7 @@ export class ChatStore {
     const ext = decoded && IMAGE_EXT[decoded.mime];
     if (!decoded || !ext) return null;
     const dataDir = this.dataDirOf(docId);
-    const ref = storeBytes(dataDir, decoded.bytes, ext, `chats/attachments/${safeName(threadId)}`);
+    const ref = storeBytes(dataDir, decoded.bytes, ext, docPaths(dataDir).attachmentsRef(threadId));
     return { ref, file: assetFile(dataDir, ref)! };
   }
 
@@ -97,12 +95,8 @@ export class ChatStore {
       version: 1, threadId, agent: first.agent, persona: messages.find((m) => m.persona)?.persona,
       createdAt: first.ts, updatedAt: messages.at(-1)!.ts, messages,
     };
-    const dir = this.chatsDir(docId);
     try {
-      mkdirSync(dir, { recursive: true });
-      const path = join(dir, `${safeName(threadId)}.json`);
-      writeFileSync(`${path}.tmp`, `${JSON.stringify(file, null, 2)}\n`);
-      renameSync(`${path}.tmp`, path);
+      writeJsonAtomic(docPaths(this.dataDirOf(docId)).chatThread(threadId), file, { newline: true });
     } catch { /* history is best-effort; the live chat still works */ }
   }
 
@@ -110,10 +104,8 @@ export class ChatStore {
     const legacy = join(this.legacyDir(), `${safeName(docId)}.jsonl`);
     if (!existsSync(legacy)) return;
     const byThread = new Map<string, ChatMessage[]>();
-    for (const line of readFileSync(legacy, 'utf8').split('\n')) {
-      if (!line.trim()) continue;
+    for (const m of readJsonl(legacy) as ChatMessage[]) {
       try {
-        const m = JSON.parse(line) as ChatMessage;
         const t = threadOfMessage(m);
         // Old history kept thumbnails as base64; they become attachment files like new ones.
         if (m.images?.length) m.images = m.images.map((src) => (src.startsWith('data:') ? this.saveImage(docId, t, '', src)?.ref ?? src : src));
@@ -122,7 +114,7 @@ export class ChatStore {
         const at = rows.findIndex((x) => x.id === m.id);
         if (at >= 0) rows[at] = m; else rows.push(m);
         byThread.set(t, rows);
-      } catch { /* skip a torn line */ }
+      } catch { /* skip a line whose images cannot be saved */ }
     }
     const all = [...byThread.values()].flat().sort((a, b) => a.ts - b.ts);
     this.cache.set(docId, all);

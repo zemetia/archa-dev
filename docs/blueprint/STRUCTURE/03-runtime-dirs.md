@@ -4,6 +4,8 @@
 
 **Phase:** 4. Format details → [FILE_FORMATS/02](../FILE_FORMATS/02-archadev-project.md).
 
+**Single source of paths (built):** `packages/protocol/src/storage.ts`, exported from `@archa/protocol/node`. Every path under ARCHA_HOME (`paths.*`), inside a document's data folder (`dataDirFor`, `docPaths(dataDir).*`) and in other tools' folders (`hostToolPaths.*`) is a named helper there, next to the shared file primitives (`readJson` with zod + fallback, `writeJsonAtomic`, `appendJsonl`, `ensureDir`, `listDir`). Stores never `join(archaHome(), …)` themselves; a new file gets a helper first. A call with no document uses `Workspace.activeDataDir(docId?)` (given doc → last-used doc → null).
+
 ---
 
 ## Per project — `<project>/.archadev/`
@@ -72,5 +74,5 @@
 
 **Linked from:** [FILE_FORMATS/02](../FILE_FORMATS/02-archadev-project.md)
 
-**Code:** [`apps/desktop/src/core-host/icons.ts`](../../../apps/desktop/src/core-host/icons.ts) · [`apps/desktop/src/core-host/library.ts`](../../../apps/desktop/src/core-host/library.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts)
+**Code:** [`apps/desktop/src/core-host/icons.ts`](../../../apps/desktop/src/core-host/icons.ts) · [`apps/desktop/src/core-host/library.ts`](../../../apps/desktop/src/core-host/library.ts) · [`apps/desktop/test/active-data-dir.test.ts`](../../../apps/desktop/test/active-data-dir.test.ts) · [`packages/protocol/src/node.ts`](../../../packages/protocol/src/node.ts) · [`packages/protocol/src/storage.ts`](../../../packages/protocol/src/storage.ts) · [`packages/protocol/test/storage.test.ts`](../../../packages/protocol/test/storage.test.ts)
 <!-- backlinks:end -->

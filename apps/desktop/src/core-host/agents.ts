@@ -1,16 +1,15 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { newId } from '@archa/schema';
 import { formatElapsed, GUIDES, guidesFor, guideText, ORCHESTRATOR_PROMPT, threadOf, workerBrief, type ChatImage, type ChatMessage, type ChatMode, type ChatQueued, type ChatRunEvent, type ModelOption, type OrchestraMeta, type OrchestraReport, type OrchestraTask, type OrchestraWorker } from '@archa/protocol';
-import { archaHome } from '@archa/protocol/node';
+import { paths, anyObject, readJson, writeJsonAtomic, dataDirFor } from '@archa/protocol/node';
 import type { Workspace } from './workspace';
 import { describeState } from './execute';
 import { ADAPTERS, type Adapter, type AgentEvent, type Attachment, type McpCommand, type StreamParser } from './agent-adapters';
 import { resolveCli, type AccountManager } from './accounts';
 import { randomPersona } from './personas';
 import { ChatStore } from './chat-store';
-import { dataDirFor } from './assets';
 
 /*
  * Launch mode (blueprint AGENT_BRIDGE): the app starts the agent's own CLI headless,
@@ -52,9 +51,7 @@ function killTree(child: ChildProcess | null) {
  * ARCHA_HOME/chats/sessions.json, so a thread can be resumed after a restart. Deleting either only
  * loses history, never design data.
  */
-const chatsDir = () => join(archaHome(), 'chats');
-const safeName = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80) || 'doc';
-const threadDir = (threadId: string) => join(archaHome(), 'runtime', 'threads', safeName(threadId));
+const threadDir = paths.thread;
 
 export class ChatRunner {
   private runs = new Map<string, Run>();
@@ -64,7 +61,7 @@ export class ChatRunner {
   private sessions: Map<string, string> | null = null; // threadId:agent:login -> CLI session id
   /** A run can outlive its document's tab; its history then lands in the runtime folder of that id. */
   readonly store = new ChatStore((docId) => {
-    try { return this.ws.dataDir(docId); } catch { return dataDirFor(null, docId); }
+    return this.ws.activeDataDir(docId) ?? dataDirFor(null, docId);
   });
   // Orchestrate mode (blueprint AGENT_BRIDGE/06)
   private meta = new Map<string, OrchestraMeta | null>(); // threadId -> lead / worker role (null = plain chat)
@@ -128,10 +125,8 @@ export class ChatRunner {
   private sessionMap(): Map<string, string> {
     if (this.sessions) return this.sessions;
     this.sessions = new Map();
-    try {
-      const raw = JSON.parse(readFileSync(join(chatsDir(), 'sessions.json'), 'utf8')) as Record<string, unknown>;
-      for (const [k, v] of Object.entries(raw)) if (typeof v === 'string') this.sessions.set(k, v);
-    } catch { /* first run */ }
+    // Missing on the first run.
+    for (const [k, v] of Object.entries(readJson(paths.chatSessions(), anyObject, {}))) if (typeof v === 'string') this.sessions.set(k, v);
     return this.sessions;
   }
 
@@ -140,8 +135,7 @@ export class ChatRunner {
     if (map.get(key) === id) return;
     map.set(key, id);
     try {
-      mkdirSync(chatsDir(), { recursive: true });
-      writeFileSync(join(chatsDir(), 'sessions.json'), JSON.stringify(Object.fromEntries(map), null, 2));
+      writeJsonAtomic(paths.chatSessions(), Object.fromEntries(map));
     } catch { /* resume is best-effort */ }
   }
 
@@ -167,8 +161,8 @@ export class ChatRunner {
 
   /** Node ids in a tool summary read as their layer names ("inspect · Hero" instead of an opaque id). */
   private named(docId: string, text: string): string {
-    let doc: ReturnType<Workspace['session']>['doc'];
-    try { doc = this.ws.session(docId).doc; } catch { return text; }
+    const doc = this.ws.findSession(docId)?.doc;
+    if (!doc) return text;
     return text.replace(/[A-Za-z0-9_-]{6,40}/g, (id) => { const n = doc.get(id); return n && n.type !== 'page' ? `"${n.name}"` : id; });
   }
 
@@ -298,7 +292,7 @@ export class ChatRunner {
     const sessionKey = `${threadId}:${adapter.id}:${login.label ? Object.values(login.env).join() : 'host'}`;
     const sessionId = this.sessionMap().get(sessionKey);
     // Claude Code files sessions by cwd: a pre-0.2.5 thread that already has one keeps the shared folder.
-    const cfgDir = sessionId && !existsSync(threadDir(threadId)) ? join(archaHome(), 'runtime') : threadDir(threadId);
+    const cfgDir = sessionId && !existsSync(threadDir(threadId)) ? paths.runtime() : threadDir(threadId);
     mkdirSync(cfgDir, { recursive: true });
     const id = newId();
     const mcpConfigFile = join(cfgDir, `mcp-${id}.json`);
@@ -557,7 +551,7 @@ export class ChatRunner {
     const sessionId = this.sessionMap().get(sessionKey);
     void account;
     // Each thread works in its own folder, so parallel runs never share skills or MCP config files.
-    const cfgDir = sessionId && !existsSync(threadDir(threadId)) ? join(archaHome(), 'runtime') : threadDir(threadId);
+    const cfgDir = sessionId && !existsSync(threadDir(threadId)) ? paths.runtime() : threadDir(threadId);
     mkdirSync(cfgDir, { recursive: true });
     const mcpConfigFile = join(cfgDir, `mcp-${runId}.json`);
     // Settings → MCP servers join the run next to archadev; the file may hold their secrets.

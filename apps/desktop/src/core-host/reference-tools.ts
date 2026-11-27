@@ -1,9 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, isAbsolute, join, normalize } from 'node:path';
 import { z } from 'zod';
 import { DocumentError, type ArchaDocument } from '@archa/core';
 import type { CompareRegion, CompareResult } from '@archa/protocol';
-import { archaHome } from '@archa/protocol/node';
+import { paths, docPaths, ensureDir } from '@archa/protocol/node';
 import { imageSize } from './assets';
 import { fileKey, readPdfPage, summarizePage } from './reference';
 import { fitBudget, INLINE_BUDGET, saveShot, SLICE_HEIGHT } from './shots';
@@ -37,8 +37,7 @@ function referenceFile(raw: string): string {
 
 /** A copy the window may load (archa-asset:// serves ARCHA_HOME/runtime only, besides asset folders). */
 function stage(path: string): string {
-  const dir = join(archaHome(), 'runtime', 'reference');
-  mkdirSync(dir, { recursive: true });
+  const dir = ensureDir(paths.referenceStage());
   const dest = join(dir, `${fileKey(path)}${extname(path).toLowerCase()}`);
   if (!existsSync(dest)) copyFileSync(path, dest);
   return dest;
@@ -50,8 +49,7 @@ export async function readReference(ws: Workspace, p: z.infer<typeof referenceSc
   const assetDir = ws.assetDir(s);
   const path = referenceFile(p.path);
   const page = p.page ?? 1;
-  const dir = join(ws.dataDir(s), 'reference');
-  mkdirSync(dir, { recursive: true });
+  const dir = ensureDir(docPaths(ws.dataDir(s)).reference());
   const ext = extname(path).toLowerCase();
   ws.log(s.id, conn.author, 'reference', `Reference ${basename(path)}${ext === '.pdf' ? ` · page ${page}` : ''}`, [], conn.client.runId);
   if (ext !== '.pdf') {

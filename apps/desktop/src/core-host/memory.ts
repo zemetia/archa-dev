@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { DocumentError } from '@archa/core';
 import type { MemoryEntry, MemoryScope } from '@archa/protocol';
-import { archaHome } from '@archa/protocol/node';
+import { paths, docPaths, writeFileAtomic, ensureDir, listDir } from '@archa/protocol/node';
 import { parse } from './accounts';
 import { parseFrontmatter } from './skills';
 
@@ -17,8 +17,8 @@ import { parseFrontmatter } from './skills';
  * chat; agents add and remove them with the `remember` / `forget` MCP tools.
  */
 
-export const globalMemoryDir = () => join(archaHome(), 'memory');
-export const documentMemoryDir = (dataDir: string) => join(dataDir, 'memory');
+export const globalMemoryDir = paths.globalMemory;
+export const documentMemoryDir = (dataDir: string) => docPaths(dataDir).memory();
 
 /** How much memory goes into a first message: enough for the rules that matter, never a context hog. */
 const PROMPT_ENTRIES = 40;
@@ -64,14 +64,13 @@ export class MemoryStore {
     const old = p.replaces ? this.find(p.replaces, p.docId) : null;
     if (old) this.remove(old, p.docId);
     const dir = this.dirOf(p.scope, p.docId);
-    mkdirSync(dir, { recursive: true });
+    ensureDir(dir);
     const title = oneLine(p.name || p.text.split(/[.!?\n]/)[0] || p.text).slice(0, 80);
     let slug = slugOf(title);
     for (let i = 2; existsSync(join(dir, `${slug}.md`)); i++) slug = `${slugOf(title)}-${i}`;
     const now = Date.now();
     const file = join(dir, `${slug}.md`);
-    writeFileSync(`${file}.tmp`, `---\nname: ${JSON.stringify(title)}\nupdatedAt: ${now}\n---\n\n${p.text.trim()}\n`);
-    renameSync(`${file}.tmp`, file);
+    writeFileAtomic(file, `---\nname: ${JSON.stringify(title)}\nupdatedAt: ${now}\n---\n\n${p.text.trim()}\n`);
     this.changed();
     return { id: `${p.scope}:${slug}`, scope: p.scope, name: title, text: p.text.trim(), updatedAt: now, file };
   }
@@ -115,8 +114,7 @@ export class MemoryStore {
 }
 
 function readDir(dir: string, scope: MemoryScope): MemoryEntry[] {
-  let files: string[];
-  try { files = readdirSync(dir).filter((f) => f.endsWith('.md')); } catch { return []; }
+  const files = listDir(dir, (f) => f.endsWith('.md'));
   const out: MemoryEntry[] = [];
   for (const f of files) {
     const file = join(dir, f);
