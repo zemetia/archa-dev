@@ -74,5 +74,5 @@ Today: `.github/workflows/ci.yml`, one `check` job on ubuntu + windows — froze
 
 **Linked from:** — (only its hub and the indexes)
 
-**Code:** [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) · [`apps/desktop/test/host-helper.ts`](../../../apps/desktop/test/host-helper.ts) · [`packages/host/test/agents-live.test.ts`](../../../packages/host/test/agents-live.test.ts) · [`packages/host/test/helpers.ts`](../../../packages/host/test/helpers.ts) · [`vitest.config.ts`](../../../vitest.config.ts)
+**Code:** [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) · [`apps/desktop/test/host-helper.ts`](../../../apps/desktop/test/host-helper.ts) · [`packages/host/test/agents-live.test.ts`](../../../packages/host/test/agents-live.test.ts) · [`packages/host/test/helpers.ts`](../../../packages/host/test/helpers.ts) · [`packages/host/test/parity-scenario.test.ts`](../../../packages/host/test/parity-scenario.test.ts) · [`vitest.config.ts`](../../../vitest.config.ts)
 <!-- backlinks:end -->
