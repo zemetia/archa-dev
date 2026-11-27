@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@biomejs/biome':
+        specifier: 2.6.9
+        version: 2.6.9
       '@phosphor-icons/core':
         specifier: 2.1.1
         version: 2.1.1
@@ -38,6 +41,12 @@ importers:
 
   apps/cli:
     dependencies:
+      '@archa/host':
+        specifier: workspace:*
+        version: link:../../packages/host
+      '@archa/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@archa/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -60,15 +69,24 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@archa/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@archa/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@archa/formats':
         specifier: workspace:*
         version: link:../../packages/formats
+      '@archa/host':
+        specifier: workspace:*
+        version: link:../../packages/host
       '@archa/icons':
         specifier: workspace:*
         version: link:../../packages/icons
+      '@archa/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@archa/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -185,6 +203,24 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@types/react@19.3.0)(react@19.3.1)
 
+  packages/agents:
+    dependencies:
+      '@archa/core':
+        specifier: workspace:*
+        version: link:../core
+      '@archa/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@archa/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.2
+        version: 1.32.2(zod@4.6.7)
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
   packages/core:
     dependencies:
       '@archa/schema':
@@ -203,11 +239,68 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
 
+  packages/host:
+    dependencies:
+      '@archa/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@archa/core':
+        specifier: workspace:*
+        version: link:../core
+      '@archa/formats':
+        specifier: workspace:*
+        version: link:../formats
+      '@archa/icons':
+        specifier: workspace:*
+        version: link:../icons
+      '@archa/mcp':
+        specifier: workspace:*
+        version: link:../mcp
+      '@archa/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@archa/schema':
+        specifier: workspace:*
+        version: link:../schema
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
   packages/icons:
     dependencies:
       '@archa/schema':
         specifier: workspace:*
         version: link:../schema
+
+  packages/mcp:
+    dependencies:
+      '@archa/core':
+        specifier: workspace:*
+        version: link:../core
+      '@archa/formats':
+        specifier: workspace:*
+        version: link:../formats
+      '@archa/icons':
+        specifier: workspace:*
+        version: link:../icons
+      '@archa/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@archa/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.2
+        version: 1.32.2(zod@4.6.7)
+      pdfjs-dist:
+        specifier: 6.5.438
+        version: 6.5.438
+      quickjs-emscripten:
+        specifier: ^0.32.0
+        version: 0.32.0
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   packages/protocol:
     dependencies:
@@ -311,6 +404,71 @@ packages:
   '@babel/types@7.29.14':
     resolution: {integrity: sha512-UjI/dKmwJwT9pOszJitq2G6EObZPnsZUfdCr92z2TlF3EZK9J3EdfOKUrCzHl6wFthbzwhzl1Soc/UIwxRiq6w==}
     engines: {node: '>=6.9.0'}
+
+  '@biomejs/biome@2.6.9':
+    resolution: {integrity: sha512-RelCBDzTXu4DBU8c35P4iMrDO80SUjW0OgjDA7CT1z3UcCU5IclWTZ2XnMelI4frQL//xg2K2BQxAhcOKxdPQA==}
+    engines: {node: '>=14.21.3'}
+    hasBin: true
+
+  '@biomejs/cli-android-arm64@2.6.9':
+    resolution: {integrity: sha512-/3Aj5aiG+Iz8yDBJJb/GFDsptr9ONk3n1wZUIERuU+pVXMIslBaOnrTYJI5QVVXZ9jE494myQHiIvFrjQCBYeQ==}
+    engines: {node: '>=14.21.3'}
+    cpu: [arm64]
+    os: [android]
+
+  '@biomejs/cli-android-x64@2.6.9':
+    resolution: {integrity: sha512-erjbUpD9KJhzTsGHY9oStJ1bSiUJ1ikUXgdr0iOFoIAMiKqW+GdVdEqAlEyqiZA6CBiFqf2fV+g0AVl3hYOuYg==}
+    engines: {node: '>=14.21.3'}
+    cpu: [x64]
+    os: [android]
+
+  '@biomejs/cli-darwin-arm64@2.6.9':
+    resolution: {integrity: sha512-fO67s0SF+lKGhNPQ7jUXiz0yXGl/1Qm3XTIn/4Hd2Z2z3ewQMrotWIMVdIPxZAgLJdQtRLBOzgsTRzTl981yWA==}
+    engines: {node: '>=14.21.3'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@biomejs/cli-darwin-x64@2.6.9':
+    resolution: {integrity: sha512-RdjT3Z6dLlii0x6EroncTp9jg38FMx2R1aeaaU4BbZ4//3TJ2mA2R39KMIrZYxHdHXcfv9X2V5hwKkXhg08w/g==}
+    engines: {node: '>=14.21.3'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@biomejs/cli-linux-arm64-musl@2.6.9':
+    resolution: {integrity: sha512-qoG0R5MhJ8VFozVFZQC42V3qCI1TInDhL/YcPPg0oTzfv3vuh0ZDXj+2nNahq8gboHUMv7MWpGjRDLhpQatJ+A==}
+    engines: {node: '>=14.21.3'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@biomejs/cli-linux-arm64@2.6.9':
+    resolution: {integrity: sha512-x73OpQSuQLuvNfzXWEjf0mK95NxlJQX4eG/jmuSrGWOz+/jcLUE4N/21yBu3n0X+wa8bJ3NsWNvmNacLnyc2CQ==}
+    engines: {node: '>=14.21.3'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@biomejs/cli-linux-x64-musl@2.6.9':
+    resolution: {integrity: sha512-o73Sk1hCbGOFOrDlxtpHGIubnLwMXscT32+ujMwUyq9o0f4onxO7OznzkFgcZGbwKy1R3ohroOkqZDXqj1u29g==}
+    engines: {node: '>=14.21.3'}
+    cpu: [x64]
+    os: [linux]
+
+  '@biomejs/cli-linux-x64@2.6.9':
+    resolution: {integrity: sha512-uVrqS0HDjRzFlx88ZpfmlZvJ+xIwTU+110vunzrYvZQ5OqXl/1ugMTNvAs61hejH7jh7iequKJwagRVarrYcSQ==}
+    engines: {node: '>=14.21.3'}
+    cpu: [x64]
+    os: [linux]
+
+  '@biomejs/cli-win32-arm64@2.6.9':
+    resolution: {integrity: sha512-4yvNG4nQGJsJA/PTVAt8IBFXvY6hXk4UdjtPlTf4QTMIjH7ysOwBew78bKThkRv1eyRwH2mGLIk4lAZp8tfAdw==}
+    engines: {node: '>=14.21.3'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@biomejs/cli-win32-x64@2.6.9':
+    resolution: {integrity: sha512-mwarNc4GEg5JknsRaJDyJDFr4kICD7snsGM8yYFOoIHimSU1ekWNbcZ44QDa6/30fUZC9077wbBpXE8fp03aug==}
+    engines: {node: '>=14.21.3'}
+    cpu: [x64]
+    os: [win32]
 
   '@electron-internal/extract-zip@1.0.8':
     resolution: {integrity: sha512-8iajeLFbzNwM0m3AsQZSZgYREWglAImyGvvFSWU34FgMW8sHlzdwj9QKvv9dgN7jMP591EFUF/sLOC3Jl9YIjQ==}
@@ -3075,6 +3233,49 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.14
       '@babel/helper-validator-identifier': 7.29.7
+
+  '@biomejs/biome@2.6.9':
+    optionalDependencies:
+      '@biomejs/cli-android-arm64': 2.6.9
+      '@biomejs/cli-android-x64': 2.6.9
+      '@biomejs/cli-darwin-arm64': 2.6.9
+      '@biomejs/cli-darwin-x64': 2.6.9
+      '@biomejs/cli-linux-arm64': 2.6.9
+      '@biomejs/cli-linux-arm64-musl': 2.6.9
+      '@biomejs/cli-linux-x64': 2.6.9
+      '@biomejs/cli-linux-x64-musl': 2.6.9
+      '@biomejs/cli-win32-arm64': 2.6.9
+      '@biomejs/cli-win32-x64': 2.6.9
+
+  '@biomejs/cli-android-arm64@2.6.9':
+    optional: true
+
+  '@biomejs/cli-android-x64@2.6.9':
+    optional: true
+
+  '@biomejs/cli-darwin-arm64@2.6.9':
+    optional: true
+
+  '@biomejs/cli-darwin-x64@2.6.9':
+    optional: true
+
+  '@biomejs/cli-linux-arm64-musl@2.6.9':
+    optional: true
+
+  '@biomejs/cli-linux-arm64@2.6.9':
+    optional: true
+
+  '@biomejs/cli-linux-x64-musl@2.6.9':
+    optional: true
+
+  '@biomejs/cli-linux-x64@2.6.9':
+    optional: true
+
+  '@biomejs/cli-win32-arm64@2.6.9':
+    optional: true
+
+  '@biomejs/cli-win32-x64@2.6.9':
+    optional: true
 
   '@electron-internal/extract-zip@1.0.8': {}
 

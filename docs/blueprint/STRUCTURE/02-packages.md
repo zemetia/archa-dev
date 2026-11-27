@@ -9,13 +9,14 @@
 | Package | Name | Owns | May import |
 |---|---|---|---|
 | `packages/schema` | `@archa/schema` | zod schemas: nodes, properties, variables, ops, manifest, plugin manifest | zod only |
-| `packages/protocol` | `@archa/protocol` | RPC method schemas, framing, typed client | schema |
+| `packages/protocol` | `@archa/protocol` | RPC method schemas, framing, typed client; `/node`: every path, asset-folder and screenshot-file helpers | schema |
 | `packages/core` | `@archa/core` | Document store, ops, transactions, undo, revisions, Yoga layout, hashing, indexes, cache, journal, watcher, RPC handlers | schema, protocol |
 | `packages/render` | `@archa/render` | CanvasKit drawing, tiles, render worker, raster/SVG/PDF export | schema, core (read-only types) |
 | `packages/formats` | `@archa/formats` | `.archa` packed/unpacked I/O, `.archadev/` layout, migrations, importers, code exporters | schema, core |
 | `packages/design-system` | `@archa/design-system` | Variable resolution, themes, style profiles, palettes, fonts, token export | schema, core |
-| `packages/mcp` | `@archa/mcp` | MCP server, tools, `execute` sandbox, response shaping, lint | core, render, formats, design-system |
-| `packages/agents` | `@archa/agents` | Adapters, stream parsers, profiles, models, runs, worktrees | protocol, core |
+| `packages/mcp` | `@archa/mcp` | **Built.** MCP server (`createMcpServer`), tools, `execute` sandbox, reference / compare, response shaping; needs a `ToolHost` it defines | core, render, formats, design-system, protocol, icons |
+| `packages/agents` | `@archa/agents` | **Built** (no worktrees yet). Adapters, stream parsers, profiles / accounts, keyring, models, runs (`ChatRunner` behind its own `ChatHost`), skills, memory, agent MCP config, chat store | protocol, core, schema |
+| `packages/host` | `@archa/host` | **Built.** The core host: `createHost` (composition root), `HostContext`, domain modules + router (one handler per RPC method, zod-checked), local socket, in-process channel. No Electron; the app's utility process and headless `archa` both run it | everything above |
 | `packages/plugin-sdk` | `@archa/plugin-sdk` | Public plugin API + types (published to npm) | schema |
 | `packages/plugin-host` | `@archa/plugin-host` | Loader, sandbox, capability broker | plugin-sdk, protocol, core |
 | `packages/ui` | `@archa/ui` | Shared React components (CVA, Storybook) | — (React, Radix) |
@@ -25,10 +26,10 @@
 ## Dependency Direction
 
 ```
-schema ← protocol ← core ← render / formats / design-system ← mcp / agents / plugin-host ← apps
+schema ← protocol ← core ← render / formats / design-system ← mcp / agents / plugin-host ← host ← apps
 ```
 
-Enforced by `eslint-plugin-boundaries` (or `dependency-cruiser`) in CI. A cycle or an upward import fails the build.
+Target: enforced by `dependency-cruiser` in CI (a cycle or an upward import fails the build). **Today:** Biome `noRestrictedImports` stops `electron` anywhere in `packages/**` (and React / DOM in `core`); `agents` and `mcp` never import `host` (each defines the interface it needs).
 
 ---
 
@@ -63,5 +64,5 @@ packages/<name>/
 
 **Linked from:** [BEST_PRACTICE/01](../BEST_PRACTICE/01-typescript-eslint.md) · [STRUCTURE/01](./01-root-apps.md)
 
-**Code:** [`.npmrc`](../../../.npmrc) · [`packages/core/src/index.ts`](../../../packages/core/src/index.ts) · [`packages/formats/src/index.ts`](../../../packages/formats/src/index.ts) · [`packages/render/src/index.ts`](../../../packages/render/src/index.ts) · [`pnpm-workspace.yaml`](../../../pnpm-workspace.yaml)
+**Code:** [`.npmrc`](../../../.npmrc) · [`packages/agents/src/agents.ts`](../../../packages/agents/src/agents.ts) · [`packages/agents/src/index.ts`](../../../packages/agents/src/index.ts) · [`packages/core/src/index.ts`](../../../packages/core/src/index.ts) · [`packages/formats/src/index.ts`](../../../packages/formats/src/index.ts) · [`packages/host/src/index.ts`](../../../packages/host/src/index.ts) · [`packages/mcp/src/index.ts`](../../../packages/mcp/src/index.ts) · [`packages/mcp/src/tool-host.ts`](../../../packages/mcp/src/tool-host.ts) · [`packages/render/src/index.ts`](../../../packages/render/src/index.ts) · [`pnpm-workspace.yaml`](../../../pnpm-workspace.yaml)
 <!-- backlinks:end -->

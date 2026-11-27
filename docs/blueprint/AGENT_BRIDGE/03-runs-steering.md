@@ -90,7 +90,7 @@ Per agent, up to `maxParallel` (default 3) concurrent runs. Paused runs free the
 
 No session id seen yet → new session with the original task + previous output. On Windows, stopping kills the whole process tree (`taskkill /T /F` via argv).
 
-**Built (0.3.x) — warm sessions** (`core-host/agents.ts`, plan [CHAT_AGENT](../../plan/CHAT_AGENT.md), D-11 A):
+**Built (0.3.x) — warm sessions** (`agents/src/agents.ts`, plan [CHAT_AGENT](../../plan/CHAT_AGENT.md), D-11 A):
 
 | Rule | Detail |
 |---|---|
@@ -122,7 +122,7 @@ Failover: `rate_limited` event → offer next profile/agent (auto if setting on)
 | Rule | Detail |
 |---|---|
 | Thread | Every `chat.send` carries `threadId` (none = new thread, returned in the result). The CLI session resumes per `threadId:agent:login`, so New chat starts fresh |
-| Storage | One JSON file per conversation in the document's data folder: `<name>-data/chats/<threadId>.json` = `{ version, threadId, agent, persona, createdAt, updatedAt, messages }` (`core-host/chat-store.ts`). Never inside the `.archa`; opening a document loads its conversations from the folder. Session ids stay per machine in `ARCHA_HOME/chats/sessions.json`. Pre-0.4.1 `chats/<docId>.jsonl` is split into thread files on first load and renamed `.migrated` |
+| Storage | One JSON file per conversation in the document's data folder: `<name>-data/chats/<threadId>.json` = `{ version, threadId, agent, persona, createdAt, updatedAt, messages }` (`agents/src/chat-store.ts`). Never inside the `.archa`; opening a document loads its conversations from the folder. Session ids stay per machine in `ARCHA_HOME/chats/sessions.json`. Pre-0.4.1 `chats/<docId>.jsonl` is split into thread files on first load and renamed `.migrated` |
 | Reopen | Activating a document reopens its most recent thread |
 | Delete | `chat.deleteThread` removes the thread's file and attachments; refused while that thread runs |
 
@@ -132,5 +132,5 @@ Failover: `rate_limited` event → offer next profile/agent (auto if setting on)
 
 **Linked from:** [AGENT_BRIDGE/05](./05-skills-mcp.md) · [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) · [MCP/01](../MCP/01-transports-tools.md) · [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md)
 
-**Code:** [`apps/desktop/src/core-host/agents.ts`](../../../apps/desktop/src/core-host/agents.ts) · [`apps/desktop/src/core-host/chat-store.ts`](../../../apps/desktop/src/core-host/chat-store.ts) · [`apps/desktop/src/core-host/personas.ts`](../../../apps/desktop/src/core-host/personas.ts) · [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`apps/desktop/src/renderer/canvas/cursors.ts`](../../../apps/desktop/src/renderer/canvas/cursors.ts) · [`apps/desktop/src/renderer/lib/chatImages.ts`](../../../apps/desktop/src/renderer/lib/chatImages.ts) · [`apps/desktop/src/renderer/ui/ChatPanel.tsx`](../../../apps/desktop/src/renderer/ui/ChatPanel.tsx) · [`apps/desktop/src/renderer/ui/HistoryPanel.tsx`](../../../apps/desktop/src/renderer/ui/HistoryPanel.tsx) · [`apps/desktop/test/agents-live.test.ts`](../../../apps/desktop/test/agents-live.test.ts) · [`apps/desktop/test/chat-details.test.ts`](../../../apps/desktop/test/chat-details.test.ts) · [`apps/desktop/test/sessions.test.ts`](../../../apps/desktop/test/sessions.test.ts) · [`apps/desktop/test/warm.test.ts`](../../../apps/desktop/test/warm.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/rpc.ts`](../../../packages/protocol/src/rpc.ts)
+**Code:** [`apps/desktop/src/renderer/canvas/cursors.ts`](../../../apps/desktop/src/renderer/canvas/cursors.ts) · [`apps/desktop/src/renderer/lib/chatImages.ts`](../../../apps/desktop/src/renderer/lib/chatImages.ts) · [`apps/desktop/src/renderer/ui/ChatPanel.tsx`](../../../apps/desktop/src/renderer/ui/ChatPanel.tsx) · [`apps/desktop/src/renderer/ui/HistoryPanel.tsx`](../../../apps/desktop/src/renderer/ui/HistoryPanel.tsx) · [`packages/agents/src/agents.ts`](../../../packages/agents/src/agents.ts) · [`packages/agents/src/chat-store.ts`](../../../packages/agents/src/chat-store.ts) · [`packages/agents/src/personas.ts`](../../../packages/agents/src/personas.ts) · [`packages/host/src/domains/chat.ts`](../../../packages/host/src/domains/chat.ts) · [`packages/host/src/host.ts`](../../../packages/host/src/host.ts) · [`packages/host/src/mcp-command.ts`](../../../packages/host/src/mcp-command.ts) · [`packages/host/test/agents-live.test.ts`](../../../packages/host/test/agents-live.test.ts) · [`packages/host/test/chat-details.test.ts`](../../../packages/host/test/chat-details.test.ts) · [`packages/host/test/sessions.test.ts`](../../../packages/host/test/sessions.test.ts) · [`packages/host/test/warm.test.ts`](../../../packages/host/test/warm.test.ts) · [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) · [`packages/protocol/src/rpc.ts`](../../../packages/protocol/src/rpc.ts)
 <!-- backlinks:end -->

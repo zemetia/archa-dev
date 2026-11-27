@@ -4,16 +4,18 @@
   "packageManager": "pnpm@9.15.0",
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @archa/desktop dev",
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
+    "dev": "node scripts/pnpm.mjs --filter @archa/desktop dev",
+    "build": "node scripts/pnpm.mjs -r build",
+    "typecheck": "node scripts/pnpm.mjs -r typecheck",
+    "lint": "biome lint --error-on-warnings .",
     "test": "vitest run",
-    "cli": "pnpm --filter @archa/cli build",
-    "dist": "pnpm --filter @archa/cli build && pnpm --filter @archa/desktop dist",
+    "cli": "node scripts/pnpm.mjs --filter @archa/cli build",
+    "dist": "node scripts/pnpm.mjs --filter @archa/cli build && node scripts/pnpm.mjs --filter @archa/desktop dist",
     "docs:links": "node scripts/gen-backlinks.mjs",
     "docs:check": "node scripts/gen-backlinks.mjs --check"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.9",
     "@phosphor-icons/core": "2.1.1",
     "@tabler/icons": "3.35.0",
     "@types/node": "^26.6.6",

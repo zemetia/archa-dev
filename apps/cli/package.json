@@ -11,6 +11,8 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@archa/host": "workspace:*",
+    "@archa/mcp": "workspace:*",
     "@archa/protocol": "workspace:*",
     "@archa/schema": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.2",

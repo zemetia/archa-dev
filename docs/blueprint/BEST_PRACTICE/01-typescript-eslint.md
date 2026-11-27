@@ -29,7 +29,11 @@
 
 ---
 
-## ESLint (flat config)
+## Lint today — Biome
+
+TypeScript 7 (native) has no typescript-eslint support yet, so `pnpm lint` runs **Biome** (`biome.json`, `biome lint --error-on-warnings .`). Formatter stays off. Recommended preset, minus rules that would mean mass rewrites of current style: `noNonNullAssertion` (the `noUncheckedIndexedAccess` idiom), `noAssignInExpressions` (`while ((m = re.exec()))`), `noConfusingVoidType`, `noArrayIndexKey`, `noDescendingSpecificity`, `useOptionalChain` (`a && a.b` ≠ `a?.b` for `''`/`0`), `useExhaustiveDependencies` (needs a per-hook review) and the a11y rules the UI breaks today (`useButtonType`, `noStaticElementInteractions`, `noSvgWithoutTitle`, `noAutofocus`, `useValidAnchor`, `useKeyWithClickEvents`, `useAriaPropsSupportedByRole`, `noRedundantAlt`, `useSemanticElements`, `useFocusableInteractive`, `noLabelWithoutControl`). Turning one back on is its own PR. `packages/core/**` gets `noRestrictedImports` for `electron` / `react` / `react-dom`; DOM globals are kept out by core's `lib: ["ES2023"]`. The table below is the target once ESLint can run on TS 7.
+
+## ESLint (target, flat config)
 
 | Rule / plugin | Setting |
 |---|---|
@@ -86,5 +90,5 @@ Relative imports only inside a package. Across packages always the package name.
 
 **Linked from:** — (only its hub and the indexes)
 
-**Code:** [`tsconfig.base.json`](../../../tsconfig.base.json)
+**Code:** [`biome.json`](../../../biome.json) · [`tsconfig.base.json`](../../../tsconfig.base.json)
 <!-- backlinks:end -->

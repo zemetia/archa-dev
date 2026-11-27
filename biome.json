@@ -1,0 +1,96 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/out",
+      "!**/node_modules",
+      "!**/release",
+      "!docs",
+      "!packages/icons/data",
+      "!packages/core/src/text-metrics-data.ts",
+      "!packages/protocol/src/fonts.ts",
+      "!apps/desktop/src/renderer/lib/bundled-fonts.ts",
+      "!skills/*/examples"
+    ]
+  },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "css": { "parser": { "tailwindDirectives": true } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "noNonNullAssertion": "off",
+        "noDescendingSpecificity": "off"
+      },
+      "suspicious": {
+        "noAssignInExpressions": "off",
+        "noConfusingVoidType": "off",
+        "noArrayIndexKey": "off"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "off"
+      },
+      "complexity": {
+        "useOptionalChain": "off"
+      },
+      "a11y": {
+        "useButtonType": "off",
+        "noStaticElementInteractions": "off",
+        "noSvgWithoutTitle": "off",
+        "noAutofocus": "off",
+        "useValidAnchor": "off",
+        "useKeyWithClickEvents": "off",
+        "useAriaPropsSupportedByRole": "off",
+        "noRedundantAlt": "off",
+        "useSemanticElements": "off",
+        "useFocusableInteractive": "off",
+        "noLabelWithoutControl": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "electron": "Only apps/desktop imports Electron; packages run headless in the CLI (blueprint STRUCTURE/02 rule 4)."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/core/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "electron": "packages/core never imports Electron (CLAUDE.md non-negotiables).",
+                  "react": "packages/core never imports React (CLAUDE.md non-negotiables).",
+                  "react-dom": "packages/core never imports React or the DOM (CLAUDE.md non-negotiables).",
+                  "react-dom/client": "packages/core never imports React or the DOM (CLAUDE.md non-negotiables).",
+                  "react/jsx-runtime": "packages/core never imports React (CLAUDE.md non-negotiables)."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

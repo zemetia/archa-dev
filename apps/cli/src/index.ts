@@ -15,7 +15,8 @@ program
   .description('MCP server on stdio for agents (Claude Code, Codex, agy, Hermes)')
   .option('--doc <id>', 'target document id (default: the active one)')
   .option('--agent <name>', 'agent name shown in ArchaDev')
-  .action(async (opts: { doc?: string; agent?: string }) => runMcp(opts));
+  .option('--headless', 'with no app running, start a core in this process (short: -hl)')
+  .action(async (opts: { doc?: string; agent?: string; headless?: boolean }) => runMcp(opts));
 
 program
   .command('status')
@@ -91,7 +92,10 @@ program
     }
   });
 
-program.parseAsync(process.argv).catch((e: unknown) => {
+// `-hl` is a two-letter short flag, which commander cannot declare (it would read -h -l).
+const argv = process.argv.map((a, i) => (i > 1 && a === '-hl' ? '--headless' : a));
+
+program.parseAsync(argv).catch((e: unknown) => {
   console.error(`error: ${(e as Error).message}`);
   process.exit(1);
 });

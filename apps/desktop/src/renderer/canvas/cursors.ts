@@ -36,7 +36,7 @@ const LINGER_MS = 700;
 const FADE_MS = 500;
 
 const center = (s: TrailStep): Pt => ({ x: s.bounds.x + s.bounds.width / 2, y: s.bounds.y + s.bounds.height / 2 });
-const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const smooth = (t: number) => { const x = Math.min(1, Math.max(0, t)); return x * x * (3 - 2 * x); };
 /** A hand's reach: minimum-jerk speed profile, a ~4% overshoot near the end, settled at 1. */
 const reach = (u: number) => {

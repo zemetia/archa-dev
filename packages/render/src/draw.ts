@@ -69,7 +69,7 @@ export function drawNode(ctx: Ctx, doc: ArchaDocument, node: Node, anim?: AnimMa
       const pts = polygonPoints(node.sides, node.width, node.height);
       shape(ctx, node, () => {
         ctx.beginPath();
-        pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+        pts.forEach((p, i) => { if (i) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); });
         ctx.closePath();
       });
       break;
@@ -283,7 +283,7 @@ function drawSticky(ctx: Ctx, n: StickyNode) {
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   const lh = n.fontSize * STICKY_LINE;
-  wrapText(ctx, n.text, n.width - STICKY_PADDING * 2).forEach((line, i) => ctx.fillText(line, STICKY_PADDING, STICKY_PADDING + lh * i + lh / 2));
+  wrapText(ctx, n.text, n.width - STICKY_PADDING * 2).forEach((line, i) => { ctx.fillText(line, STICKY_PADDING, STICKY_PADDING + lh * i + lh / 2); });
   ctx.restore();
 }
 

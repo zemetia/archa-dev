@@ -3,25 +3,24 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browserCommandSchema, placeImageSchema, type BrowserCommand, type Channel, type Message } from '@archa/protocol';
-import { assetFile } from '../src/core-host/assets';
+import { assetFile } from '@archa/protocol/node';
 
 /* Search, image listing, download and place_image (blueprint BROWSER, "Images"). */
 
 vi.mock('electron', () => ({ nativeImage: {}, WebContentsView: class {} }));
 const bridge = vi.hoisted(() => ({ calls: [] as BrowserCommand[] }));
-vi.mock('../src/core-host/main-bridge', () => ({
-  callBrowser: async (cmd: BrowserCommand) => {
-    bridge.calls.push(cmd);
-    return {
-      text: 'Saved', png: 'PREVIEW',
-      image: { path: 'C:\\dl\\sunset-beach.jpg', mime: 'image/jpeg', width: 1600, height: 1000, bytes: 1234, source: cmd.url ?? 'ref', embed: 'data:image/jpeg;base64,/9j/AAAA' },
-    };
-  },
-}));
+/** The app's main-process browser, as the host sees it. */
+const callBrowser = async (cmd: BrowserCommand) => {
+  bridge.calls.push(cmd);
+  return {
+    text: 'Saved', png: 'PREVIEW',
+    image: { path: 'C:\\dl\\sunset-beach.jpg', mime: 'image/jpeg' as const, width: 1600, height: 1000, bytes: 1234, source: cmd.url ?? 'ref', embed: 'data:image/jpeg;base64,/9j/AAAA' },
+  };
+};
 
 const { fetchImage, fileNameFor, saveImage, sniffMime } = await import('../src/main/browser-image');
 const { searchUrl } = await import('../src/main/browser-url');
-const { Workspace } = await import('../src/core-host/workspace');
+const { newHost } = await import('./host-helper');
 
 let home: string;
 beforeEach(() => {
@@ -93,12 +92,12 @@ describe('schemas', () => {
 
 describe('place_image', () => {
   function setup() {
-    const ws = new Workspace();
+    const ws = newHost({ browser: callBrowser });
     const ui: Channel = { send: (_m: Message) => {}, onMessage: () => {} };
     ws.attach(ui, { kind: 'renderer', name: 'window' });
     const agent = ws.attach({ send: () => {}, onMessage: () => {} }, { kind: 'mcp', name: 'claude', agentId: 'claude' });
-    ws.requestRender = async () => ({ png: 'AAAA' });
-    return { ws, agent, docId: ws.summaries()[0]!.id };
+    ws.ctx.requestRender = async () => ({ png: 'AAAA' });
+    return { ws, agent, docId: ws.ctx.summaries()[0]!.id };
   }
 
   it('downloads through the browser and places an image layer at a comfortable size', async () => {
@@ -106,12 +105,12 @@ describe('place_image', () => {
     const r = await ws.handlers['agent.placeImage']({ docId, url: 'https://x.com/sunset.jpg' }, agent);
     expect(r.ok).toBe(true);
     expect(bridge.calls[0]).toMatchObject({ action: 'download', url: 'https://x.com/sunset.jpg' });
-    const node = ws.session(docId).doc.findByName('sunset-beach')[0]!;
+    const node = ws.ctx.session(docId).doc.findByName('sunset-beach')[0]!;
     expect(node).toMatchObject({ type: 'image', width: 800, height: 500, fit: 'crop' });
     // The downloaded picture lives in the document's asset folder, not as base64 in the document.
     const src = (node as { src: string }).src;
     expect(src).toMatch(/^asset:images\/[0-9a-f]{24}\.jpg$/);
-    expect(readFileSync(assetFile(ws.assetDir(docId), src)!).toString('base64')).toBe('/9j/AAAA');
+    expect(readFileSync(assetFile(ws.ctx.assetDir(docId), src)!).toString('base64')).toBe('/9j/AAAA');
     if (r.ok) expect(r.output.join('\n')).toMatch(/file 1600×1000 px[\s\S]*Saved file: C:\\dl\\sunset-beach\.jpg/);
   });
 
@@ -120,7 +119,7 @@ describe('place_image', () => {
     await ws.handlers['agent.execute']({ docId, code: `insert(null, { type: 'frame', name: 'Hero', width: 1200, height: 600 })` }, agent);
     const r = await ws.handlers['agent.placeImage']({ docId, ref: 'e7', parent: 'Hero', width: 320, name: 'Photo', cornerRadius: 12 }, agent);
     expect(r.ok).toBe(true);
-    const doc = ws.session(docId).doc;
+    const doc = ws.ctx.session(docId).doc;
     const photo = doc.findByName('Photo')[0]!;
     expect(photo).toMatchObject({ width: 320, height: 200, cornerRadius: 12 });
     expect(photo.parentId).toBe(doc.findByName('Hero')[0]!.id);
@@ -131,9 +130,9 @@ describe('place_image', () => {
     await ws.handlers['agent.execute']({ docId, code: `insert(null, { type: 'frame', name: 'Hero', width: 1200, height: 600, fills: ['#111111', { type: 'linear-gradient', stops: ['#00000000', '#000000b3'] }] })` }, agent);
     const r = await ws.handlers['agent.placeImage']({ docId, url: 'https://x.com/sunset.jpg', fillOf: 'Hero' }, agent);
     expect(r.ok).toBe(true);
-    const hero = ws.session(docId).doc.findByName('Hero')[0]!;
+    const hero = ws.ctx.session(docId).doc.findByName('Hero')[0]!;
     expect(hero.type === 'frame' && hero.fills.map((f) => f.type)).toEqual(['image', 'linear-gradient']);
-    expect(ws.session(docId).doc.findByName('sunset-beach')).toEqual([]);
+    expect(ws.ctx.session(docId).doc.findByName('sunset-beach')).toEqual([]);
   });
 
   it('binds "$token" values, follows setVariable, and drives component props and variants', async () => {
@@ -152,7 +151,7 @@ describe('place_image', () => {
     `);
     expect(r.ok).toBe(true);
     await run(`setVariable('color/accent', '#ef4444')`);
-    const doc = ws.session(docId).doc;
+    const doc = ws.ctx.session(docId).doc;
     const card = doc.findByName('Card')[0]!;
     const title = doc.findByName('Title')[0]!;
     expect(card.type === 'frame' && card.fills[0]!.type === 'solid' && card.fills[0]!.color).toEqual(doc.variables.size && [...doc.variables.values()].find((v) => v.name === 'color/accent')!.value);
@@ -170,7 +169,7 @@ describe('place_image', () => {
     await run(`insert(null, { type: 'frame', name: 'Nav', width: 400, height: 56, fills: ['#ffffff26'], effects: [{ type: 'shadow', y: 4, blur: 12 }] })`);
     await run(`update('Nav', { backdropFilter: 'blur(20px)' })`);
     await run(`insert(null, { type: 'frame', name: 'Grid', y: 100, columns: 2, gap: 8, sizing: 'hug', children: [1, 2, 3].map((i) => ({ type: 'rect', name: 'c' + i, width: 40, height: 40 })) })`);
-    const doc = ws.session(docId).doc;
+    const doc = ws.ctx.session(docId).doc;
     const nav = doc.findByName('Nav')[0]!;
     expect(nav.type === 'frame' && nav.effects.map((e) => e.type)).toEqual(['drop-shadow', 'background-blur']);
     expect(doc.findByName('c3')[0]).toMatchObject({ x: 0, y: 48 });

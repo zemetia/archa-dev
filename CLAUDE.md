@@ -59,14 +59,15 @@ Scripts that exist today (on this machine prefix with `corepack pnpm@9.15.0` —
 ```bash
 pnpm install        # then: node node_modules/electron/install.js
 pnpm dev            # run the desktop app in dev (isolate ARCHA_HOME + --user-data-dir)
-pnpm typecheck      # pnpm -r typecheck
+pnpm typecheck      # pnpm -r typecheck (works via corepack too; real exit code)
+pnpm lint           # Biome, zero warnings (biome.json; formatter off)
 pnpm test           # vitest run
 pnpm cli            # build the archa CLI bundle
 pnpm dist           # CLI + installer
 pnpm docs:check     # blueprint backlinks, code-map coverage, broken links, 150-line limit
 ```
 
-Planned, not wired yet: `pnpm lint` (zero warnings), `pnpm bench`, `pnpm gen:api-docs`.
+CI (`.github/workflows/ci.yml`) runs typecheck, lint, test and docs:check on every push and PR. Planned, not wired yet: `pnpm bench`, `pnpm gen:api-docs`.
 
 ## Non-negotiables
 

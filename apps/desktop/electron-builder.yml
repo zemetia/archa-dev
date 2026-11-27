@@ -14,6 +14,9 @@ extraResources:
   # The `archa` CLI (MCP server for agents) ships inside the app.
   - from: ../cli/dist/archa.cjs
     to: cli/archa.cjs
+  # QuickJS wasm for the headless core's `execute` (archa.cjs loads it from its own folder).
+  - from: ../cli/dist/emscripten-module.wasm
+    to: cli/emscripten-module.wasm
   # Built-in design skills (repo skills/), handed to every chat run unless turned off in Settings → Skills.
   - from: ../../skills
     to: skills

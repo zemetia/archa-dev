@@ -505,6 +505,7 @@ export async function exportEach(nodeIds: string[], kind: Exclude<ExportKind, 'p
   const used = new Map<string, number>();
   try {
     for (const id of ids) {
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: strips characters Windows forbids in file names
       const base = doc.require(id).name.replace(/[<>:"/\\|?*\x00-\x1f]+/g, '-').trim() || 'Layer';
       const n = (used.get(base) ?? 0) + 1;
       used.set(base, n);

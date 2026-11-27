@@ -13,7 +13,7 @@ export function insertOpsFor(input: NodeInput, parentId: string, index?: number)
     const node = normaliseInput({ ...rest, id }) as Node;
     ops.push({ op: 'insert', node, parentId: parent, ...(at === undefined ? {} : { index: at }) });
     created.push({ id, name: String(node.name) });
-    children?.forEach((c) => visit(c, id));
+    children?.forEach((c) => { visit(c, id); });
     return id;
   };
   const rootId = visit(input, parentId, index);

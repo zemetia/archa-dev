@@ -64,5 +64,5 @@ Paths and file shapes are owned by each adapter's `mcpConfig()` → [AGENT_BRIDG
 
 **Linked from:** [CLI/01](../CLI/01-commands.md) · [FILE_FORMATS/02](../FILE_FORMATS/02-archadev-project.md) · [STRUCTURE/01](../STRUCTURE/01-root-apps.md)
 
-**Code:** [`apps/desktop/test/warm.test.ts`](../../../apps/desktop/test/warm.test.ts) · [`packages/protocol/src/agent-docs.ts`](../../../packages/protocol/src/agent-docs.ts) · [`packages/protocol/src/design-guides.ts`](../../../packages/protocol/src/design-guides.ts)
+**Code:** [`packages/host/test/warm.test.ts`](../../../packages/host/test/warm.test.ts) · [`packages/protocol/src/agent-docs.ts`](../../../packages/protocol/src/agent-docs.ts) · [`packages/protocol/src/design-guides.ts`](../../../packages/protocol/src/design-guides.ts)
 <!-- backlinks:end -->

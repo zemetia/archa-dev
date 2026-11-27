@@ -13,7 +13,7 @@
 | stdio | `archa mcp [--project <dir> \| --file <path>] [--run <runId>]` | Spawned by the agent; cwd project by default |
 | Streamable HTTP | App setting or `ARCHA_MCP_HTTP_PORT`; binds `127.0.0.1` only; bearer token from `runtime/core.json` | Off by default |
 
-`archa mcp` is a relay: running app → forwards to its core (the person sees the agent live); no app → headless core in-process → [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md).
+`archa mcp` is a relay: running app → forwards to its core (the person sees the agent live); no app → fails, or with `--headless` (`-hl`) a headless core in-process → [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md).
 
 ---
 
@@ -64,10 +64,10 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 The tool registry [`packages/protocol/src/tools.ts`](../../../packages/protocol/src/tools.ts) `TOOLS` is the single source for `archa mcp` (name, description, zod input — byte-identical listing), `MCP_TOOLS` (Claude `--allowedTools`), agy's tool list (`AGY_TOOLS_NOTE`, from each `agy` entry) and the chat line (`toolSummary`).
 
 1. Add the entry to `TOOLS`: `description`, `input` (zod shape; add `doc: docParam` for a document tool), `rpc` (the core method), `agy` (`"name { args } (what for)"`, or none to keep it out of agy's list) and `summary` if the chat line should say more than the name.
-2. New core method? Add it to `RPC` in [`rpc.ts`](../../../packages/protocol/src/rpc.ts) and its handler in `Workspace.handlers` (type error until you do).
-3. Only if the reply needs formatting (images, `execute` contract): a `REPLIES` entry in [`apps/cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts). Otherwise `relay` calls `rpc` with `doc` → `docId` and replies with the result as text (`void` → `ok`).
+2. New core method? Add it to `RPC` in [`rpc.ts`](../../../packages/protocol/src/rpc.ts) and its handler in the fitting `packages/host/src/domains/*.ts` module (add it to `host/test/router.test.ts`'s list — type error until you do).
+3. Only if the reply needs formatting (images, `execute` contract): a `REPLIES` entry in [`packages/mcp/src/server.ts`](../../../packages/mcp/src/server.ts). Otherwise `relay` calls `rpc` with `doc` → `docId` and replies with the result as text (`void` → `ok`).
 
-`apps/desktop/test/rpc-registry.test.ts` checks the four lists agree.
+`packages/host/test/rpc-registry.test.ts` checks the four lists agree.
 
 ---
 
@@ -75,7 +75,7 @@ The tool registry [`packages/protocol/src/tools.ts`](../../../packages/protocol/
 
 | # | Rule |
 |---|---|
-| 1 | A tool acts on the document named by its `doc` argument (id, `.archa` path or unique name — `Workspace.session(ref)`); without it, on `--doc` / `ARCHA_DOC_ID`, else the active document. An unknown `doc` fails with the list of open documents. **Built:** `get_state`, `execute`, `screenshot`, `export_svg`, `say`, `reference`, `compare`, `save_document` |
+| 1 | A tool acts on the document named by its `doc` argument (id, `.archa` path or unique name — `HostContext.session(ref)`); without it, on `--doc` / `ARCHA_DOC_ID`, else the active document. An unknown `doc` fails with the list of open documents. **Built:** `get_state`, `execute`, `screenshot`, `export_svg`, `say`, `reference`, `compare`, `save_document` |
 | 6 | A reply stays under 6 MB of inline data (`INLINE_BUDGET`): MCP stdio clients drop messages over 10 MB and close the connection. Slices that do not fit are counted, never silently dropped |
 | 2 | Inputs validated by zod; validation errors follow the reply contract (they steer, not just fail) |
 | 3 | Pre-injection: launched runs receive `get_state` output in the first prompt, marked fresh |
@@ -89,5 +89,5 @@ The tool registry [`packages/protocol/src/tools.ts`](../../../packages/protocol/
 
 **Linked from:** [AGENT_BRIDGE/02](../AGENT_BRIDGE/02-roster-profiles.md) · [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md) · [CLI/01](../CLI/01-commands.md) · [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md)
 
-**Code:** [`apps/cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) · [`apps/desktop/src/core-host/execute.ts`](../../../apps/desktop/src/core-host/execute.ts) · [`apps/desktop/src/core-host/mcp-servers.ts`](../../../apps/desktop/src/core-host/mcp-servers.ts) · [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`apps/desktop/src/renderer/ui/settings/OtherPages.tsx`](../../../apps/desktop/src/renderer/ui/settings/OtherPages.tsx) · [`apps/desktop/test/assets.test.ts`](../../../apps/desktop/test/assets.test.ts) · [`apps/desktop/test/rpc-registry.test.ts`](../../../apps/desktop/test/rpc-registry.test.ts) · [`packages/core/src/outline.ts`](../../../packages/core/src/outline.ts) · [`packages/protocol/src/design-guides.ts`](../../../packages/protocol/src/design-guides.ts) · [`packages/protocol/src/gemini-schema.ts`](../../../packages/protocol/src/gemini-schema.ts) · [`packages/protocol/src/tools.ts`](../../../packages/protocol/src/tools.ts) · [`packages/protocol/test/gemini-schema.test.ts`](../../../packages/protocol/test/gemini-schema.test.ts)
+**Code:** [`apps/cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) · [`apps/desktop/src/renderer/ui/settings/OtherPages.tsx`](../../../apps/desktop/src/renderer/ui/settings/OtherPages.tsx) · [`apps/desktop/test/assets.test.ts`](../../../apps/desktop/test/assets.test.ts) · [`packages/agents/src/mcp-servers.ts`](../../../packages/agents/src/mcp-servers.ts) · [`packages/core/src/outline.ts`](../../../packages/core/src/outline.ts) · [`packages/host/src/context.ts`](../../../packages/host/src/context.ts) · [`packages/host/src/domains/agent-tools.ts`](../../../packages/host/src/domains/agent-tools.ts) · [`packages/host/test/rpc-registry.test.ts`](../../../packages/host/test/rpc-registry.test.ts) · [`packages/mcp/src/execute.ts`](../../../packages/mcp/src/execute.ts) · [`packages/mcp/src/server.ts`](../../../packages/mcp/src/server.ts) · [`packages/mcp/src/tool-host.ts`](../../../packages/mcp/src/tool-host.ts) · [`packages/protocol/src/design-guides.ts`](../../../packages/protocol/src/design-guides.ts) · [`packages/protocol/src/gemini-schema.ts`](../../../packages/protocol/src/gemini-schema.ts) · [`packages/protocol/src/tools.ts`](../../../packages/protocol/src/tools.ts) · [`packages/protocol/test/gemini-schema.test.ts`](../../../packages/protocol/test/gemini-schema.test.ts)
 <!-- backlinks:end -->
