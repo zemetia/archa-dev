@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file, following [Keep
 
 ## [Unreleased]
 
+### Projects and files
+- **Open this folder with Archa**: right-click a folder (or inside one, or a drive) in Explorer. Also File → Open folder… (Ctrl+Shift+O). The folder becomes a project in its own window; an open project is focused instead of opened twice.
+- **`.design/` folder**: every project gets `<folder>/.design/` for any number of `.archa` files. New designs save there without asking for a path (`Untitled.archa`, `Untitled 2.archa` …). The project chip in the title bar lists them.
+- **Reopens what you had open** (like VS Code): each window — a project or the public window with no folder — remembers its open files in ArchaDev's own folder and opens them again next time. Unsaved untitled work outside a project comes back too.
+- **Auto-save**: open designs with changes are saved when an agent finishes and every 45 seconds. Settings → General turns it off or changes the interval. Quitting never loses unsaved work.
+
 ## [1.7.3] - 2026-11-26
 
 ### Canvas

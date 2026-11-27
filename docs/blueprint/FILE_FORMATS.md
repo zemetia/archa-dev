@@ -8,6 +8,7 @@
 | [02 — `.archadev/` project](./FILE_FORMATS/02-archadev-project.md) | `project.json`, `agents.json`, `plugins.json`, init flow |
 | [03 — Migrations and validation](./FILE_FORMATS/03-migrations-validation.md) | `formatVersion`, migrations, quarantine, fixtures |
 | [04 — Importers](./FILE_FORMATS/04-importers.md) | Import pipeline, SVG, HTML/URL, tokens, `.pen` rules, import report |
+| [05 — `.design/` projects, restore, auto-save](./FILE_FORMATS/05-design-folder-projects.md) | **Built:** folder = project with `.design/*.archa`, window contexts, reopen last files, backups, auto-save |
 
 ---
 
@@ -17,7 +18,8 @@
 |---|---|---|
 | `.archa` | `landing.archa` | Portable design document (zip of JSON + assets) |
 | Unpacked design | `.archadev/designs/landing/` | Same content, git-friendly |
-| `.archadev/` | `<project>/.archadev/` | Project design space |
+| `.design/` | `<project>/.design/landing.archa` | **Built** project design folder → [05](./FILE_FORMATS/05-design-folder-projects.md) |
+| `.archadev/` | `<project>/.archadev/` | Planned richer project space |
 | `.pen` | `old.pen` | Import source only — never written, never decrypted |
 
 Code: `packages/formats/`. Schemas: `packages/schema/src/files/` (target); today `packages/schema/src/document.ts` (`FORMAT_VERSION` 3, manifest). `.archadev/` projects and `.pen` import are not built → [CODE_MAP/04](./CODE_MAP/04-packages.md).

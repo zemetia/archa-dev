@@ -10,14 +10,14 @@
 
 | Flag | Meaning |
 |---|---|
-| `--project <dir>` | Open `<dir>` as a project (create `.archadev/` after confirm) |
+| `--project <dir>` | Open `<dir>` as a project in its own window; creates `<dir>/.design/` → [FILE_FORMATS/05](../FILE_FORMATS/05-design-folder-projects.md) |
 | `--file <path>` | Open a `.archa` standalone |
 | `--import <path>` | Start screen with import dialog prefilled |
 | `--new-window` | Do not reuse an existing window |
 | `archadev://open?path=<encoded>&kind=project\|file` | Same, via protocol |
 | bare path (from file association) | Folder → `--project`, `.archa` → `--file` |
 
-Parsing lives in one pure function `parseArgv(argv, cwd): OpenIntent` — unit tested with Windows, macOS and Linux argv shapes (Electron adds its own args; `process.defaultApp` shifts indices in dev).
+Chromium moves its own switches in front of positional arguments in a second instance's argv (`--project --allow-file-access-from-files D:\site`): a flag with no value takes the first positional argument. Parsing lives in one pure function `parseArgv(argv, cwd): OpenIntent` — unit tested with Windows, macOS and Linux argv shapes (Electron adds its own args; `process.defaultApp` shifts indices in dev).
 
 ---
 
@@ -50,9 +50,10 @@ app.on('open-url',  (e, url)  => { e.preventDefault(); openIntent(fromDeepLink(u
 
 | Intent | Behaviour |
 |---|---|
-| Project already open | Focus its window |
-| New project | New window |
-| Standalone file | Open as a tab in the focused standalone window, or a new window if none |
+| Project already open | Focus its window (built) |
+| New project | New window (built); the window shows only that project's documents |
+| Standalone file | Open as a tab in the focused window (built) |
+| No folder | Public window; reopens the files it had open last time (built) |
 | `--new-window` | Always new |
 
 Window bounds per project saved in `~/.archadev/config.json` (`windows[projectId]`).
@@ -74,5 +75,5 @@ Window bounds per project saved in `~/.archadev/config.json` (`windows[projectId
 
 **Linked from:** [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md) · [CLI/01](../CLI/01-commands.md)
 
-**Code:** [`apps/desktop/src/main/index.ts`](../../../apps/desktop/src/main/index.ts)
+**Code:** [`apps/desktop/src/main/index.ts`](../../../apps/desktop/src/main/index.ts) · [`packages/host/src/files.ts`](../../../packages/host/src/files.ts) · [`packages/protocol/src/storage.ts`](../../../packages/protocol/src/storage.ts)
 <!-- backlinks:end -->

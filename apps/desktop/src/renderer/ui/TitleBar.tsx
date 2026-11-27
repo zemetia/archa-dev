@@ -1,5 +1,6 @@
 import { FileText, FolderOpen, Globe, Plus, Save, Settings, X } from 'lucide-react';
 import { AppMenu } from './AppMenu';
+import { ProjectMenu } from './ProjectMenu';
 import { activate, closeDoc, newDoc, openFile, save, useStore } from '../lib/store';
 import { cn, IconButton } from './controls';
 import { toggleBrowser } from './BrowserPanel';
@@ -15,6 +16,7 @@ export function TitleBar() {
   return (
     <div className="drag flex h-10 shrink-0 items-center gap-2 pl-3 pr-[150px]">
       <div className="pr-1"><AppMenu /></div>
+      <ProjectMenu />
       <div className="no-drag flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-panel p-1">
         {docs.map((d) => (
           <div key={d.id} onClick={() => void activate(d.id)}

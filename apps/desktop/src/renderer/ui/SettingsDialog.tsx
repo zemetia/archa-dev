@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { Blocks, Bot, Brain, Info, Lock, Plug, Sparkles, TerminalSquare, X } from 'lucide-react';
+import { Blocks, Bot, Brain, Info, Lock, Plug, Settings2, Sparkles, TerminalSquare, X } from 'lucide-react';
 import { loadAccounts, loadMcpServers, loadSkills, useStore, type SettingsPage } from '../lib/store';
 import { cn } from './controls';
 import { BrandMark } from './settings/Logo';
@@ -8,6 +8,7 @@ import { SkillsPage } from './settings/SkillsPage';
 import { McpPage } from './settings/McpPage';
 import { MemoryPage } from './settings/MemoryPage';
 import { AboutPage, ConnectPage, GithubPage, IntegrationsPage } from './settings/OtherPages';
+import { GeneralPage } from './settings/GeneralPage';
 
 /*
  * Settings (Ctrl+,). One dialog, a grouped nav on the left, one page on the right (blueprint APP_UI/01).
@@ -42,7 +43,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { id: 'integrations', label: 'Integrations', icon: <Blocks size={15} />, soon: true },
     ],
   },
-  { group: 'ArchaDev', items: [{ id: 'about', label: 'About', icon: <Info size={15} /> }] },
+  { group: 'ArchaDev', items: [{ id: 'general', label: 'General', icon: <Settings2 size={15} /> }, { id: 'about', label: 'About', icon: <Info size={15} /> }] },
 ];
 
 export function SettingsDialog() {
@@ -103,6 +104,7 @@ export function SettingsDialog() {
             {page === 'connect' && <ConnectPage />}
             {page === 'github' && <GithubPage onOpenMcp={() => go('mcp')} />}
             {page === 'integrations' && <IntegrationsPage />}
+            {page === 'general' && <GeneralPage />}
             {page === 'about' && <AboutPage />}
           </div>
         </section>

@@ -47,5 +47,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   shortcutName: ArchaDev
+  # Explorer "Open this folder with Archa" on folders, folder backgrounds and drives.
+  include: build/installer.nsh
 publish: null
 electronVersion: 45.3.4

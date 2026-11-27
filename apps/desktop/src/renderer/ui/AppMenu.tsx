@@ -5,7 +5,7 @@ import { EDGE, Rows, SEP, SUB_WIDTH, type Entry } from './ContextMenu';
 import { toggleBrowser } from './BrowserPanel';
 import { cn } from './controls';
 import {
-  closeDoc, EXPORT_KINDS, exportEach, exportNode, exportPdf, newDoc, openFile, openSettings, readingOrder, redo, save, togglePanel, togglePixelGrid, undo, useStore,
+  closeDoc, EXPORT_KINDS, exportEach, exportNode, exportPdf, newDoc, openFile, openProject, openSettings, readingOrder, redo, save, togglePanel, togglePixelGrid, undo, useStore,
 } from '../lib/store';
 import { copy, deleteSelection, duplicate, hasCopiedLayers, paste, selectAll, zoomTo } from '../lib/commands';
 import { importImageOrSvg } from '../lib/importers';
@@ -89,6 +89,7 @@ function MenuPanel({ anchor, close }: { anchor: React.RefObject<HTMLDivElement |
     { kind: 'sub', label: 'File', items: [
       { kind: 'item', label: 'New file', keys: 'Ctrl+N', run: newDoc },
       { kind: 'item', label: 'Open…', keys: 'Ctrl+O', run: openFile },
+      { kind: 'item', label: 'Open folder…', keys: 'Ctrl+Shift+O', run: () => openProject() },
       SEP,
       { kind: 'item', label: 'Save', keys: 'Ctrl+S', run: () => save(), disabled: !activeDocId },
       { kind: 'item', label: 'Save as…', keys: 'Ctrl+Shift+S', run: () => save(true), disabled: !activeDocId },

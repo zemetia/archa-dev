@@ -5,6 +5,7 @@ import type { ActivityEntry, AgentClient, Channel, ClientInfo, CoreEvents, DocSu
 import { assetDirFor, dataDirFor, docPaths, externalizeOps } from '@archa/protocol/node';
 import { describeState, type RenderReply, type ToolHost } from '@archa/mcp';
 import type { ChatHost } from '@archa/agents';
+import { contextKey, projectRoot } from './projects';
 import { IconStore } from './stores/icons';
 import { LibraryStore } from './stores/library';
 import { takeScreenshot } from './screenshot';
@@ -26,12 +27,17 @@ export class HostContext implements ToolHost, ChatHost {
   readonly library = new LibraryStore();
   readonly icons = new IconStore();
   lastDocId: string | null = null;
+  /** Window context of each document: a project folder, or null (public). */
+  readonly projects = new Map<string, string | null>();
+  /** Called after every broadcast (auto-save and open-file tracking listen here). */
+  afterBroadcast: (<E extends EventName>(event: E, data: CoreEvents[E]) => void) | null = null;
   private renderWaiters = new Map<string, (r: RenderReply) => void>();
   /** Subtree hash of the last screenshot each client got, per node and scale. */
   readonly sentHashes = new Map<string, string>();
 
   broadcast<E extends EventName>(event: E, data: CoreEvents[E]) {
     for (const c of this.connections.values()) c.channel.send({ t: 'evt', event, data });
+    this.afterBroadcast?.(event, data);
   }
 
   agents(): AgentClient[] {
@@ -41,7 +47,17 @@ export class HostContext implements ToolHost, ChatHost {
   /* -------------------------------- documents ------------------------------- */
 
   summaries(): DocSummary[] {
-    return [...this.sessions.values()].map((s) => ({ id: s.id, name: s.doc.meta.name, filePath: s.filePath, dataDir: this.dataDir(s), assetDir: this.assetDir(s), dirty: s.dirty, revision: s.revision }));
+    return [...this.sessions.values()].map((s) => ({ id: s.id, name: s.doc.meta.name, filePath: s.filePath, dataDir: this.dataDir(s), assetDir: this.assetDir(s), dirty: s.dirty, revision: s.revision, project: this.projectOf(s.id) }));
+  }
+
+  projectOf(docId: string | null): string | null {
+    return docId ? this.projects.get(docId) ?? null : null;
+  }
+
+  /** The open documents of one window context (a project folder, or null = public). */
+  inContext(project: string | null): DocumentSession[] {
+    const key = contextKey(project);
+    return [...this.sessions.values()].filter((s) => contextKey(this.projectOf(s.id)) === key);
   }
 
   /** The document's `<name>-data/` folder (assets, chats, skills, memory); a runtime folder while it has no file. */
@@ -71,18 +87,28 @@ export class HostContext implements ToolHost, ChatHost {
     return assetDirFor(session.filePath, session.id);
   }
 
-  register(session: DocumentSession) {
+  register(session: DocumentSession, project: string | null = null) {
     // No base64 in documents: images arriving as data: URLs are written to the asset folder first.
     session.transformOps = (ops) => externalizeOps(this.assetDir(session), ops);
     this.sessions.set(session.id, session);
+    this.projects.set(session.id, project ? projectRoot(project) : null);
     this.lastDocId = session.id;
     session.onApplied((a) => this.broadcast('doc.applied', a));
     this.broadcast('workspace.changed', this.summaries());
     return session.id;
   }
 
-  newDoc(name: string) {
-    return this.register(new DocumentSession(ArchaDocument.create(name)));
+  newDoc(name: string, project: string | null = null) {
+    return this.register(new DocumentSession(ArchaDocument.create(name)), project);
+  }
+
+  /** Forgets a closed document; the window it was in keeps one open. */
+  forget(docId: string) {
+    const project = this.projectOf(docId);
+    this.sessions.delete(docId);
+    this.projects.delete(docId);
+    if (!this.inContext(project).length) this.newDoc('Untitled', project);
+    if (!this.lastDocId || !this.sessions.has(this.lastDocId)) this.lastDocId = this.inContext(project).at(-1)?.id ?? null;
   }
 
   /**

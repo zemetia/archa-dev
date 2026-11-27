@@ -6,6 +6,7 @@ import { AccountManager, ChatRunner, McpServerManager, MemoryStore, randomPerson
 import { AgentExecutor } from '@archa/mcp';
 import { HostContext, type Connection } from './context';
 import { createRouter, type Router } from './router';
+import { DocumentFiles } from './files';
 import { documentRoutes } from './domains/documents';
 import { exportRoutes } from './domains/export';
 import { agentToolRoutes } from './domains/agent-tools';
@@ -23,6 +24,11 @@ export type HostOptions = {
   /** The `archa` CLI bundle, for Settings → Connect. */
   cliPath: string;
   version?: string;
+  /**
+   * The host serves app windows: each window restores its own files (workspace.restore), so it starts with no
+   * document; open-file lists, backups of unsaved work and timed auto-save run. Off for headless and tests.
+   */
+  windows?: boolean;
 };
 
 const clientInfoSchema = z.object({
@@ -45,6 +51,7 @@ export class Host {
   readonly memory = new MemoryStore((docId) => this.ctx.activeDataDir(docId), () => this.ctx.broadcast('memory.changed', {}));
   readonly mcpServers = new McpServerManager(() => this.ctx.broadcast('mcp.changed', {}));
   readonly chat: ChatRunner;
+  readonly files: DocumentFiles;
   readonly router: Router;
   /** Every RPC method, callable directly (tests, in-process callers); requests from clients take the same path. */
   readonly handlers: Invoke;
@@ -53,9 +60,10 @@ export class Host {
   constructor(opts: HostOptions) {
     const { ctx } = this;
     this.chat = new ChatRunner(ctx, { accounts: this.accounts, skills: this.skills, memory: this.memory, mcpServers: this.mcpServers }, opts.mcpCommand);
+    this.files = new DocumentFiles(ctx, opts.windows ?? false);
     const executor = (conn: Connection) => this.executor(conn);
     this.router = createRouter([
-      ['documents', documentRoutes(ctx, this.chat)],
+      ['documents', documentRoutes(ctx, this.files, this.chat)],
       ['export', exportRoutes(ctx)],
       ['agent-tools', agentToolRoutes(ctx, this.skills, executor)],
       ['browser', browserRoutes(ctx, executor, opts.browser)],
@@ -68,7 +76,7 @@ export class Host {
       ['app', appRoutes(ctx, { version: opts.version ?? '1.7.3', cliPath: opts.cliPath, mcpCommand: opts.mcpCommand })],
     ]);
     this.handlers = Object.fromEntries(Object.keys(this.router.routes).map((m) => [m, (p: unknown, c: Connection) => this.router.call(m, p, c)])) as Invoke;
-    ctx.newDoc('Untitled');
+    if (!opts.windows) ctx.newDoc('Untitled');
     sweepShots();
   }
 
@@ -100,6 +108,7 @@ export class Host {
 
   /** Stops agent logins and runs; call before the process exits. */
   async shutdown() {
+    this.files.dispose();
     this.accounts.shutdown();
     await this.chat.shutdown();
   }

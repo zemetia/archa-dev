@@ -12,7 +12,8 @@ import { callBrowser } from './main-bridge';
 
 /** The `archa` CLI bundle: ARCHA_CLI override, else the monorepo build next to the desktop app (dev). */
 const cliPath = process.env.ARCHA_CLI ?? resolve(__dirname, '../../../cli/dist/archa.cjs');
-const core = createHost({ browser: callBrowser, cliPath, mcpCommand: nodeMcpCommand(cliPath) });
+// Each window restores its own files (workspace.restore), so the app starts with no document.
+const core = createHost({ browser: callBrowser, cliPath, mcpCommand: nodeMcpCommand(cliPath), windows: true });
 
 function portChannel(port: MessagePortMain): Channel {
   const subs: Array<(m: Message) => void> = [];
@@ -28,16 +29,21 @@ process.parentPort.on('message', (e) => {
     const conn = core.attach(portChannel(port), { kind: 'renderer', name: `window-${msg.windowId}` });
     port.on('close', () => core.detach(conn));
   } else if (msg.type === 'shutdown') {
-    cleanup();
+    void cleanup();
   }
 });
 
 // Local socket for `archa` CLI and `archa mcp` (blueprint ARCHITECTURE/02).
 core.listen('app').catch((e) => console.error('[core] socket error', e));
 
-function cleanup() {
+let closing = false;
+async function cleanup() {
+  if (closing) return;
+  closing = true;
+  // Unsaved work goes to its file or a backup first; main waits for this process to exit (at most 5 s).
+  try { await Promise.race([core.flush(), new Promise((r) => setTimeout(r, 4000))]); } catch (e) { console.error('[core] flush failed', e); }
   // Its synchronous part removes the runtime file, closes the socket and stops agent processes.
   void core.close();
   process.exit(0);
 }
-process.on('SIGTERM', cleanup);
+process.on('SIGTERM', () => void cleanup());

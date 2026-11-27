@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { PanelRightOpen } from 'lucide-react';
-import { init, newDoc, openFile, redo, save, setTool, togglePanel, toggleRailPanel, undo, useStore } from './lib/store';
+import { init, newDoc, openFile, openProject, redo, save, setTool, togglePanel, toggleRailPanel, undo, useStore } from './lib/store';
 import { importImageOrSvg } from './lib/importers';
 import {
   arrange, copy, createComponent, deleteSelection, duplicate, group, nudge, pasteFrom, removeLayout, reorder, selectAll, selectChildren, selectParent, ungroup, wrapInFrame, zoomTo,
@@ -110,6 +110,7 @@ function onKey(e: KeyboardEvent) {
     if (k === 'z') return run(undo);
     if (k === 'y') return run(redo);
     if (k === 's') return run(() => save(e.shiftKey));
+    if (k === 'o' && e.shiftKey) return run(() => openProject());
     if (k === 'o') return run(openFile);
     if (k === 'n') return run(newDoc);
     if (k === 'd') return run(duplicate);

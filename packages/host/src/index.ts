@@ -8,3 +8,5 @@ export type { BrowserBridge } from './domains/browser';
 export { LibraryStore } from './stores/library';
 export { IconStore } from './stores/icons';
 export { nodeMcpCommand } from './mcp-command';
+export { DocumentFiles } from './files';
+export { contextKey, projectRoot } from './projects';

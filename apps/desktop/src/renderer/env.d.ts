@@ -15,6 +15,8 @@ declare global {
       onModelProgress(cb: (p: { received: number; total: number }) => void): () => void;
       pickFolder(title: string): Promise<string | null>;
       openFolder(path: string): Promise<string>;
+      windowContext(): Promise<{ project: string | null }>;
+      openProject(path?: string): Promise<string | null>;
       onOpenIntent(cb: (intent: { kind: string; path?: string }) => void): void;
       browser: {
         setBounds(r: { x: number; y: number; width: number; height: number } | null): void;

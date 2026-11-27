@@ -40,6 +40,13 @@ export const paths = {
   /** Pre-1.7.3 asset folder of an unsaved document (migrated on open). */
   legacyRuntimeAssets: (docId: string) => home('runtime', 'assets', safeSegment(docId, 'doc')),
   screenshots: () => home('runtime', 'screenshots'),
+  /** Which files each window context had open (blueprint ENTRY_POINTS/01). */
+  openFiles: () => home('runtime', 'open-files.json'),
+  /** Unsaved work with no file to go to, kept until it is saved or closed (VS Code-like hot exit). */
+  backups: () => home('runtime', 'backups'),
+  backup: (docId: string) => home('runtime', 'backups', `${safeSegment(docId, 'doc')}.archa`),
+  /** App preferences (Settings → General). */
+  settings: () => home('settings.json'),
   /** Staged copies the window may load (archa-asset:// serves runtime/). */
   referenceStage: () => home('runtime', 'reference'),
   /** Agent login profiles — never copied into a project. */

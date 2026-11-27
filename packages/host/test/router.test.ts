@@ -12,13 +12,14 @@ import { newHost } from './helpers';
  * removed in the protocol without updating it.
  */
 const ALL: Record<MethodName, true> = {
-  'workspace.list': true, 'doc.new': true, 'doc.open': true, 'doc.save': true, 'doc.close': true, 'doc.rename': true,
+  'workspace.list': true, 'workspace.restore': true, 'project.files': true, 'doc.new': true, 'doc.open': true, 'doc.save': true,
+  'doc.close': true, 'doc.rename': true,
   'doc.snapshot': true, 'doc.apply': true, 'doc.undo': true, 'doc.redo': true, 'selection.set': true,
   'render.respond': true, 'agents.list': true, 'activity.list': true, 'agent.state': true, 'agent.execute': true,
   'agent.screenshot': true, 'agent.exportSvg': true, 'agent.reference': true, 'agent.compare': true,
   'agent.outline': true, 'agent.say': true, 'agent.readSkill': true, 'agent.done': true, 'agent.browser': true,
   'agent.placeImage': true, 'orchestra.delegate': true, 'orchestra.wait': true, 'orchestra.tell': true,
-  'app.info': true, 'export.save': true, 'export.page': true, 'export.code': true, 'chat.send': true,
+  'app.info': true, 'settings.get': true, 'settings.set': true, 'export.save': true, 'export.page': true, 'export.code': true, 'chat.send': true,
   'chat.warm': true, 'chat.stop': true, 'chat.queued': true, 'chat.sendQueued': true, 'chat.unqueue': true,
   'chat.runs': true, 'chat.list': true, 'chat.deleteThread': true, 'agents.models': true, 'library.list': true,
   'library.publish': true, 'library.remove': true, 'library.insert': true, 'icons.custom.list': true,

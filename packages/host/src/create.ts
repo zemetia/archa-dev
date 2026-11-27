@@ -12,6 +12,8 @@ export type CoreHost = {
   connect(client: ClientInfo): RpcClient;
   /** Opens the local socket and writes `runtime/core.json` (`kind` says who owns it). */
   listen(kind?: 'app' | 'headless'): Promise<LocalServer>;
+  /** Unsaved work goes to its file or a backup (app windows only; see HostOptions.windows). */
+  flush(): Promise<void>;
   /** Stops agent runs and logins, closes the socket and removes the runtime file. */
   close(): Promise<void>;
 };
@@ -33,6 +35,7 @@ export function createHost(opts: HostOptions): CoreHost {
       server = await listenLocal(host, kind);
       return server;
     },
+    flush: () => host.files.flush(),
     async close() {
       server?.close();
       server = null;

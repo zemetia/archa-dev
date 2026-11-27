@@ -4,7 +4,7 @@ import { browserCommandSchema, placeImageSchema, type BrowserReply } from './bro
 import type { McpImportCandidate, McpServer, McpTestResult, MemoryEntry, Skill, SkillsOverview } from './settings';
 import type {
   AccountsOverview, ActivityEntry, AgentAccount, AgentClient, AppInfo, ChatMessage, ChatQueued, ChatRunEvent, CompareResult, CompareStats,
-  CustomIconInfo, DocSummary, ExecuteResult, LibraryItem, LoginState, ModelOption, OrchestraReport, OrchestraWorker, Shot,
+  AppSettings, CustomIconInfo, DocSummary, ExecuteResult, LibraryItem, LoginState, ModelOption, OrchestraReport, OrchestraWorker, ProjectFile, Shot,
 } from './index';
 
 /* ----------------------------------------------------------------------------
@@ -60,13 +60,21 @@ const accountId = z.object({ id: z.string().min(1).max(64) });
 const skillSlug = z.string().trim().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letters, digits and dashes');
 const skillById = z.object({ id: z.string().min(1).max(200), docId: z.string().optional() });
 const chatQueueParams = z.object({ threadId, id: z.string().min(1).max(64) });
+/** A window context: an absolute project folder, or null (public). Omitted on doc.new / doc.open = the context of the document used last. */
+const project = z.string().min(1).max(4096).refine((p) => /^([A-Za-z]:[\\/]|[\\/])/.test(p), 'project must be an absolute folder path');
+export const settingsPatchSchema = z.object({
+  autosave: z.object({ enabled: z.boolean(), seconds: z.number().int().min(5).max(3600) }).optional(),
+}).strict();
 
 /* ---------------------------------- methods ---------------------------------- */
 
 export const RPC = {
   'workspace.list': m(none, out<DocSummary[]>(), 'Every open document'),
-  'doc.new': m(z.object({ name: z.string().optional() }), out<{ docId: string }>(), 'Create an empty document'),
-  'doc.open': m(z.object({ path: z.string().min(1) }), out<{ docId: string }>(), 'Open a .archa file (or return the id it is open under)'),
+  'doc.new': m(z.object({ name: z.string().optional(), project: project.nullable().optional() }), out<{ docId: string }>(), 'Create an empty document'),
+  'doc.open': m(z.object({ path: z.string().min(1), project: project.nullable().optional() }), out<{ docId: string }>(), 'Open a .archa file (or return the id it is open under)'),
+  /** A window's start: reopens the files its context had open last time (null = public, else a project folder). */
+  'workspace.restore': m(z.object({ project: project.nullable() }), out<{ active: string | null }>(), 'Reopen the files a window context had open'),
+  'project.files': m(z.object({ project }), out<ProjectFile[]>(), 'The .archa files in a project\'s .design/ folder, newest first'),
   'doc.save': m(z.object({ docId: docRef, path: z.string().optional() }), out<{ path: string }>(), 'Save to its file, or to `path` (Save As)'),
   'doc.close': m(z.object({ docId: z.string().min(1) }), out<void>(), 'Close a document'),
   'doc.rename': m(z.object({ docId: docRef, name: z.string() }), out<void>(), 'Rename a document'),
@@ -111,6 +119,8 @@ export const RPC = {
   'orchestra.tell': m(z.object({ worker: z.string().min(1).max(100), message: z.string().min(1).max(40_000) }), out<{ queued: boolean }>(), 'Follow-up message to a worker'),
   // App
   'app.info': m(none, out<AppInfo>(), 'Version, user, CLI and MCP command, available agents'),
+  'settings.get': m(none, out<AppSettings>(), 'App preferences (Settings → General)'),
+  'settings.set': m(settingsPatchSchema, out<AppSettings>(), 'Change app preferences'),
   /** html / tailwind also write a CSS file and image assets next to `path`; png / jpg arrive rendered by the renderer as base64. */
   'export.save': m(z.object({
     docId: z.string().min(1), nodeId: z.string().min(1), format: z.enum(['png', 'jpg', 'svg', 'html', 'tailwind']),

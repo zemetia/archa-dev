@@ -29,7 +29,12 @@ export type ClientInfo = { kind: ClientKind; name: string; agentId?: string; run
  * dataDir: the document's `<name>-data/` folder next to its `.archa` (a runtime folder while unsaved) — assets, chats,
  * skills, memory. assetDir: its `assets/`, where `asset:` references resolve.
  */
-export type DocSummary = { id: string; name: string; filePath: string | null; dataDir: string; assetDir: string; dirty: boolean; revision: number };
+/** project: the folder the document belongs to (its window shows it; untitled ones save into `<project>/.design/`); null = public. */
+export type DocSummary = { id: string; name: string; filePath: string | null; dataDir: string; assetDir: string; dirty: boolean; revision: number; project: string | null };
+/** A `.archa` file in a project's `.design/` folder. */
+export type ProjectFile = { path: string; name: string; modifiedAt: number; docId: string | null };
+/** App-wide preferences in ARCHA_HOME/settings.json. autosave.seconds: interval for documents with unsaved changes. */
+export type AppSettings = { autosave: { enabled: boolean; seconds: number } };
 export type AppliedEvent = { docId: string; revision: number; txnId: string; author: Author; label: string; ops: Op[]; touched: string[] };
 export type ActivityEntry = { id: string; ts: number; docId: string; author: Author; tool: string; text: string; nodeIds: string[]; runId?: string };
 export type AgentClient = { id: string; name: string; kind: ClientKind; connectedAt: number };
