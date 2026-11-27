@@ -1,9 +1,8 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path';
-import { z } from 'zod';
 import { DocumentError } from '@archa/core';
-import type { Skill, SkillSource, SkillsOverview } from '@archa/protocol';
+import { RPC, type Skill, type SkillSource, type SkillsOverview } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import { claudeHostDir, codexHostDir, parse } from './accounts';
 
@@ -30,13 +29,13 @@ const SOURCES: Array<{ source: SkillSource; label: string; dir: () => string }> 
   { source: 'agents', label: 'Shared (~/.agents)', dir: () => join(homedir(), '.agents', 'skills') },
 ];
 
-const slug = z.string().trim().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letters, digits and dashes');
+/** Param schemas live in the RPC registry (packages/protocol/src/rpc.ts). */
 export const skillParams = {
-  create: z.object({ name: slug, description: z.string().trim().min(1).max(1024), body: z.string().max(200_000) }),
-  import: z.object({ dir: z.string().trim().min(1).max(1024) }),
-  update: z.object({ id: z.string().min(1).max(200), enabled: z.boolean() }),
-  byId: z.object({ id: z.string().min(1).max(200), docId: z.string().optional() }),
-  readForAgent: z.object({ docId: z.string().optional(), name: z.string().trim().min(1).max(120), file: z.string().trim().max(400).optional() }),
+  create: RPC['skills.create'].params,
+  import: RPC['skills.import'].params,
+  update: RPC['skills.update'].params,
+  byId: RPC['skills.read'].params,
+  readForAgent: RPC['agent.readSkill'].params,
 };
 
 type State = { version: 1; disabled: string[] };

@@ -5,60 +5,26 @@ import { basename, dirname, extname, isAbsolute, join, normalize, resolve as res
 import { ArchaDocument, DocumentError, DocumentSession, findEmptySpace, libraryInsertOps, outline, subtreeHash } from '@archa/core';
 import { decodeArcha, encodeArcha, exportHtml, exportHtmlStandalone, exportSvg } from '@archa/formats';
 import { newId, opSchema, type Author, type Op } from '@archa/schema';
-import { browserCommandSchema, placeImageSchema, type Shot, type ActivityEntry, type TrailStep, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName } from '@archa/protocol';
+import { INVALID_PARAMS, isMethod, parseParams, type Shot, type ActivityEntry, type TrailStep, type AgentClient, type Channel, type ClientInfo, type CoreEvents, type CoreMethods, type DocSummary, type EventName, type Message, type MethodName, type ParsedParams } from '@archa/protocol';
 import { z } from 'zod';
 import { AgentExecutor, describeState } from './execute';
 import { ADAPTERS, ChatRunner, findBin, type McpCommand } from './agents';
-import { AccountManager, parse, resolveCli } from './accounts';
-import { LibraryStore, libraryInsertSchema, libraryItemSchema, libraryPublishSchema } from './library';
-import { IconStore, iconsAddSchema, iconsRemoveSchema } from './icons';
+import { AccountManager, resolveCli } from './accounts';
+import { LibraryStore } from './library';
+import { IconStore } from './icons';
 import { SkillManager } from './skills';
 import { McpServerManager } from './mcp-servers';
 import { callBrowser } from './main-bridge';
 import { randomPersona } from './personas';
-import { MemoryStore, memoryParams } from './memory';
+import { MemoryStore } from './memory';
 import { assetDirFor, dataDirFor, externalizeData, externalizeOps, inlineData, isRuntimeDataDir, migrateDataDir, moveDataDir } from './assets';
-import { compareReference, compareSchema, readReference, referenceSchema } from './reference-tools';
+import { compareReference, readReference } from './reference-tools';
 import { canvasFit, fitBudget, INLINE_BUDGET, INLINE_MAX_SIDE, MAX_SLICES, saveShot, SLICE_HEIGHT, SLICE_MIN_HEIGHT, SLICE_RATIO, sweepShots } from './shots';
 
-const chatSendSchema = z.object({
-  docId: z.string().min(1), agent: z.string().min(1), prompt: z.string().min(1).max(100_000),
-  model: z.string().max(100).optional(), account: z.string().max(100).optional(), threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
-  now: z.boolean().optional(), focus: z.array(z.string().min(1).max(100)).max(50).optional(), mode: z.enum(['chat', 'orchestrate']).optional(),
-  images: z.array(z.object({
-    mime: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
-    data: z.string().min(1).max(15_000_000).regex(/^[A-Za-z0-9+/]+=*$/),
-    thumb: z.string().max(300_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/),
-  })).max(6).optional(),
-});
-const chatWarmSchema = z.object({
-  docId: z.string().min(1), agent: z.string().min(1), model: z.string().max(100).optional(), account: z.string().max(100).optional(),
-  threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
-});
-const chatQueueSchema = z.object({ threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/), id: z.string().min(1).max(64) });
-const chatQueuedSchema = z.object({ threadId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/) });
-const agentModelsSchema = z.object({ agent: z.enum(['claude', 'agy', 'codex']), account: z.string().max(100).optional() });
 const clientInfoSchema = z.object({
   kind: z.enum(['renderer', 'cli', 'mcp']), name: z.string().min(1).max(200), agentId: z.string().max(200).optional(),
   runId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
 });
-const exportSaveSchema = z.object({
-  docId: z.string().min(1), nodeId: z.string().min(1), format: z.enum(['png', 'jpg', 'svg', 'html', 'tailwind']),
-  path: z.string().min(1).max(4096).refine((p) => isAbsolute(p), 'Export path must be absolute'),
-  image: z.string().max(200_000_000).optional(),
-});
-const exportPageSchema = z.object({ docId: z.string().min(1), nodeId: z.string().min(1) });
-const exportCodeSchema = z.object({ docId: z.string().min(1), nodeId: z.string().min(1), style: z.enum(['css', 'tailwind']) });
-const outlineSchema = z.object({ docId: z.string().optional(), node: z.string().min(1).optional(), depth: z.number().int().min(0).max(12).optional() });
-const orchestraDelegateSchema = z.object({
-  tasks: z.array(z.object({
-    title: z.string().min(1).max(120), prompt: z.string().min(1).max(40_000), kind: z.string().max(40).optional(),
-    agent: z.enum(['claude', 'agy', 'codex']).optional(), model: z.string().max(100).optional(), frame: z.string().min(1).max(100).optional(),
-  })).min(1).max(8),
-});
-const orchestraWaitSchema = z.object({ workers: z.array(z.string().min(1).max(100)).max(8).optional(), timeoutSec: z.number().min(5).max(600).optional() });
-const orchestraTellSchema = z.object({ worker: z.string().min(1).max(100), message: z.string().min(1).max(40_000) });
-const chatThreadSchema = z.object({ docId: z.string().min(1), threadId: z.string().min(1).max(64) });
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -78,7 +44,8 @@ type RenderReply = Omit<CoreMethods['render.respond']['params'], 'requestId'>;
 /** threadId: the chat thread of a launched run's `archa mcp`; its trail is tagged with it. */
 export type Connection = { id: string; channel: Channel; client: ClientInfo; author: Author; connectedAt: number; threadId?: string };
 
-type Handler<M extends MethodName> = (params: CoreMethods[M]['params'], conn: Connection) => Promise<CoreMethods[M]['result']> | CoreMethods[M]['result'];
+/** Gets the params the registry schema parsed (packages/protocol/src/rpc.ts); never called with invalid ones. */
+type Handler<M extends MethodName> = (params: ParsedParams<M>, conn: Connection) => Promise<CoreMethods[M]['result']> | CoreMethods[M]['result'];
 
 /** All open documents and every connected client. The single writer (blueprint ARCHITECTURE/04). */
 export class Workspace {
@@ -141,15 +108,21 @@ export class Workspace {
 
   private async onMessage(conn: Connection, msg: Message) {
     if (msg.t !== 'req') return;
-    const handler = (this.handlers as Record<string, Handler<MethodName>>)[msg.method];
     try {
-      if (!handler) throw new DocumentError('NOT_FOUND', `Unknown method ${msg.method}`);
-      const result = await handler(msg.params as never, conn);
+      const result = await this.dispatch(conn, msg.method, msg.params);
       conn.channel.send({ t: 'res', id: msg.id, ok: true, result });
     } catch (e) {
       const err = e as Error & { code?: string };
       conn.channel.send({ t: 'res', id: msg.id, ok: false, error: { code: err.code ?? 'INTERNAL', message: err.message } });
     }
+  }
+
+  /** One request from any client (window port or socket): params are checked against the registry before the handler runs. */
+  async dispatch(conn: Connection, method: string, params: unknown): Promise<unknown> {
+    if (!isMethod(method)) throw new DocumentError('NOT_FOUND', `Unknown method ${method}`);
+    const p = parseParams(method, params);
+    if (!p.ok) throw Object.assign(new Error(p.message), { code: INVALID_PARAMS });
+    return (this.handlers[method] as Handler<MethodName>)(p.data as never, conn);
   }
 
   /* -------------------------------- documents ------------------------------- */
@@ -383,16 +356,15 @@ export class Workspace {
       this.trail(conn, s.id, [trailStep(s, 'look', id)]);
       return r;
     },
-    'agent.reference': (params, conn) => readReference(this, parse(referenceSchema, params), conn),
-    'agent.compare': (params, conn) => compareReference(this, parse(compareSchema, params), conn),
+    'agent.reference': (params, conn) => readReference(this, params, conn),
+    'agent.compare': (params, conn) => compareReference(this, params, conn),
     'agent.exportSvg': ({ docId, node }, conn) => {
       const s = this.session(docId);
       const id = resolveRef(s, node);
       this.trail(conn, s.id, [trailStep(s, 'read', id)]);
       return { svg: exportSvg(s.doc, id) };
     },
-    'agent.outline': (params, conn) => {
-      const { docId, node, depth } = parse(outlineSchema, params);
+    'agent.outline': ({ docId, node, depth }, conn) => {
       const s = this.session(docId);
       const sel = (this.selection.get(s.id) ?? []).filter((id) => s.doc.get(id));
       const ids = node ? [resolveRef(s, node)] : sel.length ? sel : [s.doc.pages[0]!.rootId];
@@ -401,7 +373,7 @@ export class Workspace {
       const head = node ? '' : sel.length ? `Selection (${sel.length}):\n` : 'Nothing selected — the page:\n';
       return head + ids.map((id) => outline(s.doc, id, depth ?? (id === s.doc.pages[0]!.rootId ? 1 : 3))).join('\n');
     },
-    'agent.readSkill': (p) => ({ text: this.skills.readForAgent(p, this.skillsDir(p?.docId)) }),
+    'agent.readSkill': (p) => ({ text: this.skills.readForAgent(p, this.skillsDir(p.docId)) }),
     'agent.say': ({ docId, text, nodeId }, conn) => {
       const s = this.session(docId);
       const id = nodeId ? resolveRef(s, nodeId) : null;
@@ -413,18 +385,14 @@ export class Workspace {
       this.log(s.id, conn.author, 'done', summary?.trim() ? summary.trim().slice(0, 300) : 'Done', [], conn.client.runId);
       this.broadcast('agent.done', { docId: s.id, author: conn.author, ...(conn.client.runId ? { runId: conn.client.runId } : {}) });
     },
-    'agent.browser': async (params, conn) => {
-      const parsed = browserCommandSchema.safeParse(params);
-      if (!parsed.success) throw new DocumentError('VALIDATION', `Invalid browser input: ${parsed.error.issues[0]?.path.join('.')} ${parsed.error.issues[0]?.message}`);
-      const cmd = parsed.data;
+    'agent.browser': async (cmd, conn) => {
       const { text, png } = await callBrowser(cmd, conn.author.name ?? conn.author.id);
       const detail = (cmd.url ?? cmd.query ?? cmd.ref ?? cmd.selector ?? cmd.key ?? (cmd.text !== undefined ? `"${cmd.text.slice(0, 40)}"` : '')).slice(0, 120);
       this.log(this.session().id, conn.author, 'browser', `Browser · ${cmd.action}${detail ? ` ${detail}` : ''}`, [], conn.client.runId);
       // The canvas-ready copy of a download stays here; the agent gets the text and the preview.
       return { text, png };
     },
-    'agent.placeImage': async (params, conn) => {
-      const { docId, url, ref, selector, capture, path, ...place } = parse(placeImageSchema, params);
+    'agent.placeImage': async ({ docId, url, ref, selector, capture, path, ...place }, conn) => {
       if (!url && !ref && !selector) throw new DocumentError('VALIDATION', 'place_image needs url (web address, data: URL or file path), or ref/selector of an image on the open browser page.');
       const s = this.session(docId);
       const { image } = await callBrowser({ action: 'download', url, ref, selector, capture, path }, conn.author.name ?? conn.author.id);
@@ -443,8 +411,8 @@ export class Workspace {
         agents: ADAPTERS.map((a) => ({ id: a.id, label: a.label, available: !!resolveCli(a.bin) && existsSync(cliPath()) })),
       };
     },
-    'export.save': async (params) => {
-      const { docId, nodeId, format, path, image } = parse(exportSaveSchema, params);
+    'export.save': async ({ docId, nodeId, format, path, image }) => {
+      if (!isAbsolute(path)) throw new DocumentError('VALIDATION', 'path: Export path must be absolute');
       const s = this.session(docId);
       // Exported files stand alone: asset images are inlined, then the HTML exporter writes its own copies.
       const doc = new ArchaDocument(inlineData(this.assetDir(s), s.doc.toData()), s.revision);
@@ -469,54 +437,41 @@ export class Workspace {
       }
       return { files: written };
     },
-    'export.page': (params) => {
-      const { docId, nodeId } = parse(exportPageSchema, params);
+    'export.page': ({ docId, nodeId }) => {
       const s = this.session(docId);
       const n = s.doc.require(nodeId);
       const doc = new ArchaDocument(inlineData(this.assetDir(s), s.doc.toData()), s.revision);
       return { html: exportHtmlStandalone(doc, nodeId), width: n.width, height: n.height };
     },
-    'export.code': (params) => {
-      const { docId, nodeId, style } = parse(exportCodeSchema, params);
+    'export.code': ({ docId, nodeId, style }) => {
       const s = this.session(docId);
       if (style === 'css') return { code: exportHtmlStandalone(s.doc, nodeId) };
       const [page] = exportHtml(s.doc, nodeId, { style: 'tailwind', inlineAssets: true });
       return { code: String(page!.data) };
     },
-    'chat.send': (params) => {
-      const p = parse(chatSendSchema, params);
-      return this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId, { now: p.now, focus: p.focus, images: p.images, mode: p.mode });
-    },
-    'chat.warm': (params) => {
-      const p = parse(chatWarmSchema, params);
-      return this.chat.warmUp(this.session(p.docId).id, p.agent, p.model, p.account, p.threadId);
-    },
+    'chat.send': (p) => this.chat.send(this.session(p.docId).id, p.agent, p.prompt, p.model, p.account, p.threadId, { now: p.now, focus: p.focus, images: p.images, mode: p.mode }),
+    'chat.warm': (p) => this.chat.warmUp(this.session(p.docId).id, p.agent, p.model, p.account, p.threadId),
     'chat.stop': ({ runId }) => this.chat.stop(runId),
-    'chat.queued': (params) => this.chat.queued(parse(chatQueuedSchema, params).threadId),
-    'chat.sendQueued': (params) => { const p = parse(chatQueueSchema, params); this.chat.sendQueued(p.threadId, p.id); },
-    'chat.unqueue': (params) => { const p = parse(chatQueueSchema, params); this.chat.unqueue(p.threadId, p.id); },
+    'chat.queued': (p) => this.chat.queued(p.threadId),
+    'chat.sendQueued': (p) => { this.chat.sendQueued(p.threadId, p.id); },
+    'chat.unqueue': (p) => { this.chat.unqueue(p.threadId, p.id); },
     // Team tools of an orchestrate lead; the connection's thread is the lead (blueprint AGENT_BRIDGE/06).
-    'orchestra.delegate': (params, conn) => this.chat.delegate(conn.threadId, parse(orchestraDelegateSchema, params).tasks),
-    'orchestra.wait': (params, conn) => { const p = parse(orchestraWaitSchema, params ?? {}); return this.chat.wait(conn.threadId, p.workers, p.timeoutSec); },
-    'orchestra.tell': (params, conn) => { const p = parse(orchestraTellSchema, params); return this.chat.tell(conn.threadId, p.worker, p.message); },
+    'orchestra.delegate': (p, conn) => this.chat.delegate(conn.threadId, p.tasks),
+    'orchestra.wait': (p, conn) => this.chat.wait(conn.threadId, p.workers, p.timeoutSec),
+    'orchestra.tell': (p, conn) => this.chat.tell(conn.threadId, p.worker, p.message),
     'chat.runs': () => this.chat.active(),
     'chat.list': ({ docId }) => this.chat.list(this.session(docId).id),
     'library.list': () => this.library.list(),
-    'library.publish': (params) => {
-      const p = parse(libraryPublishSchema, params);
+    'library.publish': (p) => {
       // Libraries are shared across documents, so their images are stored inline (they move into each user's folder on insert).
       const s = this.session(p.docId);
       return this.library.publish(new ArchaDocument(inlineData(this.assetDir(s), s.doc.toData()), s.revision), p.nodeId, p.library, p.png);
     },
-    'library.remove': (params) => {
-      const p = parse(libraryItemSchema, params);
-      this.library.remove(p.library, p.id);
-    },
+    'library.remove': (p) => { this.library.remove(p.library, p.id); },
     'icons.custom.list': () => this.icons.list(),
-    'icons.custom.add': (params) => this.icons.add(parse(iconsAddSchema, params).icons),
-    'icons.custom.remove': (params) => { this.icons.remove(parse(iconsRemoveSchema, params).name); },
-    'library.insert': (params, conn) => {
-      const p = parse(libraryInsertSchema, params);
+    'icons.custom.add': (p) => this.icons.add(p.icons),
+    'icons.custom.remove': (p) => { this.icons.remove(p.name); },
+    'library.insert': (p, conn) => {
       const s = this.session(p.docId);
       const item = this.library.read(p.library, p.id);
       if (!item) throw new DocumentError('NOT_FOUND', `Library component ${p.library}:${p.id} not found`);
@@ -528,12 +483,8 @@ export class Workspace {
       if (!wasDirty) this.broadcast('workspace.changed', this.summaries());
       return { nodeId: r.rootId, placed: r.placed };
     },
-    'agents.models': (params) => {
-      const p = parse(agentModelsSchema, params);
-      return this.chat.models(p.agent, p.account);
-    },
-    'chat.deleteThread': (params) => {
-      const p = parse(chatThreadSchema, params);
+    'agents.models': (p) => this.chat.models(p.agent, p.account),
+    'chat.deleteThread': (p) => {
       this.chat.deleteThread(this.session(p.docId).id, p.threadId);
     },
     'accounts.overview': () => this.accounts.overview(),
@@ -546,7 +497,7 @@ export class Workspace {
     'accounts.login.code': (p) => this.accounts.submitCode(p),
     'accounts.login.cancel': (p) => this.accounts.cancelLogin(p),
     'skills.list': (p) => this.skills.overview(this.skillsDir(p?.docId)),
-    'memory.list': (p) => this.memory.list(parse(memoryParams.list, p ?? {}).docId),
+    'memory.list': (p) => this.memory.list(p.docId),
     'memory.remember': (p) => this.memory.remember(p),
     'memory.forget': (p) => this.memory.forget(p),
     'skills.create': (p) => this.skills.create(p),

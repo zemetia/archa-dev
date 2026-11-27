@@ -7,6 +7,8 @@
 ---
 
 <!-- Entries below, newest first -->
+[2026-11-27] - Worktree `rpc-registry` again started on the old mvp-app commit (02fb292) instead of `main` v1.7.3 named in the task - It had no own commits, so reset the branch to `main` before any edit - Check `git log -1` against the task's stated base first thing in every new Orca worktree; this keeps happening.
+
 [2026-11-24] - Worktree `logo-menu` was created from an old mvp-app commit (no ContextMenu/ArchaLogo), not `main`; then `electron-vite dev` failed with "Electron uninstall" after running the root `node node_modules/electron/install.js` - Fast-forwarded the empty branch to `main`; `apps/desktop/node_modules/electron` is a separate, non-hoisted copy and needed its own `node apps/desktop/node_modules/electron/install.js` - In a new worktree check `git log -1` against `main` before reading code, and fetch Electron for every electron copy (`apps/desktop` too).
 
 [2026-11-24] - Live check showed dragging a group's child on the canvas pulled it out of the group into the frame below (containerAt skips groups, so the drop target was the frame) - The move gesture now treats the frame holding the group as "home" - Test canvas drags of nested layers live; unit tests on ops never exercise the canvas drop-target logic.

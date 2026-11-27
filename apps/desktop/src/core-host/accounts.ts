@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { DocumentError } from '@archa/core';
 import { newId } from '@archa/schema';
-import type { AccountAgent, AccountsOverview, AgentAccount, AgentCli, HostLogin, LoginState } from '@archa/protocol';
+import { RPC, type AccountAgent, type AccountsOverview, type AgentAccount, type AgentCli, type HostLogin, type LoginState } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import { findBin } from './agent-adapters';
 import { keyringRead, keyringWrite } from './keyring';
@@ -37,15 +37,13 @@ type LoginSession = { child: ChildProcess; out: string; url: string; needsCode: 
 
 /* ------------------------------ zod boundary ------------------------------ */
 
-const agentId = z.enum(['claude', 'agy', 'codex']);
-const id = z.string().min(1).max(64);
+/** Param schemas live in the RPC registry (packages/protocol/src/rpc.ts); the manager re-checks for direct callers. */
 export const accountParams = {
-  /** No name: the account is named after the login it signs in with. */
-  create: z.object({ agent: agentId, name: z.string().trim().max(80).optional(), apiKey: z.string().trim().max(512).optional() }),
-  update: z.object({ id, name: z.string().trim().min(1).max(80).optional(), enabled: z.boolean().optional(), isDefault: z.boolean().optional() }),
-  byId: z.object({ id }),
-  captureHost: z.object({ agent: z.literal('agy') }),
-  code: z.object({ id, code: z.string().trim().min(1).max(4096).regex(/^[^\r\n]+$/, 'Paste the code on one line') }),
+  create: RPC['accounts.create'].params,
+  update: RPC['accounts.update'].params,
+  byId: RPC['accounts.delete'].params,
+  captureHost: RPC['accounts.captureHost'].params,
+  code: RPC['accounts.login.code'].params,
 };
 
 export function parse<T>(schema: z.ZodType<T>, params: unknown): T {

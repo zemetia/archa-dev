@@ -2,7 +2,7 @@
 
 ← [CODE_MAP.md](../CODE_MAP.md) | [Blueprint INDEX](../INDEX.md) | [← 04](./04-packages.md) | [06 — Tests →](./06-tests.md)
 
-What exists **today**. Targets and full contracts: [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [MCP/01](../MCP/01-transports-tools.md), [CLI/01](../CLI/01-commands.md), [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md). Types: [`packages/protocol/src/index.ts`](../../../packages/protocol/src/index.ts) (`CoreMethods`, `CoreEvents`); handlers: [`core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts).
+What exists **today**. Targets and full contracts: [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [MCP/01](../MCP/01-transports-tools.md), [CLI/01](../CLI/01-commands.md), [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md). Methods: [`packages/protocol/src/rpc.ts`](../../../packages/protocol/src/rpc.ts) (`RPC` registry → `CoreMethods`), events: [`index.ts`](../../../packages/protocol/src/index.ts) (`CoreEvents`); handlers: [`core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts).
 
 ---
 

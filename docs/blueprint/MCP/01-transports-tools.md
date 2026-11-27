@@ -59,6 +59,16 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 | `delegate` / `wait_workers` / `tell_worker` | `{ tasks[] }` / `{ workers?, timeoutSec? }` / `{ worker, message }` | **Built:** orchestrate-mode team tools, lead threads only → [AGENT_BRIDGE/06](../AGENT_BRIDGE/06-orchestrate.md) |
 | `plugin_<id>_<tool>` | Plugin-defined | Added by enabled plugins → [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md) |
 
+### Adding a tool
+
+The tool registry [`packages/protocol/src/tools.ts`](../../../packages/protocol/src/tools.ts) `TOOLS` is the single source for `archa mcp` (name, description, zod input — byte-identical listing), `MCP_TOOLS` (Claude `--allowedTools`), agy's tool list (`AGY_TOOLS_NOTE`, from each `agy` entry) and the chat line (`toolSummary`).
+
+1. Add the entry to `TOOLS`: `description`, `input` (zod shape; add `doc: docParam` for a document tool), `rpc` (the core method), `agy` (`"name { args } (what for)"`, or none to keep it out of agy's list) and `summary` if the chat line should say more than the name.
+2. New core method? Add it to `RPC` in [`rpc.ts`](../../../packages/protocol/src/rpc.ts) and its handler in `Workspace.handlers` (type error until you do).
+3. Only if the reply needs formatting (images, `execute` contract): a `REPLIES` entry in [`apps/cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts). Otherwise `relay` calls `rpc` with `doc` → `docId` and replies with the result as text (`void` → `ok`).
+
+`apps/desktop/test/rpc-registry.test.ts` checks the four lists agree.
+
 ---
 
 ## Rules
@@ -77,7 +87,7 @@ Identity is the transaction `author` and appears on every activity entry and `ag
 
 ---
 
-**Linked from:** [AGENT_BRIDGE/02](../AGENT_BRIDGE/02-roster-profiles.md) · [CLI/01](../CLI/01-commands.md) · [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md)
+**Linked from:** [AGENT_BRIDGE/02](../AGENT_BRIDGE/02-roster-profiles.md) · [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md) · [CLI/01](../CLI/01-commands.md) · [PLUGINS/01](../PLUGINS/01-manifest-capabilities.md)
 
-**Code:** [`apps/cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) · [`apps/desktop/src/core-host/execute.ts`](../../../apps/desktop/src/core-host/execute.ts) · [`apps/desktop/src/core-host/mcp-servers.ts`](../../../apps/desktop/src/core-host/mcp-servers.ts) · [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`apps/desktop/src/renderer/ui/settings/OtherPages.tsx`](../../../apps/desktop/src/renderer/ui/settings/OtherPages.tsx) · [`apps/desktop/test/assets.test.ts`](../../../apps/desktop/test/assets.test.ts) · [`packages/core/src/outline.ts`](../../../packages/core/src/outline.ts) · [`packages/protocol/src/design-guides.ts`](../../../packages/protocol/src/design-guides.ts) · [`packages/protocol/src/gemini-schema.ts`](../../../packages/protocol/src/gemini-schema.ts) · [`packages/protocol/test/gemini-schema.test.ts`](../../../packages/protocol/test/gemini-schema.test.ts)
+**Code:** [`apps/cli/src/mcp.ts`](../../../apps/cli/src/mcp.ts) · [`apps/desktop/src/core-host/execute.ts`](../../../apps/desktop/src/core-host/execute.ts) · [`apps/desktop/src/core-host/mcp-servers.ts`](../../../apps/desktop/src/core-host/mcp-servers.ts) · [`apps/desktop/src/core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) · [`apps/desktop/src/renderer/ui/settings/OtherPages.tsx`](../../../apps/desktop/src/renderer/ui/settings/OtherPages.tsx) · [`apps/desktop/test/assets.test.ts`](../../../apps/desktop/test/assets.test.ts) · [`apps/desktop/test/rpc-registry.test.ts`](../../../apps/desktop/test/rpc-registry.test.ts) · [`packages/core/src/outline.ts`](../../../packages/core/src/outline.ts) · [`packages/protocol/src/design-guides.ts`](../../../packages/protocol/src/design-guides.ts) · [`packages/protocol/src/gemini-schema.ts`](../../../packages/protocol/src/gemini-schema.ts) · [`packages/protocol/src/tools.ts`](../../../packages/protocol/src/tools.ts) · [`packages/protocol/test/gemini-schema.test.ts`](../../../packages/protocol/test/gemini-schema.test.ts)
 <!-- backlinks:end -->

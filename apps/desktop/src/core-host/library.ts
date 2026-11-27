@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path';
 import { z } from 'zod';
 import { componentMeta, DocumentError, libraryRef, subtreeInput, type ArchaDocument, type LibraryComponent } from '@archa/core';
-import type { LibraryItem } from '@archa/protocol';
+import { DEFAULT_LIBRARY, RPC, type LibraryItem } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 
 /*
@@ -13,23 +13,11 @@ import { archaHome } from '@archa/protocol/node';
  * A library is plain files: deleting a thumbnail only loses the preview.
  */
 
-export const DEFAULT_LIBRARY = 'my-library';
+export { DEFAULT_LIBRARY };
 const nameRe = /^[A-Za-z0-9_-]{1,64}$/;
-const libName = z.string().regex(nameRe, 'Library and component ids use letters, digits, - and _');
-
-export const libraryPublishSchema = z.object({
-  docId: z.string().min(1),
-  nodeId: z.string().min(1),
-  library: libName.default(DEFAULT_LIBRARY),
-  png: z.string().max(4_000_000).optional(),
-});
-export const libraryItemSchema = z.object({ library: libName, id: libName });
-export const libraryInsertSchema = libraryItemSchema.extend({
-  docId: z.string().min(1),
-  parentId: z.string().min(1).optional(),
-  x: z.number().finite().optional(),
-  y: z.number().finite().optional(),
-});
+export const libraryPublishSchema = RPC['library.publish'].params;
+export const libraryItemSchema = RPC['library.remove'].params;
+export const libraryInsertSchema = RPC['library.insert'].params;
 
 const storedSchema = z.object({
   id: z.string(), name: z.string(), description: z.string().default(''),

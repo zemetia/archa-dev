@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { basename, extname, isAbsolute, join, normalize } from 'node:path';
 import { z } from 'zod';
 import { DocumentError, type ArchaDocument } from '@archa/core';
-import type { CompareRegion, CompareResult } from '@archa/protocol';
+import { RPC, type CompareRegion, type CompareResult } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import { imageSize } from './assets';
 import { fileKey, readPdfPage, summarizePage } from './reference';
@@ -14,13 +14,8 @@ import { resolveRef, type Connection, type Workspace } from './workspace';
  * build is from it. Reference files are staged into ARCHA_HOME/runtime/reference so the window can load them.
  */
 
-export const referenceSchema = z.object({
-  docId: z.string().optional(), path: z.string().min(1).max(4096), page: z.number().int().min(1).optional(), images: z.boolean().optional(),
-});
-export const compareSchema = z.object({
-  docId: z.string().optional(), node: z.string().min(1), reference: z.string().min(1).max(4096),
-  page: z.number().int().min(1).optional(), scale: z.number().min(0.1).max(4).optional(),
-});
+export const referenceSchema = RPC['agent.reference'].params;
+export const compareSchema = RPC['agent.compare'].params;
 
 /** First raster of a heavy PDF page can take a minute or two; later ones come from the window's cache. */
 const RASTER_TIMEOUT = 300_000;

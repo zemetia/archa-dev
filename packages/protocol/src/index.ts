@@ -1,6 +1,5 @@
-import type { Author, DocumentData, Issue, NodeInput, Op } from '@archa/schema';
-import type { BrowserCommand, BrowserReply, PlaceImageParams } from './browser';
-import type { McpImportCandidate, McpImportSource, McpServer, McpServerInput, McpTestResult, MemoryEntry, MemoryScope, SkillsOverview, Skill } from './settings';
+import type { Author, Issue, NodeInput, Op } from '@archa/schema';
+import type { MethodName, Params, Result } from './rpc';
 
 
 /** An icon the person uploaded: a node tree at its natural size. */
@@ -11,6 +10,8 @@ export * from './browser';
 export * from './settings';
 export * from './fonts';
 export * from './gemini-schema';
+export * from './rpc';
+export * from './tools';
 
 /* ----------------------------------------------------------------------------
  * One protocol for every client: renderer (MessagePort), CLI / MCP (socket).
@@ -64,109 +65,6 @@ export type CompareResult = { stats: CompareStats; path?: string; slices?: Inlin
 export type ExecuteResult =
   | { ok: true; revision: number; created: Array<{ name: string; id: string }>; changed: Array<{ name: string; id: string }>; output: string[]; screenshots: Shot[]; issues: Issue[] }
   | { ok: false; revision: number; statement?: string; reason: string; editId: string };
-
-export interface CoreMethods {
-  'workspace.list': { params: void; result: DocSummary[] };
-  'doc.new': { params: { name?: string }; result: { docId: string } };
-  'doc.open': { params: { path: string }; result: { docId: string } };
-  'doc.save': { params: { docId: string; path?: string }; result: { path: string } };
-  'doc.close': { params: { docId: string }; result: void };
-  'doc.rename': { params: { docId: string; name: string }; result: void };
-  'doc.snapshot': { params: { docId: string }; result: { data: DocumentData; revision: number } };
-  'doc.apply': { params: { docId: string; baseRevision: number; ops: Op[]; label: string }; result: { revision: number; txnId: string } };
-  'doc.undo': { params: { docId: string }; result: { revision: number } | null };
-  'doc.redo': { params: { docId: string }; result: { revision: number } | null };
-  'selection.set': { params: { docId: string; ids: string[] }; result: void };
-  'render.respond': { params: { requestId: string; png?: string; slices?: string[]; colors?: Array<string | null>; stats?: CompareStats; error?: string }; result: void };
-  'agents.list': { params: void; result: AgentClient[] };
-  'activity.list': { params: { docId?: string; limit?: number }; result: ActivityEntry[] };
-  // Agent-facing (MCP relay)
-  'agent.state': { params: { docId?: string }; result: string };
-  'agent.execute': { params: { docId?: string; code?: string; editId?: string; edits?: Array<{ find: string; replace: string }> }; result: ExecuteResult };
-  'agent.screenshot': { params: { docId?: string; node: string; scale?: number; slices?: boolean }; result: Shot };
-  'agent.exportSvg': { params: { docId?: string; node: string }; result: { svg: string } };
-  'agent.reference': { params: { docId?: string; path: string; page?: number; images?: boolean }; result: { text: string; json?: string; png?: string } };
-  'agent.compare': { params: { docId?: string; node: string; reference: string; page?: number; scale?: number }; result: CompareResult };
-  /** Compact text tree of a node (default: the selection, else the page) — what the design panel shows, per layer. */
-  'agent.outline': { params: { docId?: string; node?: string; depth?: number }; result: string };
-  'agent.say': { params: { docId?: string; text: string; nodeId?: string }; result: void };
-  'agent.readSkill': { params: { docId?: string; name: string; file?: string }; result: { text: string } };
-  /** The agent finished its turn: its canvas cursor stops and fades (blueprint RENDERING/02, Agent presence). */
-  'agent.done': { params: { docId?: string; summary?: string }; result: void };
-  /** Drive the in-app browser (blueprint BROWSER). */
-  'agent.browser': { params: BrowserCommand; result: BrowserReply };
-  /** A picture from a URL, file or the browser page onto the canvas (blueprint BROWSER, "Images"). */
-  'agent.placeImage': { params: PlaceImageParams; result: ExecuteResult };
-  /** Orchestrate mode (blueprint AGENT_BRIDGE/06): a lead thread starts worker threads and collects their reports. */
-  'orchestra.delegate': { params: { tasks: OrchestraTask[] }; result: { workers: OrchestraWorker[] } };
-  'orchestra.wait': { params: { workers?: string[]; timeoutSec?: number }; result: { workers: OrchestraReport[]; timedOut: boolean } };
-  'orchestra.tell': { params: { worker: string; message: string }; result: { queued: boolean } };
-  // App
-  'app.info': { params: void; result: AppInfo };
-  /** html / tailwind also write a CSS file and image assets next to `path`; png / jpg arrive rendered by the renderer as base64. */
-  'export.save': { params: { docId: string; nodeId: string; format: ExportFormat; path: string; image?: string }; result: { files: string[] } };
-  /** Self-contained HTML page of a node (CSS inlined, images embedded) — main prints it to PDF. */
-  'export.page': { params: { docId: string; nodeId: string }; result: { html: string; width: number; height: number } };
-  /** Code of a node for the clipboard: one HTML file (CSS inlined in a <style>, or Tailwind classes), images embedded. */
-  'export.code': { params: { docId: string; nodeId: string; style: 'css' | 'tailwind' }; result: { code: string } };
-  // Chat: launch a local agent CLI on this document (blueprint AGENT_BRIDGE/03)
-  /** No threadId = start a new conversation. */
-  /**
-   * `now` stops the thread's running turn and runs this message next; otherwise a busy thread queues it.
-   * `focus` = node ids the request is about (the composer's selection chip).
-   */
-  'chat.send': { params: { docId: string; agent: string; model?: string; account?: string; prompt: string; threadId?: string; now?: boolean; focus?: string[]; images?: ChatImage[]; mode?: ChatMode }; result: { runId: string; threadId: string; persona: string; queued?: boolean } };
-  /** Start (or keep) the agent process for a thread before the person sends, so the first turn starts at once. No threadId = a fresh thread id is reserved and returned. */
-  'chat.warm': { params: { docId: string; agent: string; model?: string; account?: string; threadId?: string }; result: { threadId: string; warm: boolean } };
-  'chat.stop': { params: { runId: string }; result: void };
-  /** Messages waiting in a thread; `chat.sendQueued` runs one now (stops the current turn), `chat.unqueue` drops it. */
-  'chat.queued': { params: { threadId: string }; result: ChatQueued[] };
-  'chat.sendQueued': { params: { threadId: string; id: string }; result: void };
-  'chat.unqueue': { params: { threadId: string; id: string }; result: void };
-  /** Runs still working, so a reloaded window shows every parallel session. */
-  'chat.runs': { params: void; result: ChatRunEvent[] };
-  'chat.list': { params: { docId: string }; result: ChatMessage[] };
-  'chat.deleteThread': { params: { docId: string; threadId: string }; result: void };
-  /** Models the installed agent CLI offers (agy asks the network; cached). */
-  'agents.models': { params: { agent: string; account?: string }; result: { models: ModelOption[]; source: string } };
-  // Global component libraries (blueprint DESIGN_SYSTEM/02)
-  'library.list': { params: void; result: LibraryItem[] };
-  'library.publish': { params: { docId: string; nodeId: string; library?: string; png?: string }; result: LibraryItem };
-  'library.remove': { params: { library: string; id: string }; result: void };
-  /** First use places a local main linked to the library; later uses add instances of it. */
-  'library.insert': { params: { docId: string; library: string; id: string; parentId?: string; x?: number; y?: number }; result: { nodeId: string; placed: 'main' | 'instance' } };
-  // Uploaded icons, per machine (blueprint DESIGN_SYSTEM/05)
-  'icons.custom.list': { params: void; result: CustomIconInfo[] };
-  'icons.custom.add': { params: { icons: Array<{ name: string; width: number; height: number; node: NodeInput; preview?: string }> }; result: CustomIconInfo[] };
-  'icons.custom.remove': { params: { name: string }; result: void };
-  // Agent login profiles (blueprint AGENT_BRIDGE/02)
-  'accounts.overview': { params: void; result: AccountsOverview };
-  'accounts.create': { params: { agent: AccountAgent; name?: string; apiKey?: string }; result: AgentAccount };
-  'accounts.update': { params: { id: string; name?: string; enabled?: boolean; isDefault?: boolean }; result: AgentAccount };
-  'accounts.delete': { params: { id: string }; result: void };
-  'accounts.captureHost': { params: { agent: 'agy' }; result: AgentAccount };
-  'accounts.useOnHost': { params: { id: string }; result: void };
-  'accounts.login.start': { params: { id: string }; result: LoginState };
-  'accounts.login.code': { params: { id: string; code: string }; result: AgentAccount };
-  'accounts.login.cancel': { params: { id: string }; result: void };
-  // Skills handed to chat runs (blueprint AGENT_BRIDGE/05)
-  'memory.list': { params: { docId?: string }; result: MemoryEntry[] };
-  'memory.remember': { params: { docId?: string; scope: MemoryScope; text: string; name?: string; replaces?: string }; result: MemoryEntry };
-  'memory.forget': { params: { docId?: string; id: string }; result: MemoryEntry };
-  'skills.list': { params: { docId?: string } | void; result: SkillsOverview };
-  'skills.create': { params: { name: string; description: string; body: string }; result: Skill };
-  'skills.import': { params: { dir: string }; result: Skill };
-  'skills.update': { params: { id: string; enabled: boolean }; result: Skill };
-  'skills.delete': { params: { id: string }; result: void };
-  'skills.read': { params: { id: string; docId?: string }; result: { content: string } };
-  // External MCP servers handed to chat runs (blueprint AGENT_BRIDGE/05)
-  'mcp.list': { params: void; result: McpServer[] };
-  'mcp.save': { params: McpServerInput; result: McpServer };
-  'mcp.delete': { params: { id: string }; result: void };
-  'mcp.test': { params: { id: string }; result: McpTestResult };
-  'mcp.importCandidates': { params: void; result: McpImportCandidate[] };
-  'mcp.import': { params: { source: McpImportSource; names: string[] }; result: McpServer[] };
-}
 
 /* -------------------------------- accounts -------------------------------- */
 
@@ -272,9 +170,6 @@ export function personaColor(name: string): number {
 }
 /** startedAt: when the turn began (epoch ms), for the live "working for" timer. */
 export type ChatRunEvent = { runId: string; docId: string; threadId: string; agent: string; persona: string; status: 'running' | 'finished' | 'failed' | 'stopped'; startedAt?: number };
-export type MethodName = keyof CoreMethods;
-export type Params<M extends MethodName> = CoreMethods[M]['params'];
-export type Result<M extends MethodName> = CoreMethods[M]['result'];
 
 export interface CoreEvents {
   'doc.applied': AppliedEvent;

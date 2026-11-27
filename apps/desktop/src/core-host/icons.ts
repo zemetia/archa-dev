@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import type { CustomIcon } from '@archa/icons';
 import type { NodeInput } from '@archa/schema';
+import { customIconSchema, RPC } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 
 /*
@@ -12,15 +13,9 @@ import { archaHome } from '@archa/protocol/node';
 
 const file = () => join(archaHome(), 'icons', 'custom.json');
 
-const iconSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  width: z.number().positive().max(10_000),
-  height: z.number().positive().max(10_000),
-  node: z.record(z.string(), z.unknown()).refine((n) => typeof n.type === 'string', 'node.type is required'),
-  preview: z.string().startsWith('data:image/').max(1_500_000).optional(),
-});
-export const iconsAddSchema = z.object({ icons: z.array(iconSchema).min(1).max(200) });
-export const iconsRemoveSchema = z.object({ name: z.string().min(1).max(80) });
+const iconSchema = customIconSchema;
+export const iconsAddSchema = RPC['icons.custom.add'].params;
+export const iconsRemoveSchema = RPC['icons.custom.remove'].params;
 const fileSchema = z.object({ format: z.literal('archa-icons'), icons: z.array(iconSchema.extend({ addedAt: z.number() })) });
 
 /** Largest stored icon (JSON chars incl. preview): an icon or logo, not a whole illustration. */

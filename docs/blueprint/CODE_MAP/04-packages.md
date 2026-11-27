@@ -21,7 +21,9 @@ Five packages exist today; dependency direction `schema ← protocol ← core �
 
 | File | Does | Governed by |
 |---|---|---|
-| [`index.ts`](../../../packages/protocol/src/index.ts) | `CoreMethods` (every RPC), `CoreEvents`, message framing (`req` / `res` / `evt`), `RpcClient`, `jsonLines`, shared types (`AgentTrail`, `ExecuteResult`, chat, accounts) | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [CODE_MAP/05](./05-interfaces.md) |
+| [`rpc.ts`](../../../packages/protocol/src/rpc.ts) | `RPC` registry: every method's zod params, result type, description; `CoreMethods` derived; `parseParams` | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md) |
+| [`tools.ts`](../../../packages/protocol/src/tools.ts) | `TOOLS` registry: every agent (MCP) tool — description, zod input, core method, agy note, chat summary | [MCP/01](../MCP/01-transports-tools.md#adding-a-tool) |
+| [`index.ts`](../../../packages/protocol/src/index.ts) | `CoreEvents`, message framing (`req` / `res` / `evt`), `RpcClient`, `jsonLines`, shared types (`AgentTrail`, `ExecuteResult`, chat, accounts) | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [CODE_MAP/05](./05-interfaces.md) |
 | [`node.ts`](../../../packages/protocol/src/node.ts) | Node-only: `archaHome()`, `runtimeFile()`, `socketPath()` (custom `ARCHA_HOME` → own pipe) | [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md), [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md) |
 | [`agent-docs.ts`](../../../packages/protocol/src/agent-docs.ts) | `EXECUTE_API_DOC` (tool description) and `DESIGNER_PROMPT` (chat-run system prompt) — our own text | [MCP/02](../MCP/02-execute-api.md), [MCP/04](../MCP/04-local-skill.md) |
 | [`design-guides.ts`](../../../packages/protocol/src/design-guides.ts) | Compiled-in design guides for `read_guide`; `guidesFor(request)` picks guides for a chat turn | [MCP/04](../MCP/04-local-skill.md), [MCP/01](../MCP/01-transports-tools.md) |

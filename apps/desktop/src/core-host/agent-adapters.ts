@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
-import { CORE_GUIDES, DESIGNER_PROMPT, EXECUTE_API_DOC, GUIDE_INDEX, type ModelOption } from '@archa/protocol';
+import { agyToolList, CORE_GUIDES, DESIGNER_PROMPT, EXECUTE_API_DOC, GUIDE_INDEX, TOOL_NAMES, toolSummary, type ModelOption } from '@archa/protocol';
 import { agyErrorHint } from './agy-tool-schemas';
 
 /*
@@ -76,7 +76,9 @@ export type Adapter = {
   models: (bin: string | null, env: Record<string, string>) => Promise<{ models: ModelOption[]; source: string }>;
 };
 
-export const MCP_TOOLS = ['get_state', 'execute', 'place_svg', 'inspect', 'screenshot', 'export_svg', 'say', 'browser', 'place_image', 'done', 'read_guide', 'read_skill', 'delegate', 'wait_workers', 'tell_worker', 'reference', 'compare', 'remember', 'forget', 'recall', 'list_documents', 'open_document', 'new_document', 'save_document'];
+/** The archadev tools a run may call: every tool in the registry (packages/protocol/src/tools.ts). */
+export const MCP_TOOLS: readonly string[] = TOOL_NAMES;
+export { toolSummary };
 /** Windows caps a command line near 32 KiB. */
 const MAX_ARG_PROMPT = 28_000;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/[\]@+-]{0,127}$/;
@@ -350,40 +352,6 @@ function callResult(callId: string, text: string, failed: boolean): AgentEvent {
   return { kind: 'result', callId, text: clipDetail(clean || '(no text output)'), failed };
 }
 
-/** The line of a snippet worth showing in its summary: its leading comment, else its first statement. */
-function codeHint(code: string): string {
-  const lines = code.split('\n').map((l) => l.trim()).filter(Boolean);
-  const comment = lines.find((l) => l.startsWith('//'));
-  const hint = (comment ? comment.replace(/^\/\/+\s*/, '') : lines[0] ?? '').replace(/\s+/g, ' ');
-  return hint.length > 60 ? `${hint.slice(0, 57)}…` : hint;
-}
-
-export function toolSummary(name: string, input: unknown): string {
-  const short = name.replace(/^mcp__archadev__/, '');
-  const i = (input ?? {}) as Record<string, unknown>;
-  if (short === 'execute' && typeof i.code === 'string') {
-    const n = i.code.split('\n').length;
-    const hint = codeHint(i.code);
-    return `execute · ${hint ? `${hint} · ` : ''}${n} ${n === 1 ? 'line' : 'lines'}`;
-  }
-  if (short === 'execute' && i.editId) return `execute · patch ${String(i.editId)}`;
-  if (short === 'get_state') return 'get_state · read the canvas';
-  if (short === 'inspect') return `inspect · ${i.node ? String(i.node) : 'whole page'}${i.depth !== undefined ? ` · depth ${String(i.depth)}` : ''}`;
-  if (short === 'read_guide') return `read_guide · ${String(i.topic ?? '')}`;
-  if (short === 'read_skill') return `read_skill · ${String(i.name ?? '')}${i.file ? ` · ${String(i.file)}` : ''}`;
-  if (short === 'place_svg') return `place_svg · ${String(i.name ?? (typeof i.svg === 'string' ? `${i.svg.length} chars` : ''))}`;
-  if (short === 'export_svg') return `export_svg · ${String(i.node ?? '')}`;
-  if (short === 'screenshot') return `screenshot · ${String(i.node ?? '')}`;
-  if (short === 'say') return String(i.text ?? '');
-  if (short === 'done') return `done${i.summary ? ` · ${String(i.summary)}` : ''}`;
-  if (short === 'delegate' && Array.isArray(i.tasks)) return `delegate · ${(i.tasks as Array<{ title?: unknown }>).map((t) => String(t.title ?? '')).join(' · ')}`;
-  if (short === 'wait_workers') return 'waiting for the team';
-  if (short === 'tell_worker') return `tell ${String(i.worker ?? '')} · ${String(i.message ?? '').slice(0, 80)}`;
-  if (short === 'browser') return `browser · ${String(i.action ?? '')}${i.query ? ` "${String(i.query)}"` : i.url ? ` ${String(i.url).slice(0, 120)}` : i.ref ? ` ${String(i.ref)}` : ''}`;
-  if (short === 'place_image') return `place_image · ${String(i.name ?? (i.url ? String(i.url).slice(0, 120) : i.ref ?? i.selector ?? ''))}`;
-  return short;
-}
-
 /* -------------------------------- adapters -------------------------------- */
 
 const toml = (v: unknown) => JSON.stringify(v); // JSON strings/arrays are valid TOML values
@@ -392,7 +360,7 @@ const toml = (v: unknown) => JSON.stringify(v); // JSON strings/arrays are valid
  * agy does not put MCP tool descriptions in the model's context: it reads them from schema files,
  * which costs minutes of shell/file probing per run. Hand it the tools and the execute API up front.
  */
-const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): get_state {}, execute { code } or { editId, edits }, place_svg { svg, parent?, x?, y?, width?, height?, name?, mode? }, inspect { node?, depth? }, screenshot { node }, export_svg { node }, say { text }, read_guide { topic }, read_skill { name, file? } (a skill's SKILL.md and file list, or one of its files — the only way to read skills), browser { action, … } (the built-in web browser: search, open, screenshot, images, download), place_image { url | ref, parent? | fillOf?, x?, y?, width?, height?, fit? } (a real photo or logo onto the canvas; fillOf puts it into a frame's fills as a background), done { summary? } (call once when finished — it puts your canvas cursor away). reference { path, page? } (read a PDF/image mockup into numbers), compare { node, reference, page? } (visual diff against it), remember { text, scope: "global"|"document", replaces? } (keep a preference, correction or lesson for later chats), forget { id }, recall {}, list_documents {}, open_document { path }, new_document { name? }, save_document { path? }. Every document tool also takes doc (id, .archa path or name). The canvas state is at the end of this message, so start designing right away; use browser and place_image for web research and pictures — never a shell, Python or file tools.
+export const AGY_TOOLS_NOTE = `Tools: use ONLY the "archadev" MCP server (call_mcp_tool, ServerName "archadev"): ${agyToolList()}. Every document tool also takes doc (id, .archa path or name). The canvas state is at the end of this message, so start designing right away; use browser and place_image for web research and pictures — never a shell, Python or file tools.
 
 execute tool documentation:
 ${EXECUTE_API_DOC}`;

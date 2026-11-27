@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -9,7 +8,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { DocumentError } from '@archa/core';
 import { newId } from '@archa/schema';
-import type { McpImportCandidate, McpImportSource, McpServer, McpTestResult, McpTransport, SecretEntry } from '@archa/protocol';
+import { MCP_RESERVED, RPC, type McpImportCandidate, type McpImportSource, type McpServer, type McpTestResult, type McpTransport, type SecretEntry } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import { parse } from './accounts';
 
@@ -21,7 +20,7 @@ import { parse } from './accounts';
 
 const file = () => join(archaHome(), 'mcp.json');
 const TEST_TIMEOUT = 20_000;
-export const RESERVED = 'archadev';
+export const RESERVED = MCP_RESERVED;
 
 type Stored = {
   id: string; name: string; transport: McpTransport; command: string; args: string[]; url: string;
@@ -29,21 +28,11 @@ type Stored = {
 };
 type StoreFile = { version: 1; servers: Stored[] };
 
-const secrets = z.array(z.object({ key: z.string().trim().min(1).max(200).regex(/^[^\s=]+$/, 'Keys cannot contain spaces or "="'), value: z.string().max(8192).nullable() })).max(64);
+/** Param schemas live in the RPC registry (packages/protocol/src/rpc.ts). */
 export const mcpParams = {
-  save: z.object({
-    id: z.string().min(1).max(64).optional(),
-    name: z.string().trim().min(1).max(48).regex(/^[A-Za-z0-9_-]+$/, 'Use letters, digits, "-" and "_"').refine((n) => n.toLowerCase() !== RESERVED, `"${RESERVED}" is ArchaDev's own server`),
-    transport: z.enum(['stdio', 'http', 'sse']),
-    command: z.string().trim().max(1024).optional(),
-    args: z.array(z.string().max(4096)).max(64).optional(),
-    url: z.string().trim().max(2048).optional(),
-    env: secrets.optional(),
-    headers: secrets.optional(),
-    enabled: z.boolean().optional(),
-  }),
-  byId: z.object({ id: z.string().min(1).max(64) }),
-  import: z.object({ source: z.enum(['claude', 'antigravity', 'cursor']), names: z.array(z.string().min(1).max(200)).min(1).max(100) }),
+  save: RPC['mcp.save'].params,
+  byId: RPC['mcp.test'].params,
+  import: RPC['mcp.import'].params,
 };
 
 export class McpServerManager {

@@ -1,8 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { z } from 'zod';
 import { DocumentError } from '@archa/core';
-import type { MemoryEntry, MemoryScope } from '@archa/protocol';
+import { RPC, type MemoryEntry, type MemoryScope } from '@archa/protocol';
 import { archaHome } from '@archa/protocol/node';
 import { parse } from './accounts';
 import { parseFrontmatter } from './skills';
@@ -24,16 +23,11 @@ export const documentMemoryDir = (dataDir: string) => join(dataDir, 'memory');
 const PROMPT_ENTRIES = 40;
 const PROMPT_CHARS = 6000;
 
+/** Param schemas live in the RPC registry (packages/protocol/src/rpc.ts). */
 export const memoryParams = {
-  list: z.object({ docId: z.string().optional() }),
-  remember: z.object({
-    docId: z.string().optional(),
-    scope: z.enum(['global', 'document']),
-    text: z.string().trim().min(1).max(4000),
-    name: z.string().trim().max(80).optional(),
-    replaces: z.string().max(200).optional(),
-  }),
-  forget: z.object({ docId: z.string().optional(), id: z.string().min(1).max(200) }),
+  list: RPC['memory.list'].params,
+  remember: RPC['memory.remember'].params,
+  forget: RPC['memory.forget'].params,
 };
 
 const slugOf = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'note';

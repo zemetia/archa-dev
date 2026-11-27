@@ -1,3 +1,6 @@
+import type { z } from 'zod';
+import type { mcpSaveParams } from './rpc';
+
 /* ----------------------------------------------------------------------------
  * Settings → Skills and Settings → MCP servers (blueprint AGENT_BRIDGE/05).
  * Secrets (env values, headers) never cross the protocol — only their keys.
@@ -58,17 +61,8 @@ export type McpTestResult = { ok: boolean; at: number; tools: Array<{ name: stri
 /** A key/value pair from the edit form. `value: null` keeps the stored value. */
 export type SecretEntry = { key: string; value: string | null };
 
-export type McpServerInput = {
-  id?: string;
-  name: string;
-  transport: McpTransport;
-  command?: string;
-  args?: string[];
-  url?: string;
-  env?: SecretEntry[];
-  headers?: SecretEntry[];
-  enabled?: boolean;
-};
+/** The edit form's server (env / headers as SecretEntry). Derived from the `mcp.save` schema in ./rpc. */
+export type McpServerInput = z.input<typeof mcpSaveParams>;
 
 export type McpImportSource = 'claude' | 'antigravity' | 'cursor';
 export type McpImportCandidate = { source: McpImportSource; name: string; transport: McpTransport; detail: string; exists: boolean };
