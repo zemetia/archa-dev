@@ -14,7 +14,7 @@ export const agentStateSchema = z.object({ docId: docRef });
 export const agentScreenshotSchema = z.object({ docId: docRef, node: nodeRef, scale: z.number().positive().max(16).optional(), slices: z.boolean().optional() });
 export const agentExportSvgSchema = z.object({ docId: docRef, node: nodeRef });
 export const outlineSchema = z.object({ docId: docRef, node: nodeRef.optional(), depth: z.number().int().min(0).max(12).optional() });
-export const agentSaySchema = z.object({ docId: docRef, text: z.string().max(10_000), nodeId: nodeRef.optional() });
+export const agentSaySchema = z.object({ docId: docRef, text: z.string().max(10_000), nodeId: z.string().max(500).optional() });
 export const agentDoneSchema = z.object({ docId: docRef, summary: z.string().max(10_000).optional() });
 
 export function agentToolRoutes(ctx: HostContext, skills: SkillManager, executor: (conn: Connection) => AgentExecutor): Routes {

@@ -454,4 +454,12 @@ describe('host behaviour parity scenario', () => {
     // Logged for the parity diff (PARITY_OUT); the old and new hosts differ on some of these on purpose.
     for (const s of result.steps.filter((x) => x.label.startsWith('edge:'))) expect(s.reply, s.label).toHaveProperty('ok');
   });
+
+  it('accepts what main accepted: save without doc, say with nodeId "", long names and long doc paths', () => {
+    const reply = (label: string) => result.steps.find((x) => x.label === label)?.reply as { ok: boolean; error?: { code: string } } | undefined;
+    for (const label of ['edge: MCP save_document without doc (docId "")', 'edge: say with nodeId ""', 'edge: doc.rename 250 chars', 'edge: doc.new 250 chars']) {
+      expect(reply(label)?.ok, label).toBe(true);
+    }
+    expect(reply('edge: doc.save docId long path')?.error?.code, 'long path reaches session lookup').not.toBe('VALIDATION');
+  });
 });

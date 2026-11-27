@@ -11,13 +11,16 @@ import { validated, type Routes } from '../router';
 
 /* Documents: open, save, close and edit as ops (blueprint ARCHITECTURE/04, FILE_FORMATS/01). */
 
-const docId = z.string().min(1).max(200);
+/** An id, `.archa` path or name (`ctx.session` resolves it). */
+const docId = z.string().min(1).max(4096);
+const docName = z.string().max(10_000);
 const filePath = z.string().min(1).max(4096);
-export const docNewSchema = z.object({ name: z.string().max(200).optional() });
+export const docNewSchema = z.object({ name: docName.optional() });
 export const docRefSchema = z.object({ docId });
 export const docOpenSchema = z.object({ path: filePath });
-export const docSaveSchema = z.object({ docId, path: filePath.optional() });
-export const docRenameSchema = z.object({ docId, name: z.string().max(200) });
+/** Empty `docId` = the active document (MCP `save_document` without `doc`). */
+export const docSaveSchema = z.object({ docId: z.string().max(4096), path: filePath.optional() });
+export const docRenameSchema = z.object({ docId, name: docName });
 export const docApplySchema = z.object({ docId, baseRevision: z.number().int().min(0), ops: z.array(z.unknown()), label: z.string().max(10_000) });
 export const selectionSetSchema = z.object({ docId, ids: z.array(z.string().min(1).max(200)).max(100_000) });
 
