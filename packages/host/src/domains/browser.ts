@@ -1,4 +1,3 @@
-import { basename } from 'node:path';
 import { DocumentError } from '@archa/core';
 import type { BrowserCommand, BrowserReply } from '@archa/protocol';
 import type { AgentExecutor } from '@archa/mcp';
@@ -10,6 +9,9 @@ import type { Routes } from '../router';
  * bridge (blueprint BROWSER, "Process path"). A headless host has none.
  */
 export type BrowserBridge = (cmd: BrowserCommand, agent: string) => Promise<BrowserReply>;
+
+/** Last path segment for `\` and `/` alike: a Windows download path reaching a POSIX host still names the layer. */
+const fileName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
 const noBrowser: BrowserBridge = () => Promise.reject(new Error('The browser needs the ArchaDev app (no main process in headless mode).'));
 
@@ -27,7 +29,7 @@ export function browserRoutes(ctx: HostContext, executor: (conn: Connection) => 
       const s = ctx.session(docId);
       const { image } = await bridge({ action: 'download', url, ref, selector, capture, path }, conn.author.name ?? conn.author.id);
       if (!image?.embed) throw new DocumentError('VALIDATION', `ArchaDev cannot show ${image?.mime ?? 'that file'} on the canvas. Saved to ${image?.path ?? '?'} — use capture: true with the element on the browser page for a PNG.`);
-      const r = await executor(conn).placeImage(s, image.embed, { ...place, name: place.name ?? basename(image.path).replace(/(-\d+)?\.[^.]+$/, ''), naturalWidth: image.width || undefined, naturalHeight: image.height || undefined });
+      const r = await executor(conn).placeImage(s, image.embed, { ...place, name: place.name ?? fileName(image.path).replace(/(-\d+)?\.[^.]+$/, ''), naturalWidth: image.width || undefined, naturalHeight: image.height || undefined });
       if (r.ok) r.output.push(`Saved file: ${image.path} (${image.mime}, from ${image.source.slice(0, 200)})`);
       return r;
     },
