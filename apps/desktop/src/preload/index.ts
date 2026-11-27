@@ -23,7 +23,11 @@ contextBridge.exposeInMainWorld('archa', {
   },
   pickFolder: (title: string): Promise<string | null> => ipcRenderer.invoke('dialog:folder', title),
   openFolder: (path: string): Promise<string> => ipcRenderer.invoke('shell:open-path', path),
-  onOpenIntent: (cb: (intent: { kind: string; path?: string }) => void) => {
+  /** The folder this window works in (project), or null for the public window. */
+  windowContext: (): Promise<{ project: string | null }> => ipcRenderer.invoke('window:context'),
+  /** Opens a folder as a project in its own window (asks for one without a path); resolves to its root. */
+  openProject: (path?: string): Promise<string | null> => ipcRenderer.invoke('window:open-project', path),
+  onOpenIntent:(cb: (intent: { kind: string; path?: string }) => void) => {
     ipcRenderer.on('open-intent', (_e, intent) => cb(intent));
   },
   // In-app browser (blueprint BROWSER): the pane reports where pages go; main pushes tab state.

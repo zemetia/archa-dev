@@ -19,6 +19,7 @@ import { randomPersona } from './personas';
 import { MemoryStore, memoryParams } from './memory';
 import { assetDirFor, dataDirFor, externalizeData, externalizeOps, inlineData, isRuntimeDataDir, migrateDataDir, moveDataDir } from './assets';
 import { compareReference, compareSchema, readReference, referenceSchema } from './reference-tools';
+import { backupFile, contextKey, ensureDesignDir, freeDesignPath, projectFiles, projectRoot, readOpenFiles, readSettings, settingsPatchSchema, writeOpenFiles, writeSettings, type OpenEntry } from './projects';
 import { canvasFit, fitBudget, INLINE_BUDGET, INLINE_MAX_SIDE, MAX_SLICES, saveShot, SLICE_HEIGHT, SLICE_MIN_HEIGHT, SLICE_RATIO, sweepShots } from './shots';
 
 const chatSendSchema = z.object({
@@ -90,6 +91,18 @@ export class Workspace {
   private executors = new Map<string, AgentExecutor>();
   private sentHashes = new Map<string, string>();
   private lastDocId: string | null = null;
+  /** Window context of each document: a project folder, or null (public). */
+  private projects = new Map<string, string | null>();
+  /** Saved open-file lists; contexts restored this run are rewritten from the live sessions. */
+  private openFiles = readOpenFiles();
+  private restored = new Set<string>();
+  private persistTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Revision last written to a backup, so an unchanged document is not written again. */
+  private backedUp = new Map<string, number>();
+  /** One save at a time per document (autosave, agents and the person may ask together). */
+  private saving = new Map<string, Promise<unknown>>();
+  settings = readSettings();
+  private autosaveTimer: ReturnType<typeof setInterval> | undefined;
   readonly accounts = new AccountManager((accountId) => this.broadcast('accounts.changed', accountId ? { accountId } : {}));
   readonly skills = new SkillManager(() => this.broadcast('skills.changed', {}));
   /** Agent memory: global plus the document's own (blueprint AGENT_BRIDGE/07). */
@@ -99,9 +112,11 @@ export class Workspace {
   readonly library = new LibraryStore();
   readonly icons = new IconStore();
 
-  constructor() {
-    this.newDoc('Untitled');
+  /** blank: start with one untitled public document (tests, CLI-only use); the app restores per window instead. */
+  constructor({ blank = true }: { blank?: boolean } = {}) {
+    if (blank) this.newDoc('Untitled');
     sweepShots();
+    this.scheduleAutosave();
   }
 
   /* ------------------------------ connections ------------------------------ */
@@ -137,6 +152,10 @@ export class Workspace {
 
   broadcast<E extends EventName>(event: E, data: CoreEvents[E]) {
     for (const c of this.connections.values()) c.channel.send({ t: 'evt', event, data });
+    if (event === 'workspace.changed') this.schedulePersist();
+    // Auto-save when an agent finishes its work (done() or the end of a chat turn).
+    const ended = event === 'agent.done' || (event === 'chat.run' && (data as CoreEvents['chat.run']).status !== 'running');
+    if (ended && this.settings.autosave.enabled) void this.autosave((data as { docId: string }).docId);
   }
 
   private async onMessage(conn: Connection, msg: Message) {
@@ -155,7 +174,21 @@ export class Workspace {
   /* -------------------------------- documents ------------------------------- */
 
   summaries(): DocSummary[] {
-    return [...this.sessions.values()].map((s) => ({ id: s.id, name: s.doc.meta.name, filePath: s.filePath, dataDir: this.dataDir(s), assetDir: this.assetDir(s), dirty: s.dirty, revision: s.revision }));
+    return [...this.sessions.values()].map((s) => ({ id: s.id, name: s.doc.meta.name, filePath: s.filePath, dataDir: this.dataDir(s), assetDir: this.assetDir(s), dirty: s.dirty, revision: s.revision, project: this.projectOf(s.id) }));
+  }
+
+  projectOf(docId: string | null): string | null {
+    return docId ? this.projects.get(docId) ?? null : null;
+  }
+
+  private inContext(project: string | null): DocumentSession[] {
+    const key = contextKey(project);
+    return [...this.sessions.values()].filter((s) => contextKey(this.projectOf(s.id)) === key);
+  }
+
+  /** A new untitled document nobody has touched: replaced when a restore brings real files. */
+  private pristine(s: DocumentSession) {
+    return !s.filePath && !s.dirty && s.revision === 0;
   }
 
   /** The document's `<name>-data/` folder (assets, chats, skills, memory); a runtime folder while it has no file. */
@@ -175,18 +208,205 @@ export class Workspace {
     return assetDirFor(session.filePath, session.id);
   }
 
-  private register(session: DocumentSession) {
+  private register(session: DocumentSession, project: string | null = null) {
     // No base64 in documents: images arriving as data: URLs are written to the asset folder first.
     session.transformOps = (ops) => externalizeOps(this.assetDir(session), ops);
     this.sessions.set(session.id, session);
+    this.projects.set(session.id, project ? projectRoot(project) : null);
     this.lastDocId = session.id;
     session.onApplied((a) => this.broadcast('doc.applied', a));
     this.broadcast('workspace.changed', this.summaries());
     return session.id;
   }
 
-  newDoc(name: string) {
-    return this.register(new DocumentSession(ArchaDocument.create(name)));
+  newDoc(name: string, project: string | null = null) {
+    return this.register(new DocumentSession(ArchaDocument.create(name)), project);
+  }
+
+  private async openFile(path: string, project: string | null): Promise<string> {
+    const data = decodeArcha(new Uint8Array(await readFile(path)));
+    if (this.sessions.has(data.meta.id)) data.meta.id = newId();
+    // A pre-1.7.3 `<name>-asset/` folder moves into `<name>-data/`.
+    migrateDataDir(path, data.meta.id);
+    // Older files carry images as base64: write them out to `<name>-data/assets/`; the next save drops the base64.
+    const moved = externalizeData(assetDirFor(path, data.meta.id), data);
+    const s = new DocumentSession(data, path);
+    s.dirty = moved > 0;
+    return this.register(s, project);
+  }
+
+  /** Where a save without a path goes: the file it came from, else a new file in its project's `.design/`. */
+  private saveTarget(s: DocumentSession): string | null {
+    if (s.filePath) return s.filePath;
+    const project = this.projectOf(s.id);
+    if (!project) return null;
+    const open = new Set([...this.sessions.values()].map((x) => x.filePath && normalize(x.filePath).toLowerCase()));
+    return freeDesignPath(project, s.doc.meta.name, (p) => open.has(normalize(p).toLowerCase()));
+  }
+
+  /** Saves to `path`, or to `saveTarget`. One write at a time per document. */
+  async saveDoc(s: DocumentSession, path?: string): Promise<string> {
+    const prev = this.saving.get(s.id) ?? Promise.resolve();
+    const run = prev.catch(() => {}).then(() => this.writeDoc(s, path));
+    this.saving.set(s.id, run);
+    try { return await run; } finally { if (this.saving.get(s.id) === run) this.saving.delete(s.id); }
+  }
+
+  private async writeDoc(s: DocumentSession, path?: string): Promise<string> {
+    if (path && !isAbsolute(path)) throw new DocumentError('VALIDATION', `Save path must be absolute (got "${path}")`);
+    const target = path ? (/\.archa$/i.test(path) ? path : `${path}.archa`) : this.saveTarget(s);
+    if (!target) throw new DocumentError('VALIDATION', 'No file path yet — choose where to save');
+    // The data folder travels with the file: a first save or Save As copies it to `<new name>-data/`.
+    migrateDataDir(target, s.id);
+    const fromDir = this.dataDir(s);
+    const toDir = dataDirFor(target, s.id);
+    if (fromDir !== toDir) moveDataDir(fromDir, toDir, isRuntimeDataDir(fromDir));
+    const revision = s.revision;
+    const tmp = `${target}.tmp`;
+    await writeFile(tmp, encodeArcha(s.doc.toData()));
+    await rename(tmp, target);
+    s.filePath = target;
+    // Edits that landed while the file was written keep it dirty for the next save.
+    s.dirty = s.revision !== revision;
+    if (path && s.doc.meta.name === 'Untitled') s.doc.meta.name = basename(target).replace(/\.archa$/i, '');
+    this.backedUp.delete(s.id);
+    this.broadcast('workspace.changed', this.summaries());
+    return target;
+  }
+
+  /* ----------------------- restore, backups, autosave ----------------------- */
+
+  /** Unsaved content kept in ARCHA_HOME/runtime/backups until the document is saved or closed. */
+  private async backup(s: DocumentSession) {
+    if (this.backedUp.get(s.id) === s.revision) return;
+    const file = backupFile(s.id);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(`${file}.tmp`, encodeArcha(s.doc.toData()));
+    await rename(`${file}.tmp`, file);
+    this.backedUp.set(s.id, s.revision);
+  }
+
+  /** Documents with unsaved changes go to their file (or a new one in their project), else to a backup. */
+  async autosave(docId?: string) {
+    const list = docId ? [this.sessions.get(docId)].filter((s): s is DocumentSession => !!s) : [...this.sessions.values()];
+    for (const s of list) {
+      if (!s.dirty) continue;
+      try {
+        if (s.filePath || this.projectOf(s.id)) await this.saveDoc(s);
+        else await this.backup(s);
+      } catch (e) {
+        console.error(`[core] autosave of "${s.doc.meta.name}" failed: ${(e as Error).message}`);
+      }
+    }
+    this.schedulePersist();
+  }
+
+  private scheduleAutosave() {
+    clearInterval(this.autosaveTimer);
+    this.autosaveTimer = undefined;
+    const { enabled, seconds } = this.settings.autosave;
+    if (enabled) this.autosaveTimer = setInterval(() => void this.autosave(), seconds * 1000);
+    this.autosaveTimer?.unref?.();
+  }
+
+  /** On quit nothing unsaved is lost: with auto-save on it goes to files, otherwise (and public untitled work) to backups. */
+  async flush() {
+    clearInterval(this.autosaveTimer);
+    for (const s of this.sessions.values()) {
+      if (!s.dirty) continue;
+      try {
+        if (this.settings.autosave.enabled && (s.filePath || this.projectOf(s.id))) await this.saveDoc(s);
+        else await this.backup(s);
+      } catch (e) {
+        console.error(`[core] could not keep "${s.doc.meta.name}": ${(e as Error).message}`);
+        try { await this.backup(s); } catch { /* nothing more to try */ }
+      }
+    }
+    this.persist();
+  }
+
+  private schedulePersist() {
+    clearTimeout(this.persistTimer);
+    this.persistTimer = setTimeout(() => this.persist(), 250);
+    this.persistTimer.unref?.();
+  }
+
+  /** Rewrites the open-file list of every context that has documents or was restored this run. */
+  persist() {
+    clearTimeout(this.persistTimer);
+    const keys = new Set([...this.restored, ...[...this.sessions.keys()].map((id) => contextKey(this.projectOf(id)))]);
+    for (const key of keys) {
+      const all = [...this.sessions.values()].filter((s) => contextKey(this.projectOf(s.id)) === key);
+      const docs = all.filter((s) => (s.filePath || (s.dirty && this.backedUp.has(s.id))) && !this.pristine(s));
+      const entries: OpenEntry[] = docs.map((s) => ({
+        ...(s.filePath ? { path: s.filePath } : {}),
+        ...(s.dirty && this.backedUp.has(s.id) ? { backup: s.id } : {}),
+        name: s.doc.meta.name,
+      }));
+      const active = docs.findIndex((s) => s.id === this.lastDocId);
+      const project = all.length ? this.projectOf(all[0]!.id) : this.openFiles.contexts[key]?.project ?? null;
+      this.openFiles.contexts[key] = { project, docs: entries, ...(active >= 0 ? { active } : {}) };
+    }
+    try { writeOpenFiles(this.openFiles); } catch (e) { console.error(`[core] could not write open files: ${(e as Error).message}`); }
+  }
+
+  /** A window opens: reopen what its context had open (backups included). A project gets its `.design/` folder. */
+  async restore(project: string | null): Promise<{ active: string | null }> {
+    const root = project ? projectRoot(project) : null;
+    if (root) ensureDesignDir(root);
+    const key = contextKey(root);
+    const live = this.inContext(root);
+    if (!this.restored.has(key) && live.every((s) => this.pristine(s))) {
+      const saved = this.openFiles.contexts[key];
+      const opened: string[] = [];
+      for (const e of saved?.docs ?? []) {
+        try {
+          const id = await this.reopen(e, root);
+          if (id) opened.push(id);
+        } catch (err) {
+          console.error(`[core] could not reopen ${e.path ?? e.name}: ${(err as Error).message}`);
+        }
+      }
+      // A project opened for the first time shows its newest design.
+      const newest = root && !saved ? projectFiles(root)[0] : undefined;
+      if (newest) opened.push(await this.openFile(newest.path, root));
+      if (opened.length) for (const s of live) { this.sessions.delete(s.id); this.projects.delete(s.id); }
+      const active = opened[saved?.active ?? opened.length - 1] ?? opened.at(-1);
+      if (active) this.lastDocId = active;
+    }
+    this.restored.add(key);
+    if (!this.inContext(root).length) this.newDoc('Untitled', root);
+    const docs = this.inContext(root);
+    const active = docs.find((s) => s.id === this.lastDocId) ?? docs.at(-1)!;
+    this.lastDocId = active.id;
+    this.broadcast('workspace.changed', this.summaries());
+    return { active: active.id };
+  }
+
+  private async reopen(e: OpenEntry, project: string | null): Promise<string | null> {
+    const key = (p: string) => normalize(p).toLowerCase();
+    const already = e.path ? [...this.sessions.values()].find((s) => s.filePath && key(s.filePath) === key(e.path!)) : undefined;
+    if (already) { this.projects.set(already.id, project); return already.id; }
+    if (e.backup && existsSync(backupFile(e.backup))) {
+      const data = decodeArcha(new Uint8Array(await readFile(backupFile(e.backup))));
+      if (this.sessions.has(data.meta.id)) data.meta.id = newId();
+      const s = new DocumentSession(data, e.path ?? null);
+      s.dirty = true;
+      const id = this.register(s, project);
+      if (id === e.backup) this.backedUp.set(id, s.revision);
+      return id;
+    }
+    if (e.path && existsSync(e.path)) return this.openFile(e.path, project);
+    return null;
+  }
+
+  applySettings(patch: unknown) {
+    const parsed = settingsPatchSchema.safeParse(patch);
+    if (!parsed.success) throw new DocumentError('VALIDATION', `Invalid settings: ${parsed.error.issues[0]?.path.join('.')} ${parsed.error.issues[0]?.message}`);
+    this.settings = { ...this.settings, ...parsed.data };
+    writeSettings(this.settings);
+    this.scheduleAutosave();
+    return this.settings;
   }
 
   /**
@@ -296,44 +516,43 @@ export class Workspace {
 
   readonly handlers: { [M in MethodName]: Handler<M> } = {
     'workspace.list': () => this.summaries(),
-    'doc.new': ({ name }) => ({ docId: this.newDoc(name ?? 'Untitled') }),
-    'doc.open': async ({ path }) => {
-      const existing = [...this.sessions.values()].find((s) => s.filePath === path);
-      if (existing) return { docId: existing.id };
-      const data = decodeArcha(new Uint8Array(await readFile(path)));
-      if (this.sessions.has(data.meta.id)) data.meta.id = newId();
-      // A pre-1.7.3 `<name>-asset/` folder moves into `<name>-data/`.
-      migrateDataDir(path, data.meta.id);
-      // Older files carry images as base64: write them out to `<name>-data/assets/`; the next save drops the base64.
-      const moved = externalizeData(assetDirFor(path, data.meta.id), data);
-      const s = new DocumentSession(data, path);
-      s.dirty = moved > 0;
-      return { docId: this.register(s) };
+    'workspace.restore': ({ project }) => this.restore(typeof project === 'string' && isAbsolute(project) ? project : null),
+    'project.files': ({ project }) => {
+      if (typeof project !== 'string' || !isAbsolute(project)) throw new DocumentError('VALIDATION', 'project must be an absolute folder path');
+      const key = (p: string) => normalize(p).toLowerCase();
+      return projectFiles(projectRoot(project)).map((f) => ({ ...f, docId: [...this.sessions.values()].find((s) => s.filePath && key(s.filePath) === key(f.path))?.id ?? null }));
     },
-    'doc.save': async ({ docId, path }) => {
-      const s = this.session(docId);
-      if (path && !isAbsolute(path)) throw new DocumentError('VALIDATION', `Save path must be absolute (got "${path}")`);
-      const target = path ? (/\.archa$/i.test(path) ? path : `${path}.archa`) : s.filePath;
-      if (!target) throw new DocumentError('VALIDATION', 'No file path yet — choose where to save');
-      // The data folder travels with the file: a first save or Save As copies it to `<new name>-data/`.
-      migrateDataDir(target, s.id);
-      const fromDir = this.dataDir(s);
-      const toDir = dataDirFor(target, s.id);
-      if (fromDir !== toDir) moveDataDir(fromDir, toDir, isRuntimeDataDir(fromDir));
-      const tmp = `${target}.tmp`;
-      await writeFile(tmp, encodeArcha(s.doc.toData()));
-      await rename(tmp, target);
-      s.filePath = target;
-      s.dirty = false;
-      if (path && s.doc.meta.name === 'Untitled') s.doc.meta.name = basename(target).replace(/\.archa$/i, '');
-      this.broadcast('workspace.changed', this.summaries());
-      return { path: target };
+    'doc.new': ({ name, project }) => {
+      if (project && (typeof project !== 'string' || !isAbsolute(project))) throw new DocumentError('VALIDATION', 'project must be an absolute folder path');
+      return { docId: this.newDoc(name ?? 'Untitled', project === undefined ? this.projectOf(this.lastDocId) : project || null) };
     },
+    'doc.open': async ({ path, project }) => {
+      const key = (p: string) => normalize(resolvePath(p)).toLowerCase();
+      const existing = [...this.sessions.values()].find((s) => s.filePath && key(s.filePath) === key(path));
+      if (project && (typeof project !== 'string' || !isAbsolute(project))) throw new DocumentError('VALIDATION', 'project must be an absolute folder path');
+      const context = project === undefined ? this.projectOf(existing?.id ?? this.lastDocId) : project ? projectRoot(project) : null;
+      if (existing) {
+        // Opened from another window: the document moves to that window, which keeps one open.
+        const left = this.projectOf(existing.id);
+        if (contextKey(left) !== contextKey(context)) {
+          this.projects.set(existing.id, context);
+          if (!this.inContext(left).length) this.newDoc('Untitled', left);
+          this.broadcast('workspace.changed', this.summaries());
+        }
+        return { docId: existing.id };
+      }
+      return { docId: await this.openFile(path, context) };
+    },
+    'doc.save': async ({ docId, path }) => ({ path: await this.saveDoc(this.session(docId), path) }),
     'doc.close': ({ docId }) => {
+      const project = this.projectOf(docId);
       this.sessions.delete(docId);
+      this.projects.delete(docId);
+      this.backedUp.delete(docId);
       this.chat.store.forget(docId);
-      if (!this.sessions.size) this.newDoc('Untitled');
-      this.lastDocId = [...this.sessions.keys()].at(-1) ?? null;
+      // Every window keeps one document open.
+      if (!this.inContext(project).length) this.newDoc('Untitled', project);
+      if (!this.lastDocId || !this.sessions.has(this.lastDocId)) this.lastDocId = this.inContext(project).at(-1)?.id ?? null;
       this.broadcast('workspace.changed', this.summaries());
     },
     'doc.rename': ({ docId, name }) => {
@@ -433,6 +652,8 @@ export class Workspace {
       if (r.ok) r.output.push(`Saved file: ${image.path} (${image.mime}, from ${image.source.slice(0, 200)})`);
       return r;
     },
+    'settings.get': () => this.settings,
+    'settings.set': (patch) => this.applySettings(patch),
     'app.info': () => {
       const m = mcpCommand();
       return {

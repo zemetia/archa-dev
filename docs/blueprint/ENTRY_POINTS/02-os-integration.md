@@ -10,15 +10,15 @@
 
 | Registry key (`HKCU\Software\Classes\…`) | Value |
 |---|---|
-| `Directory\shell\ArchaDev` | `(Default)` = "Open with ArchaDev", `Icon` = exe |
+| `Directory\shell\ArchaDev` | `(Default)` = "Open this folder with Archa", `Icon` = exe (built) |
 | `Directory\shell\ArchaDev\command` | `"<install>\ArchaDev.exe" --project "%1"` |
-| `Directory\Background\shell\ArchaDev` | "Open this folder with ArchaDev" |
+| `Directory\Background\shell\ArchaDev`, `Drive\shell\ArchaDev` | "Open this folder with Archa" (built; `%V` / `%1`) |
 | `Directory\Background\shell\ArchaDev\command` | `"<install>\ArchaDev.exe" --project "%V"` |
 | `.archa` | `(Default)` = `ArchaDev.Document`, `Content Type` = `application/vnd.archadev.archa+zip` |
 | `ArchaDev.Document\shell\open\command` | `"<install>\ArchaDev.exe" --file "%1"` |
 | `archadev` | `URL Protocol` = "" ; `shell\open\command` = `"<install>\ArchaDev.exe" "%1"` |
 
-- Written by the NSIS installer (`electron-builder` `nsis.include` script) **and** repairable from Settings → Integration (`os-integration/windows.ts` using `reg.exe` with argv, no shell).
+- **Built:** written by `apps/desktop/build/installer.nsh` (`nsis.include`) under `SHCTX` (HKLM for `/allusers`, else HKCU), removed on uninstall but kept across updates (`${isUpdated}`). Planned: repairable from Settings → Integration (`os-integration/windows.ts` using `reg.exe` with argv, no shell).
 - Uninstall removes every key it wrote.
 - Windows 11 shows these under "Show more options". A top-level entry needs an `IExplorerCommand` handler in a sparse MSIX package — phase 12.
 - CLI: installer adds `<install>\bin` (contains `archa.cmd`) to the user `PATH` (opt-out checkbox).
@@ -64,5 +64,5 @@ The `.archa` `thumbnail.png` entry is stored uncompressed so OS preview handlers
 
 **Linked from:** — (only its hub and the indexes)
 
-**Code:** [`apps/desktop/electron-builder.yml`](../../../apps/desktop/electron-builder.yml)
+**Code:** [`apps/desktop/build/installer.nsh`](../../../apps/desktop/build/installer.nsh)
 <!-- backlinks:end -->

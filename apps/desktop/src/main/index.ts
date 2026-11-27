@@ -1,4 +1,4 @@
-import { isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 import { app, BrowserWindow, dialog, ipcMain, MessageChannelMain, shell, utilityProcess, type UtilityProcess } from 'electron';
 import { z } from 'zod';
@@ -15,27 +15,49 @@ registerAssetScheme();
 
 type OpenIntent = { kind: 'file'; path: string } | { kind: 'project'; path: string } | { kind: 'none' };
 
+/**
+ * Chromium moves its own switches (`--allow-file-access-from-files`, …) in front of positional arguments in a
+ * second instance's argv, so `--project <dir>` can arrive as `--project --some-switch <dir>`: a flag without a
+ * value takes the first positional argument instead. The app path (dev) and `.` are not positional.
+ */
 function parseArgv(argv: string[], cwd: string): OpenIntent {
-  const args = argv.slice(app.isPackaged ? 1 : 2);
+  const args = argv.slice(1);
+  const appPath = normalize(app.getAppPath()).toLowerCase();
+  const positional = args.filter((a) => !a.startsWith('-') && a !== '.' && normalize(resolve(cwd, a)).toLowerCase() !== appPath);
   const flag = (name: string) => {
+    const eq = args.find((a) => a.startsWith(`${name}=`));
+    if (eq) return eq.slice(name.length + 1);
     const i = args.indexOf(name);
-    return i >= 0 ? args[i + 1] : undefined;
+    if (i < 0) return undefined;
+    const next = args[i + 1];
+    return next && !next.startsWith('-') ? next : positional[0];
   };
+  const isDir = (p: string) => existsSync(p) && statSync(p).isDirectory();
   const file = flag('--file');
   if (file) return { kind: 'file', path: resolve(cwd, file) };
   const project = flag('--project');
-  if (project) return { kind: 'project', path: resolve(cwd, project) };
-  const bare = args.find((a) => !a.startsWith('-') && a !== '.');
+  if (project && isDir(resolve(cwd, project))) return { kind: 'project', path: projectRoot(resolve(cwd, project)) };
+  const bare = positional[0];
   if (bare && existsSync(resolve(cwd, bare))) {
     const p = resolve(cwd, bare);
-    return statSync(p).isDirectory() ? { kind: 'project', path: p } : { kind: 'file', path: p };
+    return isDir(p) ? { kind: 'project', path: projectRoot(p) } : { kind: 'file', path: p };
   }
   return { kind: 'none' };
 }
 
+/** Explorer may pass `D:\work\site\` or the `.design` folder itself; both mean the project `D:\work\site`. */
+function projectRoot(path: string): string {
+  let p = path.replace(/[\\/]+$/, '') || path;
+  if (/^[A-Za-z]:$/.test(p)) p += '\\';
+  return basename(p).toLowerCase() === '.design' ? dirname(p) : p;
+}
+const sameFolder = (a: string, b: string) => normalize(a).toLowerCase() === normalize(b).toLowerCase();
+
 let core: UtilityProcess | null = null;
 let restarts = 0;
 const windows = new Set<BrowserWindow>();
+/** The folder each window works in (a project), or null for the public window (blueprint ENTRY_POINTS/01). */
+const contexts = new Map<number, string | null>();
 const browser = new BrowserManager();
 
 /* The core host relays agent `browser` calls here; pages live in this process (blueprint BROWSER). */
@@ -115,7 +137,17 @@ function guardWebviews(win: BrowserWindow) {
   });
 }
 
-function createWindow(intent: OpenIntent = { kind: 'none' }) {
+/** A project opens in its own window; an open one is focused. */
+function openProject(path: string) {
+  const root = projectRoot(path);
+  const open = [...windows].find((w) => { const c = contexts.get(w.webContents.id); return c && sameFolder(c, root); });
+  if (!open) return createWindow({ kind: 'none' }, root);
+  if (open.isMinimized()) open.restore();
+  open.focus();
+  return open;
+}
+
+function createWindow(intent: OpenIntent = { kind: 'none' }, project: string | null = null) {
   const win = new BrowserWindow({
     width: 1600,
     height: 980,
@@ -124,7 +156,7 @@ function createWindow(intent: OpenIntent = { kind: 'none' }) {
     backgroundColor: '#0e0e10',
     titleBarStyle: 'hidden',
     titleBarOverlay: process.platform === 'darwin' ? true : { color: '#0e0e10', symbolColor: '#a1a1aa', height: 40 },
-    title: 'ArchaDev',
+    title: project ? `${basename(project) || project} — ArchaDev` : 'ArchaDev',
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -137,9 +169,13 @@ function createWindow(intent: OpenIntent = { kind: 'none' }) {
   });
   guardWebviews(win);
   windows.add(win);
+  const contentsId = win.webContents.id;
+  contexts.set(contentsId, project);
+  win.on('page-title-updated', (e) => e.preventDefault());
   if (windows.size === 1) browser.setHost(win);
   win.on('closed', () => {
     windows.delete(win);
+    contexts.delete(contentsId);
     browser.hostClosed(win);
     const next = [...windows][0];
     if (next) browser.setHost(next);
@@ -177,7 +213,8 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', (_e, argv, cwd) => {
     const intent = parseArgv(argv, cwd);
-    const win = [...windows][0];
+    if (intent.kind === 'project') { openProject(intent.path); return; }
+    const win = BrowserWindow.getFocusedWindow() ?? [...windows][0];
     if (win && intent.kind !== 'none') {
       win.webContents.send('open-intent', intent);
       if (win.isMinimized()) win.restore();
@@ -188,6 +225,18 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     handleAssetProtocol();
     startCore();
+    ipcMain.handle('window:context', (e) => ({ project: contexts.get(e.sender.id) ?? null }));
+    ipcMain.handle('window:open-project', async (e, path: unknown) => {
+      let folder = typeof path === 'string' && isAbsolute(path) ? path : null;
+      if (!folder) {
+        const win = BrowserWindow.fromWebContents(e.sender)!;
+        const r = await dialog.showOpenDialog(win, { title: 'Open folder as project', properties: ['openDirectory', 'createDirectory'] });
+        folder = r.canceled ? null : r.filePaths[0] ?? null;
+      }
+      if (!folder || !existsSync(folder) || !statSync(folder).isDirectory()) return null;
+      openProject(folder);
+      return projectRoot(folder);
+    });
     ipcMain.handle('dialog:open', async (e) => {
       const win = BrowserWindow.fromWebContents(e.sender)!;
       const r = await dialog.showOpenDialog(win, { filters: [{ name: 'ArchaDev', extensions: ['archa'] }], properties: ['openFile'] });
@@ -246,10 +295,24 @@ if (!app.requestSingleInstanceLock()) {
       if (!a.success || (arg !== undefined && typeof arg !== 'string')) return 'Invalid browser action';
       try { await browser.ui(a.data, arg as string | undefined); return null; } catch (err) { return (err as Error).message; }
     });
-    createWindow(parseArgv(process.argv, process.cwd()));
+    const first = parseArgv(process.argv, process.cwd());
+    if (first.kind === 'project') openProject(first.path);
+    else createWindow(first);
   });
 
-  app.on('before-quit', () => { quitting = true; stopMlHost(); core?.postMessage({ type: 'shutdown' }); });
+  // The core host saves or backs up unsaved work before it exits; quitting waits for it (at most 5 s).
+  let coreFlushed = false;
+  app.on('before-quit', (e) => {
+    quitting = true;
+    stopMlHost();
+    if (coreFlushed || !core) return;
+    e.preventDefault();
+    const proc = core;
+    const done = () => { if (coreFlushed) return; coreFlushed = true; clearTimeout(timer); app.quit(); };
+    const timer = setTimeout(done, 5000);
+    proc.once('exit', done);
+    proc.postMessage({ type: 'shutdown' });
+  });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 }

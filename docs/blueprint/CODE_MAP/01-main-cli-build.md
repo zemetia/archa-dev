@@ -10,7 +10,7 @@ Each row: file → what it does → the blueprint docs that govern it. Links are
 
 | File | Does | Governed by |
 |---|---|---|
-| [`main/index.ts`](../../../apps/desktop/src/main/index.ts) | Windows, argv → open intent, single-instance lock, spawns the core host `utilityProcess` with a clean env (strips `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `ORCA_*`), relays core ↔ browser bridge, guards `<webview>` (embed nodes), dialogs | [ARCHITECTURE/01](../ARCHITECTURE/01-processes.md), [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md), [ENTRY_POINTS/01](../ENTRY_POINTS/01-cli-single-instance.md), [BROWSER](../BROWSER.md) |
+| [`main/index.ts`](../../../apps/desktop/src/main/index.ts) | Windows (one per context: a project folder or public, `window:context`), argv → open intent (tolerates Chromium's reordered second-instance argv), single-instance lock, quit waits for the core host's flush, spawns the core host `utilityProcess` with a clean env (strips `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `ORCA_*`), relays core ↔ browser bridge, guards `<webview>` (embed nodes), dialogs | [ARCHITECTURE/01](../ARCHITECTURE/01-processes.md), [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md), [ENTRY_POINTS/01](../ENTRY_POINTS/01-cli-single-instance.md), [BROWSER](../BROWSER.md) |
 | [`main/browser.ts`](../../../apps/desktop/src/main/browser.ts) | `BrowserManager`: agent-driven browser tabs as `WebContentsView`s in their own session, driven over CDP | [BROWSER](../BROWSER.md) |
 | [`main/assets-protocol.ts`](../../../apps/desktop/src/main/assets-protocol.ts) | `archa-asset://` protocol: `file/<path>` serves images from `<name>-asset/` folders and `ARCHA_HOME/runtime` (staged PDF references too), `remote/<url>` proxies web images — all with CORS so canvases stay exportable | [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) |
 | [`main/asset-paths.ts`](../../../apps/desktop/src/main/asset-paths.ts) | `allowedAssetFile` (which files the protocol may serve) and `ASSET_MIME` — pure, tested without Electron | [FILE_FORMATS/01](../FILE_FORMATS/01-archa.md) |
@@ -46,7 +46,8 @@ Each row: file → what it does → the blueprint docs that govern it. Links are
 | File | Does | Governed by |
 |---|---|---|
 | [`desktop/electron.vite.config.ts`](../../../apps/desktop/electron.vite.config.ts) | main / preload / renderer / core-host builds; workspace packages bundled from TS source | [STRUCTURE/01](../STRUCTURE/01-root-apps.md) |
-| [`desktop/electron-builder.yml`](../../../apps/desktop/electron-builder.yml) | Installer, `.archa` association, bundled CLI | [ENTRY_POINTS/02](../ENTRY_POINTS/02-os-integration.md), [BEST_PRACTICE/03](../BEST_PRACTICE/03-git-changelog-release.md) |
+| [`desktop/electron-builder.yml`](../../../apps/desktop/electron-builder.yml) | Installer, `.archa` association, bundled CLI |
+| [`desktop/build/installer.nsh`](../../../apps/desktop/build/installer.nsh) | NSIS: Explorer "Open this folder with Archa" on folders, folder backgrounds, drives (removed on uninstall) | [ENTRY_POINTS/02](../ENTRY_POINTS/02-os-integration.md) | [ENTRY_POINTS/02](../ENTRY_POINTS/02-os-integration.md), [BEST_PRACTICE/03](../BEST_PRACTICE/03-git-changelog-release.md) |
 | [`package.json`](../../../package.json) | Root scripts: `dev`, `build`, `typecheck`, `test`, `cli`, `dist` | [CODE_MAP](../CODE_MAP.md) → Commands |
 | [`tsconfig.base.json`](../../../tsconfig.base.json) | Strict compiler options for every package | [BEST_PRACTICE/01](../BEST_PRACTICE/01-typescript-eslint.md) |
 | [`vitest.config.ts`](../../../vitest.config.ts) | One Vitest run over `apps/*/test` and `packages/*/test` | [BEST_PRACTICE/02](../BEST_PRACTICE/02-testing.md) |

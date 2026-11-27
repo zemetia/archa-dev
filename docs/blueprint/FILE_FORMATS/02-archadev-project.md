@@ -2,6 +2,8 @@
 
 ← [FILE_FORMATS.md](../FILE_FORMATS.md) | [Blueprint INDEX](../INDEX.md) | [03 — Migrations →](./03-migrations-validation.md)
 
+> **Today projects are `.design/` folders** → [05](./05-design-folder-projects.md). This page is the planned `.archadev/` layer on top.
+
 **Phase:** 4. Directory layout → [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md). Code: `packages/formats/src/project/`.
 
 ---
@@ -71,5 +73,5 @@ No credentials, ever. Profiles are referenced by id; the profile itself lives in
 
 **Linked from:** [CLI/01](../CLI/01-commands.md) · [STRUCTURE/03](../STRUCTURE/03-runtime-dirs.md)
 
-**Code:** — (not built yet)
+**Code:** [`apps/desktop/src/core-host/projects.ts`](../../../apps/desktop/src/core-host/projects.ts) · [`apps/desktop/src/renderer/ui/settings/GeneralPage.tsx`](../../../apps/desktop/src/renderer/ui/settings/GeneralPage.tsx) · [`apps/desktop/test/projects.test.ts`](../../../apps/desktop/test/projects.test.ts)
 <!-- backlinks:end -->

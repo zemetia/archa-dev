@@ -28,7 +28,12 @@ export type ClientInfo = { kind: ClientKind; name: string; agentId?: string; run
  * dataDir: the document's `<name>-data/` folder next to its `.archa` (a runtime folder while unsaved) — assets, chats,
  * skills, memory. assetDir: its `assets/`, where `asset:` references resolve.
  */
-export type DocSummary = { id: string; name: string; filePath: string | null; dataDir: string; assetDir: string; dirty: boolean; revision: number };
+/** project: the folder the document belongs to (its window shows it; untitled ones save into `<project>/.design/`); null = public. */
+export type DocSummary = { id: string; name: string; filePath: string | null; dataDir: string; assetDir: string; dirty: boolean; revision: number; project: string | null };
+/** A `.archa` file in a project's `.design/` folder. */
+export type ProjectFile = { path: string; name: string; modifiedAt: number; docId: string | null };
+/** App-wide preferences in ARCHA_HOME/settings.json. autosave.seconds: interval for documents with unsaved changes. */
+export type AppSettings = { autosave: { enabled: boolean; seconds: number } };
 export type AppliedEvent = { docId: string; revision: number; txnId: string; author: Author; label: string; ops: Op[]; touched: string[] };
 export type ActivityEntry = { id: string; ts: number; docId: string; author: Author; tool: string; text: string; nodeIds: string[]; runId?: string };
 export type AgentClient = { id: string; name: string; kind: ClientKind; connectedAt: number };
@@ -67,8 +72,12 @@ export type ExecuteResult =
 
 export interface CoreMethods {
   'workspace.list': { params: void; result: DocSummary[] };
-  'doc.new': { params: { name?: string }; result: { docId: string } };
-  'doc.open': { params: { path: string }; result: { docId: string } };
+  /** project: the window context; omitted = the context of the document used last (agents, CLI). */
+  'doc.new': { params: { name?: string; project?: string | null }; result: { docId: string } };
+  'doc.open': { params: { path: string; project?: string | null }; result: { docId: string } };
+  /** A window's start: reopens the files its context had open last time (null = public, else a project folder). */
+  'workspace.restore': { params: { project: string | null }; result: { active: string | null } };
+  'project.files': { params: { project: string }; result: ProjectFile[] };
   'doc.save': { params: { docId: string; path?: string }; result: { path: string } };
   'doc.close': { params: { docId: string }; result: void };
   'doc.rename': { params: { docId: string; name: string }; result: void };
@@ -103,6 +112,8 @@ export interface CoreMethods {
   'orchestra.tell': { params: { worker: string; message: string }; result: { queued: boolean } };
   // App
   'app.info': { params: void; result: AppInfo };
+  'settings.get': { params: void; result: AppSettings };
+  'settings.set': { params: Partial<AppSettings>; result: AppSettings };
   /** html / tailwind also write a CSS file and image assets next to `path`; png / jpg arrive rendered by the renderer as base64. */
   'export.save': { params: { docId: string; nodeId: string; format: ExportFormat; path: string; image?: string }; result: { files: string[] } };
   /** Self-contained HTML page of a node (CSS inlined, images embedded) — main prints it to PDF. */

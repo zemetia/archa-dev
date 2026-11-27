@@ -77,5 +77,5 @@ Scopes = package or area: `core`, `schema`, `protocol`, `render`, `formats`, `mc
 
 **Linked from:** [BEST_PRACTICE/02](./02-testing.md) · [STRUCTURE/01](../STRUCTURE/01-root-apps.md)
 
-**Code:** [`apps/desktop/electron-builder.yml`](../../../apps/desktop/electron-builder.yml)
+**Code:** [`apps/desktop/build/installer.nsh`](../../../apps/desktop/build/installer.nsh)
 <!-- backlinks:end -->

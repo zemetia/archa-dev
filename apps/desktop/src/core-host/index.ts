@@ -9,7 +9,8 @@ import { Workspace } from './workspace';
 
 /* Core host: utilityProcess that owns every document (blueprint ARCHITECTURE/01). */
 
-const ws = new Workspace();
+// Each window restores its own files (workspace.restore), so the app starts with no document.
+const ws = new Workspace({ blank: false });
 const token = randomBytes(24).toString('hex');
 
 function portChannel(port: MessagePortMain): Channel {
@@ -26,7 +27,7 @@ process.parentPort.on('message', (e) => {
     const conn = ws.attach(portChannel(port), { kind: 'renderer', name: `window-${msg.windowId}` });
     port.on('close', () => ws.detach(conn));
   } else if (msg.type === 'shutdown') {
-    cleanup();
+    void cleanup();
   }
 });
 
@@ -64,11 +65,16 @@ server.listen(path, () => {
 });
 server.on('error', (e) => console.error('[core] socket error', e));
 
-function cleanup() {
+let closing = false;
+async function cleanup() {
+  if (closing) return;
+  closing = true;
+  // Unsaved work goes to its file or a backup first; main waits for this process to exit (at most 5 s).
+  try { await Promise.race([ws.flush(), new Promise((r) => setTimeout(r, 4000))]); } catch (e) { console.error('[core] flush failed', e); }
   ws.accounts.shutdown();
   void ws.chat.shutdown();
   try { rmSync(runtimeFile(), { force: true }); } catch { /* already gone */ }
   server.close();
   process.exit(0);
 }
-process.on('SIGTERM', cleanup);
+process.on('SIGTERM', () => void cleanup());

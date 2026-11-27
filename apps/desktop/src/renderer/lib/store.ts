@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { applyOps, ArchaDocument } from '@archa/core';
-import { RpcClient, threadOf, type AccountsOverview, type ChatMode, type CustomIconInfo, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatQueued, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
+import { RpcClient, threadOf, type AccountsOverview, type AppSettings, type ChatMode, type CustomIconInfo, type LibraryItem, type McpServer, type SkillsOverview, type BrowserState, type ExportFormat, type ActivityEntry, type AgentClient, type AppInfo, type ChatMessage, type ChatQueued, type ChatRunEvent, type DocSummary, type Message } from '@archa/protocol';
 import type { Op } from '@archa/schema';
 import { renderNodeImage, renderNodePng, renderNodeSlices } from '@archa/render';
 import { onChatRun } from './comments';
@@ -18,7 +18,12 @@ type Toast = { id: number; text: string; kind: 'info' | 'error' };
 type State = {
   client: RpcClient | null;
   info: AppInfo | null;
+  /** The folder this window works in (a project with `.design/`), or null for the public window. */
+  project: string | null;
+  /** Documents of this window's context only (the core holds every window's). */
   docs: DocSummary[];
+  /** App preferences (Settings → General); null until loaded. */
+  settings: AppSettings | null;
   activeDocId: string | null;
   /** Read-only mirror of the core's document, updated by doc.applied events (blueprint APP_UI/03). */
   doc: ArchaDocument | null;
@@ -93,7 +98,7 @@ type State = {
 export const BROWSER_MIN_WIDTH = 360;
 
 export const useStore = create<State>(() => ({
-  client: null, info: null, docs: [], activeDocId: null, doc: null, rev: 0,
+  client: null, info: null, project: null, docs: [], settings: null, activeDocId: null, doc: null, rev: 0,
   selection: [], hover: null, tool: 'select', camera: { x: 0, y: 0, zoom: 1 }, leftTab: 'layers', chatThread: null, slidesView: false, orchestraView: null, chatMode: readMode(), library: null,
   leftOpen: readFlag('archa.leftOpen'), rightOpen: readFlag('archa.rightOpen'), chatDraft: '',
   agents: [], activity: [], chat: [], runs: {}, chatQueue: {}, chatLive: {}, cursors: {}, editingText: null, textEffectsOpen: false, toasts: [], fitRequest: 0,
@@ -157,11 +162,17 @@ function connectPort(): Promise<RpcClient> {
   });
 }
 
-export async function init() {
-  const client = await connectPort();
-  set({ client });
+/** Same folder, ignoring case and separators (Windows paths). */
+const folderKey = (p: string) => p.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+export const sameProject = (a: string | null, b: string | null) => (a && b ? folderKey(a) === folderKey(b) : !a && !b);
+const ownDocs = (all: DocSummary[]) => all.filter((d) => sameProject(d.project, get().project));
 
-  client.on('workspace.changed', (docs) => {
+export async function init() {
+  const [client, context] = await Promise.all([connectPort(), window.archa.windowContext()]);
+  set({ client, project: context.project });
+
+  client.on('workspace.changed', (all) => {
+    const docs = ownDocs(all);
     set({ docs });
     const { activeDocId } = get();
     if (!activeDocId || !docs.some((d) => d.id === activeDocId)) void activate(docs.at(-1)?.id ?? null);
@@ -278,13 +289,31 @@ export async function init() {
     if (intent.kind === 'file' && intent.path) await openPath(intent.path);
   });
 
-  const [docs, agents, info, runs] = await Promise.all([client.call('workspace.list'), client.call('agents.list'), client.call('app.info'), client.call('chat.runs')]);
-  set({ docs, agents, info, runs: Object.fromEntries(runs.map((r) => [r.runId, r])) });
+  // Reopens the files this window's context had open last time (and creates `.design/` for a project).
+  const { active } = await client.call('workspace.restore', { project: context.project });
+  const [all, agents, info, runs, settings] = await Promise.all([client.call('workspace.list'), client.call('agents.list'), client.call('app.info'), client.call('chat.runs'), client.call('settings.get')]);
+  const docs = ownDocs(all);
+  set({ docs, agents, info, settings, runs: Object.fromEntries(runs.map((r) => [r.runId, r])) });
   void loadAccounts();
-  await activate(docs.at(-1)?.id ?? null);
+  await activate(active && docs.some((d) => d.id === active) ? active : docs.at(-1)?.id ?? null);
 }
 
-export type SettingsPage = 'providers' | 'skills' | 'memory' | 'mcp' | 'connect' | 'github' | 'integrations' | 'about';
+export async function updateSettings(patch: Partial<AppSettings>) {
+  const { client } = get();
+  if (!client) return;
+  try {
+    set({ settings: await client.call('settings.set', patch) });
+  } catch (e) {
+    toast((e as Error).message, 'error');
+  }
+}
+
+/** Opens a folder as a project in its own window (asks which one without a path). */
+export async function openProject(path?: string) {
+  await window.archa.openProject(path);
+}
+
+export type SettingsPage = 'general' | 'providers' | 'skills' | 'memory' | 'mcp' | 'connect' | 'github' | 'integrations' | 'about';
 
 export function openSettings(page?: SettingsPage) {
   set({ settingsOpen: true, ...(page ? { settingsPage: page } : {}) });
@@ -339,6 +368,8 @@ export async function activate(docId: string | null) {
   // Reopen the most recent conversation of this document.
   const last = chat.at(-1);
   set((s) => ({ activeDocId: docId, doc: new ArchaDocument(snap.data, snap.revision), rev: s.rev + 1, selection: [], chat, chatThread: last ? threadOf(last) : null, orchestraView: null, cursors: {}, editingText: null, fitRequest: s.fitRequest + 1 }));
+  // The core remembers the shown document: it reopens active next start, and agents default to it.
+  void client.call('selection.set', { docId, ids: [] }).catch(() => {});
 }
 
 function omit<T>(map: Record<string, T>, key: string): Record<string, T> {
@@ -391,7 +422,7 @@ export async function redo() {
 export async function newDoc() {
   const { client } = get();
   if (!client) return;
-  const { docId } = await client.call('doc.new', {});
+  const { docId } = await client.call('doc.new', { project: get().project });
   await activate(docId);
 }
 
@@ -399,7 +430,7 @@ export async function openPath(path: string) {
   const { client } = get();
   if (!client) return;
   try {
-    const { docId } = await client.call('doc.open', { path });
+    const { docId } = await client.call('doc.open', { path, project: get().project });
     await activate(docId);
   } catch (e) {
     toast((e as Error).message, 'error');
@@ -412,14 +443,19 @@ export async function openFile() {
 }
 
 export async function save(as = false) {
-  const { client, activeDocId, docs } = get();
+  const { client, activeDocId, docs, project } = get();
   if (!client || !activeDocId) return;
   const summary = docs.find((d) => d.id === activeDocId);
   let path = as ? null : summary?.filePath ?? null;
-  if (!path) path = await window.archa.showSaveDialog(`${summary?.name ?? 'Untitled'}.archa`);
-  if (!path) return;
+  // In a project an untitled document saves into `.design/` without asking; Save As starts there too.
+  if (!path && !(project && !as)) {
+    const sep = window.archa.platform === 'win32' ? '\\' : '/';
+    const name = `${summary?.name ?? 'Untitled'}.archa`;
+    path = await window.archa.showSaveDialog(project ? `${project.replace(/[\\/]+$/, '')}${sep}.design${sep}${name}` : name);
+    if (!path) return;
+  }
   try {
-    await client.call('doc.save', { docId: activeDocId, path });
+    await client.call('doc.save', { docId: activeDocId, ...(path ? { path } : {}) });
     toast('Saved');
   } catch (e) {
     toast((e as Error).message, 'error');

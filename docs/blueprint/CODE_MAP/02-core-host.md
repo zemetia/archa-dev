@@ -12,6 +12,7 @@
 |---|---|---|
 | [`core-host/index.ts`](../../../apps/desktop/src/core-host/index.ts) | Boot: one `Workspace`, random token, `MessagePort` channel per window, local socket server (`socketPath()`), writes `runtime/core.json`, cleanup on exit | [ARCHITECTURE/01](../ARCHITECTURE/01-processes.md), [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [ARCHITECTURE/03](../ARCHITECTURE/03-startup-lifecycle.md) |
 | [`core-host/workspace.ts`](../../../apps/desktop/src/core-host/workspace.ts) | `Workspace`: open `DocumentSession`s, connected clients (app / CLI / agent), **every RPC handler** with zod param schemas, activity log, `agent.trail` events, screenshot via `render.request` to a renderer, `cliPath()` / `mcpCommand()` | [ARCHITECTURE/02](../ARCHITECTURE/02-protocol-ipc.md), [ARCHITECTURE/04](../ARCHITECTURE/04-single-writer-sync.md), [MCP/01](../MCP/01-transports-tools.md) |
+| [`core-host/projects.ts`](../../../apps/desktop/src/core-host/projects.ts) | `.design/` projects (`projectRoot`, `projectFiles`, `freeDesignPath`), `runtime/open-files.json` + `runtime/backups/`, `settings.json` (auto-save); `Workspace` uses it for `workspace.restore`, `autosave`, `flush` on quit | [FILE_FORMATS/05](../FILE_FORMATS/05-design-folder-projects.md) |
 | [`core-host/main-bridge.ts`](../../../apps/desktop/src/core-host/main-bridge.ts) | `callBrowser`: forwards agent `browser` calls to main over `parentPort` and awaits the reply | [BROWSER](../BROWSER.md), [ARCHITECTURE/01](../ARCHITECTURE/01-processes.md) |
 
 ## Agent tools (target `@archa/mcp`)

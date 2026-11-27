@@ -92,7 +92,7 @@ Round-trip `pack ∘ unpack` and `unpack ∘ pack` are lossless — tested on ev
 
 ---
 
-**Linked from:** [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) · [REFERENCE](../REFERENCE.md)
+**Linked from:** [AGENT_BRIDGE/07](../AGENT_BRIDGE/07-memory.md) · [FILE_FORMATS/05](./05-design-folder-projects.md) · [REFERENCE](../REFERENCE.md)
 
 **Code:** [`apps/desktop/src/core-host/assets.ts`](../../../apps/desktop/src/core-host/assets.ts) · [`apps/desktop/src/main/asset-paths.ts`](../../../apps/desktop/src/main/asset-paths.ts) · [`apps/desktop/src/main/assets-protocol.ts`](../../../apps/desktop/src/main/assets-protocol.ts) · [`apps/desktop/src/renderer/lib/asset-urls.ts`](../../../apps/desktop/src/renderer/lib/asset-urls.ts) · [`apps/desktop/test/assets.test.ts`](../../../apps/desktop/test/assets.test.ts) · [`packages/formats/src/archa.ts`](../../../packages/formats/src/archa.ts) · [`packages/formats/test/archa.test.ts`](../../../packages/formats/test/archa.test.ts) · [`packages/schema/src/document.ts`](../../../packages/schema/src/document.ts)
 <!-- backlinks:end -->
